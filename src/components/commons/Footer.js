@@ -1,34 +1,47 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 
 import logoFooter from '../../assets/images/logo/logo-footer.png';
 
 import { FaFacebook, FaLinkedin, FaInstagram, FaWhatsapp } from "react-icons/fa";
 
 const Footer = () => {
+    const location = useLocation();
+    const currentPath = location.pathname;
+
+    const isHome = currentPath === '/';
+    const isTalents = currentPath === '/talents';
+
+    const isAbout = currentPath === '/about';
+    const footerBg = isAbout ? 'bg-title-dark' : isHome || isTalents ? 'bg-title-dark' : 'bg-number-green';
+    const iconBg = isAbout ? 'bg-button-green' : isHome || isTalents ? 'bg-custom-beige' : 'bg-custom-beige';
+    const iconText = isAbout ? '' : isHome ? 'text-button-green' : 'text-button-green';
+
+
     return (
-        <footer className="bg-title-dark text-white">
+        <footer className={`${footerBg} text-white`}>
             {/* Redes Sociales Bar */}
             
             <div className="relative">
                 <div className="absolute top-[-1.5rem] left-1/2 transform -translate-x-1/2 flex gap-4">
                     <div className="flex gap-4">
                         <a href="https://wa.me/5200000000" target="_blank" rel="noopener noreferrer" className="hover:text-button-green">
-                            <div className="bg-custom-beige rounded-full p-3 text-button-green hover:bg-button-green hover:text-white transition">
+                            <div className={`${iconBg} rounded-full p-3 ${iconText} hover:bg-button-green hover:text-white transition`}>
                                 <FaWhatsapp className="text-xl" />
                             </div>
                         </a>
                         <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="hover:text-button-green">
-                            <div className="bg-custom-beige rounded-full p-3 text-button-green hover:bg-button-green hover:text-white transition">
+                            <div className={`${iconBg} rounded-full p-3 ${iconText} hover:bg-button-green hover:text-white transition`}>
                                 <FaLinkedin className="text-xl" />
                             </div>
                         </a>
                         <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="hover:text-button-green">
-                            <div className="bg-custom-beige rounded-full p-3 text-button-green hover:bg-button-green hover:text-white transition">
+                            <div className={`${iconBg} rounded-full p-3 ${iconText} hover:bg-button-green hover:text-white transition`}>
                                 <FaInstagram className="text-xl" />
                             </div>
                         </a>
                         <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:text-button-green">
-                            <div className="bg-custom-beige rounded-full p-3 text-button-green hover:bg-button-green hover:text-white transition">
+                            <div className={`${iconBg} rounded-full p-3 ${iconText} hover:bg-button-green hover:text-white transition`}>
                                 <FaFacebook className="text-xl" />
                             </div>
                         </a>

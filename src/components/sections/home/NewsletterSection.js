@@ -15,10 +15,10 @@ const Newsletter = () => {
         <section 
             className="bg-soft-green text-black py-16 relative -z-10"
             style={{ backgroundImage: `url(${fondo})`, backgroundSize: "cover", backgroundPosition: "center", }} >
-            <div className="bg-lemon-green text-white px-4 py-8 rounded-lg flex flex-col md:flex-row max-w-xl w-full md:w-auto items-center gap-3 mx-auto justify-center">
+            <div className="bg-lemon-green text-white px-20 py-8 rounded-lg flex flex-col md:flex-row max-w-4xl w-full md:w-auto items-center gap-3 mx-auto justify-center">
                 {/* Left Column: Title + Form (same column) */}
                 <div className="flex flex-col w-full md:w-4/3 pr-4">
-                    <h2 className="text-2xl md:text-3xl font-bold text-center md:text-left mb-4">
+                    <h2 className="text-2xl md:text-4xl font-bold text-center md:text-left mb-4">
                         SUSCRÍBETE A NUESTRO NEWSLETTER
                     </h2>
 
@@ -41,11 +41,12 @@ const Newsletter = () => {
                 </div>
 
                 {/* Right Column: Decorative Icon */}
-                <div className="w-full md:w-1/3 flex justify-start">
+                <div className="w-full md:w-1/5 flex justify-start">
                     <img 
                         src={require("../../../assets/images/2-about/28.png")} 
                         alt="Decoración" 
-                        className="w-30 h-30"
+                        style={{ width: '120px', height: '120px' }}
+                        className="object-contain"
                     />
                 </div>
 

@@ -9,8 +9,8 @@ const ContactForm = () => {
     };
 
     return (
-        <section className="flex justify-center py-6">
-            <div className="bg-orange-500 text-white px-6 py-6 rounded-lg flex flex-col md:flex-row max-w-xl w-full items-center gap-3">    
+        <section className="flex justify-center py-16">
+            <div className="bg-orange-500 text-white px-5 py-6 rounded-lg flex flex-col md:flex-row max-w-xl w-full items-center gap-3">    
 
                 {/* Left Column: Title + Form (same column) */}
                 <div className="flex flex-col w-full md:w-4/3 pr-4">
