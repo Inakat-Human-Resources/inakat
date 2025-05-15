@@ -44,7 +44,7 @@ const Talents = () => {
 
     return (
         <>
-            <section className="bg-custom-beige text-text-black py-20">
+            <section className="bg-custom-beige text-text-black">
                 {/* Sección 2: Filtros de Búsqueda */}
                 <div className="bg-soft-green text-white py-24 mt-20">
                     <div className="container mx-auto text-center">
