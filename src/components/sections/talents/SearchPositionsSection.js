@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
 
-import Footer from '../../commons/Footer';
-
-// Imagenes
-import talentsImage from '../../../assets/images/4-talent/1.png';
 
 // Iconos
 import { FaSearch, FaMapMarkerAlt, FaBriefcase, FaBookmark, FaEllipsisV } from "react-icons/fa";
