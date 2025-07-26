@@ -19,14 +19,22 @@ const AboutUs = () => {
                 <div className="md:col-span-1">
                     <h2 className="text-4xl font-bold mb-6 text-title-dark">¿QUIÉNES <br />SOMOS?</h2>
                     <p className="text-lg">
-                        En Inakat, somos más que una empresa
-                        de reclutamiento. Somos un puente
-                        entre el talento individual y las
-                        empresas que aspiran a alcanzar
-                        nuevas alturas de éxito. Inspirados por
-                        la comunidad wayuu, valoramos y
-                        respetamos las habilidades únicas de
-                        cada persona.
+                        En INAKAT entendemos que reclutar no es solo cubrir un puesto.
+                    </p>
+                    <p className="text-lg">
+                        Es encontrar a la persona adecuada <strong>para el rol, la cultura y las condiciones reales de tu empresa.</strong>
+                    </p>
+                    <p className="text-lg">
+                        Sabemos que <strong>un candidato no es solo lo que sabe hacer, sino cómo se comporta, cómo se comunica, cómo se adapta, cuánto le importa el puesto y si realmente puede sostenerlo en el tiempo.</strong>
+                    </p>
+                    <p className="text-lg">
+                        Por eso, <strong>no elegimos solo por currículum, elegimos por compatibilidad, compromiso, ubicación, cultura y realidad humana.</strong>
+                    </p>
+                    <p className="text-lg">
+                        El nombre <i>INAKAT</i> proviene de la palabra “talento” en lengua wayuu, una comunidad que honra las habilidades únicas de cada persona.
+                    </p>
+                    <p className="text-lg">
+                        Eso nos inspira a ver más allá de lo obvio y conectar a las empresas con quienes <strong>de verdad pueden aportar a su equipo, su operación y sus metas.</strong>
                     </p>
                 </div>
             </div>

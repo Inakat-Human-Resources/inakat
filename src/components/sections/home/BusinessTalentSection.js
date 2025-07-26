@@ -63,14 +63,17 @@ const BusinessTalentSection = () => {
             </section>
 
             {/* Logos de empresas (fuera de la imagen de fondo) */}
+            {/*
+            
             <div className="bg-title-dark py-6">
-            <div className="container mx-auto flex justify-center gap-10">
+                <div className="container mx-auto flex justify-center gap-10">
                     <img
                         src={companiesImage}
                         alt="Flecha"
                     />
                 </div>
             </div>
+            */}
         </>
     );
 };

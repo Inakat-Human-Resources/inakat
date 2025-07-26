@@ -16,14 +16,19 @@ const BusinessTalentSection = () => {
                     {/* Contenido de la izquierda */}
                     <div className="text-left">
                         <h1 className="text-4xl font-bold text-title-dark leading-tight">
-                            BIENVENIDOS A INAKAT, <br />
-                            DONDE EL TALENTO IMPULSA <br />
-                            EL ÉXITO EMPRESARIAL
+                            Contrata de forma inteligente. <br />
+                            Contrata con INAKAT.
                         </h1>
                         <p className="text-lg text-text-black mt-4">
-                            ¡Encuentra al mejor talento en INAKAT! Líderes en reclutamiento en México.
-                            Expertos en traer profesionales de calidad para tu empresa. <br />
-                            ¡Asegura el éxito de tus proyectos hoy!
+                            En INAKAT, cada candidato es evaluado por psicólogos expertos y por especialistas líderes en su disciplina.
+                            <br />
+                            Validamos tanto el fit humano como la excelencia técnica.
+                            <br />
+                            <strong>
+                                Usamos inteligencia artificial como apoyo estratégico, pero todo el proceso está liderado por personas reales, desde el inicio hasta la decisión final.
+                            </strong>
+                            <br />
+                            Todo esto, dentro de una plataforma pensada para ti para que tengas claridad, confianza y transparencia total en cada paso del proceso.
                         </p>
                         <button className="mt-6 bg-button-green text-white py-2 px-6 rounded-full hover:bg-green-700">
                             CONOCE MÁS →
@@ -32,23 +37,23 @@ const BusinessTalentSection = () => {
                         {/* Estadísticas */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-10">
                             <div>
-                                <p className="text-3xl font-bold text-number-green">+2976</p>
-                                <p className="font-bold text-number-green">TALENTOS</p>
+                                <p className="text-3xl font-bold text-number-green">Evaluación dual</p>
+                                <p className="font-bold text-number-green">psicólogos + especialistas técnicos</p>
                                 <div className="h-[2px] w-[115px] bg-number-green mt-2"></div>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-number-green">+100</p>
-                                <p className="font-bold text-number-green">EMPRESAS</p>
+                                <p className="text-3xl font-bold text-number-green">IA que orienta,</p>
+                                <p className="font-bold text-number-green">humanos que deciden</p>
                                 <div className="h-[2px] w-[115px] bg-number-green mt-2"></div>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-number-green">+50</p>
-                                <p className="font-bold text-number-green">EXPERTOS</p>
+                                <p className="text-3xl font-bold text-number-green">Candidatos destacados,</p>
+                                <p className="font-bold text-number-green">no solo competentes</p>
                                 <div className="h-[2px] w-[115px] bg-number-green mt-2"></div>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-number-green">+70</p>
-                                <p className="font-bold text-number-green">PROFESIONES</p>
+                                <p className="text-3xl font-bold text-number-green">Transparencia total</p>
+                                <p className="font-bold text-number-green">en todo el proceso</p>
                                 <div className="h-[2px] w-[115px] bg-number-green mt-2"></div>
                             </div>
                         </div>

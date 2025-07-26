@@ -9,9 +9,13 @@ const Specialties = () => {
 
     // Lista de especialidades
     const specialties = [
-        'administración', 'diseño', 'marketing', 'producción audiovisual', 'comunicación',
-        'lingüística', 'tecnologías de la información', 'recursos humanos', 'desarrollo web',
-        'finanzas', 'asistente administrativo', 'psicología', 'community manager', 'dev ops'
+        "psicología", "educación", "ciencias humanas",
+        "tecnologías de la información",
+        "ingeniería y tecnología avanzada",
+        "negocios", "administración", "finanzas",
+        "marketing", "comunicación", "diseño",
+        "talento", "gestión", "operación de oficinas",
+        "salud", "bienestar"
     ];
 
     return (
