@@ -2,24 +2,57 @@ import React, { useState } from 'react';
 
 const specialtiesData = [
     {
-        title: "ADMINISTRACIÓN DE OFICINA",
+        title: "Psicología, Educación y Ciencias Humanas",
         image: require("../../../assets/images/2-about/4.png"),
-        subcategories: ["Gestión de Personal", "Recursos Humanos", "Administración Financiera"]
+        subcategories: ["Psicología", "Lingüística", "Educación", "Pedagogía", 
+            "Formación académica", "Generación de contenido especializado", 
+            "Diseño instruccional", "Intervención social"]
     },
     {
-        title: "MARKETING, DISEÑO Y PRODUCCIÓN AUDIOVISUAL",
+        title: "Tecnologías de la Información",
         image: require("../../../assets/images/2-about/5.png"),
-        subcategories: ["Branding", "Producción de Contenidos", "Estrategia Digital"]
+        subcategories: ["Desarrollo web", "Devops", "Infraestructura TI", 
+            "Ciberseguridad", "Bases de datos", "Soporte técnico",
+            "Machine learning", "Inteligencia artificial"
+        ]
     },
     {
-        title: "ESCRITURA",
+        title: "Ingeniería y Tecnología Avanzada",
         image: require("../../../assets/images/2-about/6.png"),
-        subcategories: ["Comunicación e Imagen", "Comunicación Organizacional", "Periodismo", "Copywriting"]
+        subcategories: ["Mecatrónica", "Electrónica", "Automatización",
+            "Proyectos industriales", "Diseño de producto", "I+D"
+    ]
     },
     {
-        title: "TECNOLOGÍAS DE LA INFORMACIÓN",
+        title: "Negocios, Administración y Finanzas",
         image: require("../../../assets/images/2-about/7.png"),
-        subcategories: ["Desarrollo Web", "Ciberseguridad", "Análisis de Datos"]
+        subcategories: ["Administración", "Finanzas",
+            "Análisis financiero", "Project Management",
+            "Consultoría empresarial", "Contabilidad"
+        ]
+    },
+    {
+        title: "Marketing, Comunicación y Diseño",
+        image: require("../../../assets/images/2-about/7.png"),
+        subcategories: ["Marketing", "Diseño gráfico", "Diseño UI/UX",
+            "Producción audiovisual", "Comunicación",
+            "Community manager", "Publicidad", "Branding"
+        ]
+    },
+    {
+        title: "Talento, Gestión y Operación de Oficinas",
+        image: require("../../../assets/images/2-about/7.png"),
+        subcategories: ["Recursos Humanos", "Asistente administrativo",
+            "Gestión documental", "Atención al cliente",
+            "Reclutamiento y selección"
+        ]
+    },
+    {
+        title: "Salud y Bienestar",
+        image: require("../../../assets/images/2-about/7.png"),
+        subcategories: ["Psicología clínica", "Nutrición", 
+            "Orientación familiar", "Educación en salud"
+        ]
     }
 ];
 
