@@ -7,6 +7,7 @@ import Companies from './components/sections/Companies';
 import Talents from './components/sections/Talents';
 import Contact from './components/sections/Contact';
 import Login from './components/sections/Login';
+import AdminCompanyRequests from "./pages/Admin/AdminCompanyRequests";
 
 function App() {
     return (
@@ -19,6 +20,7 @@ function App() {
                 <Route path="/talents" element={<Talents />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/admin/requests" element={<AdminCompanyRequests />} />
             </Routes>
         </Router>
     );
