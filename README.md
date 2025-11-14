@@ -1,70 +1,201 @@
-# Getting Started with Create React App
+# Inakat Landing Page
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Professional talent solutions platform built with Next.js 15.5.5, TypeScript, Prisma, and PostgreSQL.
 
-## Available Scripts
+## 🚀 Tech Stack
 
-In the project directory, you can run:
+### Frontend
+- **Next.js 15.5.5** - React framework with App Router
+- **TypeScript** - Type-safe JavaScript
+- **Tailwind CSS** - Utility-first CSS framework
+- **Framer Motion** - Animation library
+- **Lucide React** - Modern icon library
+- **Class Variance Authority** - Component variants
+- **clsx & tailwind-merge** - Utility for className management
 
-### `npm start`
+### Backend
+- **Prisma** - Next-generation ORM
+- **PostgreSQL** - Relational database
+- **Next.js API Routes** - Serverless API endpoints
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## 📦 Quick Start
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-### `npm test`
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   ```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+   Update `.env` with your PostgreSQL database URL:
+   ```env
+   DATABASE_URL="postgresql://user:password@localhost:5432/inakat_db"
+   ```
 
-### `npm run build`
+3. **Set up the database**
+   ```bash
+   npx prisma migrate dev --name init
+   npx prisma generate
+   ```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+5. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 🗄️ Database Setup
 
-### `npm run eject`
+You can use either a local PostgreSQL installation or a cloud database service:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Cloud Database (Recommended for production)
+- [Supabase](https://supabase.com) - Free tier available
+- [Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres)
+- [Neon](https://neon.tech) - Free tier available
+- [Railway](https://railway.app)
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+After setting up, update the `DATABASE_URL` in your `.env` file.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## 🛠️ Available Scripts
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+# Development
+npm run dev          # Start development server
 
-## Learn More
+# Production
+npm run build        # Build for production
+npm start            # Start production server
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Database
+npx prisma studio    # Open Prisma Studio (database GUI)
+npx prisma migrate dev    # Create and run migrations
+npx prisma generate  # Generate Prisma Client
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+# Code Quality
+npm run lint         # Run ESLint
+```
 
-### Code Splitting
+## 📁 Project Structure
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```
+inakat/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── api/               # API routes
+│   │   │   ├── contact/       # Contact form endpoint
+│   │   │   └── company-requests/ # Company registration endpoint
+│   │   ├── (routes)/          # Page routes
+│   │   └── layout.tsx         # Root layout
+│   ├── components/
+│   │   ├── commons/           # Shared components
+│   │   └── sections/          # Page sections
+│   ├── lib/
+│   │   ├── utils.ts           # Utility functions
+│   │   └── prisma.ts          # Prisma client
+│   └── assets/                # Images and static files
+├── prisma/
+│   ├── schema.prisma          # Database schema
+│   └── migrations/            # Database migrations
+└── tailwind.config.ts         # Tailwind configuration
+```
 
-### Analyzing the Bundle Size
+## 🔌 API Endpoints
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Contact Form
+```bash
+POST /api/contact
+Content-Type: application/json
 
-### Making a Progressive Web App
+{
+  "nombre": "John Doe",
+  "email": "john@example.com",
+  "telefono": "+52 123 456 7890",
+  "mensaje": "Message text"
+}
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### Company Registration
+```bash
+POST /api/company-requests
+Content-Type: application/json
 
-### Advanced Configuration
+{
+  "nombre": "John",
+  "apellidoPaterno": "Doe",
+  "apellidoMaterno": "Smith",
+  "nombreEmpresa": "Tech Corp",
+  "correoEmpresa": "contact@techcorp.com",
+  "razonSocial": "Tech Corporation S.A. de C.V.",
+  "rfc": "TEC123456ABC",
+  "direccionEmpresa": "123 Main St, CDMX"
+}
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### Get Company Requests (Admin)
+```bash
+GET /api/company-requests
+GET /api/company-requests?status=pending
+```
 
-### Deployment
+## 📝 Migration Status
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+This project has been migrated from Create React App to Next.js 15.5.5.
 
-### `npm run build` fails to minify
+### ✅ Completed
+- Next.js 15.5.5 setup with App Router
+- TypeScript configuration
+- Prisma + PostgreSQL backend
+- API routes (contact, company requests)
+- Core components (Navbar, Footer, ContactForm)
+- Example sections (HeroHomeSection)
+- All requested dependencies installed
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### 📋 Remaining
+See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for:
+- Components still to migrate
+- Step-by-step migration patterns
+- Icon replacement guide
+- Form integration examples
+
+## 🎨 Custom Tailwind Colors
+
+Brand colors are configured in `tailwind.config.ts`:
+- `button-green`: #9fbb2f
+- `button-orange`: #f48602
+- `button-dark-green`: #2b5d62
+- `custom-beige`: #e8e7d4
+- And more...
+
+## 🚀 Deployment
+
+### Vercel (Recommended)
+1. Push code to GitHub
+2. Import in [Vercel](https://vercel.com)
+3. Add `DATABASE_URL` environment variable
+4. Deploy
+
+### Environment Variables
+```env
+DATABASE_URL="your-postgresql-url"
+NODE_ENV="production"
+```
+
+## 📚 Documentation
+
+- [Next.js Docs](https://nextjs.org/docs)
+- [Prisma Docs](https://www.prisma.io/docs)
+- [Tailwind CSS](https://tailwindcss.com/docs)
+- [Migration Guide](./MIGRATION_GUIDE.md)
+
+## 🐛 Troubleshooting
+
+See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for common issues and solutions.
+
+---
+
+Built with ❤️ using Next.js, TypeScript, and Prisma

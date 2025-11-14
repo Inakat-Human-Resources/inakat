@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(move:*)",
+      "Bash(npm install)",
+      "Bash(npx prisma:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(del \"C:\\Users\\guill\\dev\\inakat\\src\\components\\sections\\talents\\HeroTalentSection.js\")",
+      "Bash(del \"C:\\Users\\guill\\dev\\inakat\\src\\components\\sections\\talents\\SearchPositionsSection.js\")",
+      "Bash(npm run dev:*)",
+      "Bash(cat:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
