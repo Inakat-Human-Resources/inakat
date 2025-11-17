@@ -52,7 +52,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Verificar permisos de admin para rutas específicas
+  // Verificar permisos de ADMIN para rutas específicas
   const isAdminRoute =
     pathname.startsWith('/api/company-requests') ||
     pathname.startsWith('/admin');
@@ -64,6 +64,29 @@ export function middleware(request: NextRequest) {
           success: false,
           error:
             'No tienes permisos de administrador para acceder a este recurso.'
+        },
+        { status: 403 }
+      );
+    }
+
+    // Redirigir a página de error o home
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  // Verificar permisos de EMPRESA para rutas específicas
+  const isCompanyRoute =
+    pathname.startsWith('/api/company/') || pathname.startsWith('/company/');
+
+  if (
+    isCompanyRoute &&
+    payload.role !== 'company' &&
+    payload.role !== 'admin'
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No tienes permisos de empresa para acceder a este recurso.'
         },
         { status: 403 }
       );
@@ -92,6 +115,11 @@ export function middleware(request: NextRequest) {
  * Define qué rutas deben ser protegidas
  */
 export const config = {
-  matcher: ['/api/company-requests/:path*', '/admin/:path*'],
-  runtime: 'nodejs' // ← AGREGAR ESTA LÍNEA
+  matcher: [
+    '/api/company-requests/:path*',
+    '/api/company/:path*',
+    '/admin/:path*',
+    '/company/:path*'
+  ],
+  runtime: 'nodejs'
 };

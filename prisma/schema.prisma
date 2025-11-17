@@ -21,17 +21,17 @@ model User {
   nombre            String
   apellidoPaterno   String?
   apellidoMaterno   String?
-  role              String    @default("user") // "admin", "company", "talent"
+  role              String    @default("user") // "admin", "company", "user"
   isActive          Boolean   @default(true)
   emailVerified     DateTime?
   lastLogin         DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
-  // Relación opcional con CompanyRequest
+  // Relaciones
   companyRequest    CompanyRequest?
-  jobs              Job[]
-  applications      Application[]
+  jobs              Job[]           // ← Vacantes creadas por la empresa
+  applications      Application[]   // ← AGREGAR ESTA LÍNEA
   
   @@index([email])
   @@index([role])
@@ -104,24 +104,31 @@ model Job {
   company         String
   location        String
   salary          String
-  jobType         String
-  isRemote        Boolean   @default(false)
+  jobType         String    // "Tiempo Completo", "Medio Tiempo", "Contrato"
+  workMode        String    @default("presential") // "remote", "hybrid", "presential"
   description     String    @db.Text
   requirements    String?   @db.Text
-  status          String    @default("active")
-  companyId       Int?
-  company_user    User?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  companyRating   Float?
+  status          String    @default("active") // "active", "closed", "draft"
+  companyRating          Float?    @default(5.0) // Rating de la empresa
+  
+  // Relación con la empresa que publicó
+  userId          Int?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Relación con aplicaciones
+  applications    Application[]   // ← AGREGAR ESTA LÍNEA
+  
+  // Timestamps
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   expiresAt       DateTime?
-  applications    Application[] 
   
   @@index([status])
-  @@index([companyId])
+  @@index([userId])
   @@index([createdAt])
   @@index([location])
   @@index([jobType])
+  @@index([workMode])
 }
 
 // =============================================
@@ -129,32 +136,32 @@ model Job {
 // =============================================
 model Application {
   id              Int       @id @default(autoincrement())
-  
+
   // Relaciones
   jobId           Int
   job             Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  
+
   userId          Int?
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+
   // Información del candidato
   candidateName   String
   candidateEmail  String
   candidatePhone  String?
-  
+
   // Documentos
   cvUrl           String?
   coverLetter     String?   @db.Text
-  
+
   // Estado
-  status          String    @default("pending")
+  status          String    @default("pending") // "pending", "reviewing", "interviewed", "accepted", "rejected"
   notes           String?   @db.Text
-  
+
   // Timestamps
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   reviewedAt      DateTime?
-  
+
   @@index([jobId])
   @@index([userId])
   @@index([status])
