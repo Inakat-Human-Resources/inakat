@@ -336,3 +336,26 @@ Este proyecto está bajo la Licencia MIT - ver [LICENSE](LICENSE) para detalles.
 ---
 
 **Made with ❤️ in México**
+
+🏢 USUARIOS EMPRESARIALES EN TU SEED
+
+1. TechSolutions México
+
+Email: contact@techsolutions.mx
+Password: Company123!
+Role: company
+Tiene: 6 vacantes tech
+
+2. Creative Digital Studio
+
+Email: rh@creativedigital.mx
+Password: Company123!
+Role: company
+Tiene: 6 vacantes diseño/marketing
+
+3. Grupo Financiero Nacional
+
+Email: hr@grupofinanciero.mx
+Password: Company123!
+Role: company
+Tiene: 6 vacantes negocios/finanzas

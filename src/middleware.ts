@@ -14,42 +14,34 @@ export function middleware(request: NextRequest) {
 
   // Si no hay token, denegar acceso
   if (!token) {
-    // Para rutas de API, devolver 401
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'No autenticado. Por favor inicia sesión.'
-        },
+        { success: false, error: '...' },
         { status: 401 }
       );
     }
 
-    // Para páginas, redirigir a login
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    // Redirigir a unauthorized en vez de login
+    const unauthorizedUrl = new URL('/unauthorized', request.url);
+    unauthorizedUrl.searchParams.set('reason', 'no-token');
+    unauthorizedUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(unauthorizedUrl);
   }
 
   // Verificar token
   const payload = verifyToken(token);
 
   if (!payload) {
-    // Token inválido o expirado
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Token inválido o expirado. Por favor inicia sesión de nuevo.'
-        },
+        { success: false, error: '...' },
         { status: 401 }
       );
     }
 
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    loginUrl.searchParams.set('reason', 'expired');
-    return NextResponse.redirect(loginUrl);
+    const unauthorizedUrl = new URL('/unauthorized', request.url);
+    unauthorizedUrl.searchParams.set('reason', 'expired');
+    return NextResponse.redirect(unauthorizedUrl);
   }
 
   // Verificar permisos de ADMIN para rutas específicas
@@ -60,17 +52,14 @@ export function middleware(request: NextRequest) {
   if (isAdminRoute && payload.role !== 'admin') {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            'No tienes permisos de administrador para acceder a este recurso.'
-        },
+        { success: false, error: '...' },
         { status: 403 }
       );
     }
 
-    // Redirigir a página de error o home
-    return NextResponse.redirect(new URL('/', request.url));
+    const unauthorizedUrl = new URL('/unauthorized', request.url);
+    unauthorizedUrl.searchParams.set('reason', 'no-permission');
+    return NextResponse.redirect(unauthorizedUrl);
   }
 
   // Verificar permisos de EMPRESA para rutas específicas

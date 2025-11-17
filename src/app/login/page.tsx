@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import React, { useState, FormEvent } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { Facebook, Linkedin } from "lucide-react";
-import loginImage from "@/assets/images/6-login/1.png";
-import logoIcon from "@/assets/images/6-login/logo-dark-green.png";
+import React, { useState, FormEvent } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { Facebook, Linkedin } from 'lucide-react';
+import loginImage from '@/assets/images/6-login/1.png';
+import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
 
 interface LoginFormData {
   email: string;
@@ -14,8 +14,8 @@ interface LoginFormData {
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({
-    email: "",
-    password: "",
+    email: '',
+    password: ''
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,25 +33,32 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Redirect to dashboard or home
-        window.location.href = "/admin/requests";
+        const role = data.user.role;
+
+        if (role === 'admin') {
+          window.location.href = '/admin';
+        } else if (role === 'company') {
+          window.location.href = '/company/dashboard';
+        } else {
+          window.location.href = '/';
+        }
       } else {
-        setError(data.error || "Error al iniciar sesión");
+        setError(data.error || 'Error al iniciar sesión');
       }
     } catch (error) {
-      setError("Error al conectar con el servidor");
-      console.error("Error logging in:", error);
+      setError('Error al conectar con el servidor');
+      console.error('Error logging in:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -122,7 +129,7 @@ export default function LoginPage() {
               disabled={isSubmitting}
               className="w-full bg-button-green text-white font-bold py-3 rounded-full hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? "INGRESANDO..." : "INGRESAR →"}
+              {isSubmitting ? 'INGRESANDO...' : 'INGRESAR →'}
             </button>
           </form>
 
