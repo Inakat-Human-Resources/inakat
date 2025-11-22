@@ -25,13 +25,18 @@ model User {
   isActive          Boolean   @default(true)
   emailVerified     DateTime?
   lastLogin         DateTime?
+  
+  // Sistema de Créditos (solo para empresas)
+  credits           Int       @default(0)
+  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
   // Relaciones
   companyRequest    CompanyRequest?
-  jobs              Job[]           // ← Vacantes creadas por la empresa
-  applications      Application[]   // ← AGREGAR ESTA LÍNEA
+  jobs              Job[]
+  applications      Application[]
+  creditPurchases   CreditPurchase[]
   
   @@index([email])
   @@index([role])
@@ -63,12 +68,12 @@ model CompanyRequest {
   
   // Estado y tracking
   status                    String    @default("pending") // pending, approved, rejected
-  rejectionReason           String?   // Razón de rechazo
+  rejectionReason           String?
   
   // Timestamps
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
-  approvedAt                DateTime? // Cuando fue aprobada
+  approvedAt                DateTime?
   
   // Relación con Usuario (se crea cuando se aprueba)
   userId                    Int?      @unique
@@ -109,14 +114,21 @@ model Job {
   description     String    @db.Text
   requirements    String?   @db.Text
   status          String    @default("active") // "active", "closed", "draft"
-  companyRating          Float?    @default(5.0) // Rating de la empresa
+  companyRating   Float?    @default(5.0)
+  
+  // Sistema de Créditos
+  creditCost      Int       @default(0) // Cuántos créditos costó publicar
+  
+  // Campos para calcular costo
+  profile         String?   // "Tecnología", "Diseño Gráfico", etc.
+  seniority       String?   // "Practicante", "Jr", "Middle", "Sr", "Director"
   
   // Relación con la empresa que publicó
   userId          Int?
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   
   // Relación con aplicaciones
-  applications    Application[]   // ← AGREGAR ESTA LÍNEA
+  applications    Application[]
   
   // Timestamps
   createdAt       DateTime  @default(now())
@@ -129,6 +141,8 @@ model Job {
   @@index([location])
   @@index([jobType])
   @@index([workMode])
+  @@index([profile])
+  @@index([seniority])
 }
 
 // =============================================
@@ -167,4 +181,95 @@ model Application {
   @@index([status])
   @@index([candidateEmail])
   @@index([createdAt])
+}
+
+// =============================================
+// MATRIZ DE PRECIOS (Sistema de Créditos)
+// =============================================
+model PricingMatrix {
+  id          Int      @id @default(autoincrement())
+  
+  // Categorías
+  profile     String   // "Tecnología", "Arquitectura", "Diseño Gráfico", etc.
+  seniority   String   // "Practicante", "Jr", "Middle", "Sr", "Director"
+  workMode    String   // "remote", "hybrid", "presential"
+  location    String?  // "Monterrey", "CDMX", "GDL", etc. (opcional)
+  
+  // Costo en créditos
+  credits     Int
+  
+  // Metadatos
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([profile, seniority, workMode, location])
+  @@index([profile])
+  @@index([seniority])
+  @@index([workMode])
+  @@index([location])
+  @@index([isActive])
+}
+
+// =============================================
+// COMPRAS DE CRÉDITOS
+// =============================================
+model CreditPurchase {
+  id              Int      @id @default(autoincrement())
+  
+  // Relación con empresa
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Detalles de la compra
+  amount          Int      // Cantidad de créditos comprados
+  pricePerCredit  Float    // Precio por crédito (en MXN)
+  totalPrice      Float    // Precio total pagado
+  packageType     String?  // "single", "pack_10", "pack_15", "pack_20"
+  
+  // Información de pago (Conekta)
+  paymentStatus   String   @default("pending") // "pending", "paid", "failed", "refunded"
+  paymentId       String?  @unique // ID de Conekta
+  paymentMethod   String?  // "card", "oxxo", "spei"
+  receiptUrl      String?  // URL del recibo
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  paidAt          DateTime?
+  
+  @@index([userId])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@index([paymentId])
+}
+
+// =============================================
+// HISTORIAL DE CRÉDITOS (Auditoría)
+// =============================================
+model CreditTransaction {
+  id            Int      @id @default(autoincrement())
+  
+  // Relación con empresa
+  userId        Int
+  
+  // Tipo de transacción
+  type          String   // "purchase", "spend", "refund", "admin_adjustment"
+  amount        Int      // Cantidad (positivo = suma, negativo = resta)
+  balanceBefore Int      // Balance antes de la transacción
+  balanceAfter  Int      // Balance después de la transacción
+  
+  // Referencias
+  jobId         Int?     // Si se gastó en una vacante
+  purchaseId    Int?     // Si fue una compra
+  
+  // Descripción
+  description   String?
+  
+  // Timestamp
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([jobId])
 }

@@ -74,7 +74,8 @@ async function main() {
         apellidoMaterno: 'García',
         role: 'company',
         isActive: true,
-        emailVerified: new Date()
+        emailVerified: new Date(),
+        credits: 50 // ← CRÉDITOS INICIALES PARA PRUEBAS
       }
     });
 
@@ -95,7 +96,9 @@ async function main() {
       }
     });
 
-    console.log(`✅ Empresa creada: TechSolutions México (${company1.email})`);
+    console.log(
+      `✅ Empresa creada: TechSolutions México (${company1.email}) - 50 créditos`
+    );
   } else {
     console.log(`✅ Empresa ya existe: TechSolutions México`);
   }
@@ -115,7 +118,8 @@ async function main() {
         apellidoMaterno: 'Hernández',
         role: 'company',
         isActive: true,
-        emailVerified: new Date()
+        emailVerified: new Date(),
+        credits: 50 // ← CRÉDITOS INICIALES
       }
     });
 
@@ -137,7 +141,7 @@ async function main() {
     });
 
     console.log(
-      `✅ Empresa creada: Creative Digital Studio (${company2.email})`
+      `✅ Empresa creada: Creative Digital Studio (${company2.email}) - 50 créditos`
     );
   } else {
     console.log(`✅ Empresa ya existe: Creative Digital Studio`);
@@ -158,7 +162,8 @@ async function main() {
         apellidoMaterno: 'Martínez',
         role: 'company',
         isActive: true,
-        emailVerified: new Date()
+        emailVerified: new Date(),
+        credits: 50 // ← CRÉDITOS INICIALES
       }
     });
 
@@ -180,7 +185,7 @@ async function main() {
     });
 
     console.log(
-      `✅ Empresa creada: Grupo Financiero Nacional (${company3.email})`
+      `✅ Empresa creada: Grupo Financiero Nacional (${company3.email}) - 50 créditos`
     );
   } else {
     console.log(`✅ Empresa ya existe: Grupo Financiero Nacional`);
@@ -260,6 +265,11 @@ async function main() {
   console.log(`✅ ${usersCreated} usuarios normales creados`);
 
   // =============================================
+  // 2.75 POBLAR MATRIZ DE PRECIOS
+  // =============================================
+  await seedPricingMatrix();
+
+  // =============================================
   // 3. CREAR VACANTES (DISTRIBUIDAS ENTRE EMPRESAS)
   // =============================================
   console.log('\n💼 Creando vacantes de ejemplo...\n');
@@ -273,6 +283,9 @@ async function main() {
       salary: '$35,000 - $50,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'remote',
+      profile: 'Tecnología', // ← NUEVO
+      seniority: 'Middle', // ← NUEVO
+      creditCost: 8, // ← NUEVO
       companyRating: 4.5,
       userId: company1.id,
       description: `Estamos buscando un desarrollador full stack apasionado para unirse a nuestro equipo dinámico.
@@ -303,6 +316,9 @@ Ofrecemos:
       salary: '$45,000 - $65,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Tecnología',
+      seniority: 'Sr',
+      creditCost: 14,
       companyRating: 4.7,
       userId: company1.id,
       description: `Únete a nuestro equipo de infraestructura cloud como Ingeniero DevOps.
@@ -327,6 +343,9 @@ Responsabilidades:
       salary: '$40,000 - $55,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'hybrid',
+      profile: 'Tecnología',
+      seniority: 'Middle',
+      creditCost: 10,
       companyRating: 4.3,
       userId: company1.id,
       description: `Protege la infraestructura digital de empresas líderes.
@@ -351,6 +370,9 @@ Responsabilidades:
       salary: '$22,000 - $32,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Admin de Oficina',
+      seniority: 'Jr',
+      creditCost: 5,
       companyRating: 4.4,
       userId: company1.id,
       description: `Conecta talento tech con las mejores oportunidades.
@@ -375,6 +397,9 @@ Responsabilidades:
       salary: '$400 - $600 / hora',
       jobType: 'Por Proyecto',
       workMode: 'remote',
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      creditCost: 5,
       companyRating: 4.4,
       userId: company1.id,
       description: `Proyectos web para clientes internacionales.
@@ -400,6 +425,9 @@ Tecnologías: React, Next.js, Vue.js`,
       salary: '$22,000 - $32,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'remote',
+      profile: 'Admin de Oficina',
+      seniority: 'Jr',
+      creditCost: 4,
       companyRating: 4.7,
       userId: company1.id,
       description: `Asegura el éxito de clientes en plataforma SaaS.
@@ -426,6 +454,9 @@ Responsabilidades:
       salary: '$30,000 - $45,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'hybrid',
+      profile: 'Diseño Gráfico',
+      seniority: 'Sr',
+      creditCost: 11,
       companyRating: 4.6,
       userId: company2.id,
       description: `Crea experiencias digitales excepcionales para marcas reconocidas.
@@ -450,6 +481,9 @@ Responsabilidades:
       salary: '$25,000 - $35,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      creditCost: 7,
       companyRating: 4.2,
       userId: company2.id,
       description: `Impulsa estrategias digitales para clientes B2B y B2C.
@@ -474,6 +508,9 @@ Responsabilidades:
       salary: '$18,000 - $25,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'remote',
+      profile: 'Diseño Gráfico',
+      seniority: 'Jr',
+      creditCost: 5,
       companyRating: 4.0,
       userId: company2.id,
       description: `Gestiona la presencia digital de marcas en redes sociales.
@@ -498,6 +535,9 @@ Responsabilidades:
       salary: '$20,000 - $30,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Educación',
+      seniority: 'Middle',
+      creditCost: 6,
       companyRating: 4.3,
       userId: company2.id,
       description: `Desarrolla talento y mejora clima organizacional.
@@ -522,6 +562,9 @@ Responsabilidades:
       salary: '$28,000 - $38,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'remote',
+      profile: 'Educación',
+      seniority: 'Middle',
+      creditCost: 5,
       companyRating: 4.5,
       userId: company2.id,
       description: `Crea experiencias de aprendizaje digital innovadoras.
@@ -546,6 +589,9 @@ Responsabilidades:
       salary: '$20,000 - $30,000 + comisiones',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      creditCost: 7,
       companyRating: 4.3,
       userId: company2.id,
       description: `Vende soluciones de software empresarial.
@@ -574,6 +620,9 @@ Comisiones sin techo + prestaciones superiores`,
       salary: '$25,000 - $35,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      creditCost: 7,
       companyRating: 4.1,
       userId: company3.id,
       description: `Apoya todas las funciones de RRHH en empresa manufacturera.
@@ -598,6 +647,9 @@ Responsabilidades:
       salary: '$35,000 - $50,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Finanzas',
+      seniority: 'Middle',
+      creditCost: 7,
       companyRating: 4.6,
       userId: company3.id,
       description: `Analiza inversiones y proyecciones financieras.
@@ -622,6 +674,9 @@ Responsabilidades:
       salary: '$40,000 - $55,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'hybrid',
+      profile: 'Admin de Oficina',
+      seniority: 'Sr',
+      creditCost: 10,
       companyRating: 4.4,
       userId: company3.id,
       description: `Lidera proyectos estratégicos de transformación digital.
@@ -646,6 +701,9 @@ Responsabilidades:
       salary: '$25,000 - $35,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Finanzas',
+      seniority: 'Middle',
+      creditCost: 7,
       companyRating: 4.0,
       userId: company3.id,
       description: `Gestiona contabilidad general de grupo empresarial.
@@ -670,6 +728,9 @@ Responsabilidades:
       salary: '$30,000 - $42,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Tecnología',
+      seniority: 'Middle',
+      creditCost: 10,
       companyRating: 4.5,
       userId: company3.id,
       description: `Desarrolla soluciones de automatización industrial.
@@ -694,6 +755,9 @@ Responsabilidades:
       salary: '$28,000 - $38,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      creditCost: 6,
       companyRating: 4.2,
       userId: company3.id,
       description: `Asegura estándares de calidad en producción automotriz.
@@ -724,7 +788,9 @@ Responsabilidades:
 
     if (!existing) {
       const created = await prisma.job.create({ data: job });
-      console.log(`✅ ${created.title} - ${created.company}`);
+      console.log(
+        `✅ ${created.title} - ${created.company} (${created.creditCost} créditos)`
+      );
       jobsCreated++;
     } else {
       console.log(`⏭️  Ya existe: ${job.title}`);
@@ -790,11 +856,12 @@ Responsabilidades:
   console.log(
     `  • Usuarios admin: 2 (admin@inakat.com, guillermo.sanchezy@gmail.com)`
   );
-  console.log(`  • Empresas: 3 (aprobadas con cuentas activas)`);
+  console.log(`  • Empresas: 3 (cada una con 50 créditos de prueba)`);
   console.log(`  • Usuarios normales: ${usersCreated}`);
   console.log(
     `  • Vacantes: ${jobsCreated} nuevas creadas (18 total distribuidas)`
   );
+  console.log(`  • Matriz de precios: 105 combinaciones`);
   console.log(`  • Aplicaciones: Ver detalles arriba`);
   console.log(`  • Solicitudes pendientes: ${requestsCreated}`);
 
@@ -808,14 +875,17 @@ Responsabilidades:
   console.log('\n  🏢 EMPRESA 1 (TechSolutions):');
   console.log('     Email: contact@techsolutions.mx');
   console.log('     Password: Company123!');
+  console.log('     Créditos: 50');
   console.log('     Vacantes: 6 (tech)');
   console.log('\n  🏢 EMPRESA 2 (Creative Digital):');
   console.log('     Email: rh@creativedigital.mx');
   console.log('     Password: Company123!');
+  console.log('     Créditos: 50');
   console.log('     Vacantes: 6 (diseño/marketing)');
   console.log('\n  🏢 EMPRESA 3 (Grupo Financiero):');
   console.log('     Email: hr@grupofinanciero.mx');
   console.log('     Password: Company123!');
+  console.log('     Créditos: 50');
   console.log('     Vacantes: 6 (negocios/finanzas)');
   console.log('\n  👤 USUARIOS NORMALES (Password: User123!):');
   console.log('     carlos.dev@gmail.com - Desarrollador');
@@ -859,7 +929,7 @@ async function createSampleApplications() {
   const sampleApplications = [
     // CARLOS - Desarrollador (3 aplicaciones tech)
     {
-      jobId: jobs[0]?.id, // Desarrollador Full Stack
+      jobId: jobs[0]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
       candidateEmail: 'carlos.dev@gmail.com',
@@ -869,7 +939,7 @@ async function createSampleApplications() {
       status: 'pending'
     },
     {
-      jobId: jobs[1]?.id, // Ingeniero DevOps
+      jobId: jobs[1]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
       candidateEmail: 'carlos.dev@gmail.com',
@@ -880,7 +950,7 @@ async function createSampleApplications() {
       reviewedAt: new Date()
     },
     {
-      jobId: jobs[2]?.id, // Analista de Ciberseguridad
+      jobId: jobs[2]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
       candidateEmail: 'carlos.dev@gmail.com',
@@ -894,7 +964,7 @@ async function createSampleApplications() {
 
     // ANA - Diseñadora (4 aplicaciones diseño/UX)
     {
-      jobId: jobs[6]?.id, // Diseñador UX/UI Senior
+      jobId: jobs[6]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
       candidateEmail: 'ana.designer@gmail.com',
@@ -906,7 +976,7 @@ async function createSampleApplications() {
       notes: 'Portfolio muy bueno. Programar segunda entrevista.'
     },
     {
-      jobId: jobs[10]?.id, // Diseñador Instruccional
+      jobId: jobs[10]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
       candidateEmail: 'ana.designer@gmail.com',
@@ -916,7 +986,7 @@ async function createSampleApplications() {
       status: 'pending'
     },
     {
-      jobId: jobs[8]?.id, // Community Manager
+      jobId: jobs[8]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
       candidateEmail: 'ana.designer@gmail.com',
@@ -928,7 +998,7 @@ async function createSampleApplications() {
       notes: 'Perfil más orientado a diseño que a community management.'
     },
     {
-      jobId: jobs[4]?.id, // Desarrollador Frontend Freelance
+      jobId: jobs[4]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
       candidateEmail: 'ana.designer@gmail.com',
@@ -941,7 +1011,7 @@ async function createSampleApplications() {
 
     // LUIS - Marketing (2 aplicaciones marketing)
     {
-      jobId: jobs[7]?.id, // Especialista en Marketing Digital
+      jobId: jobs[7]?.id,
       userId: luis?.id,
       candidateName: 'Luis González Hernández',
       candidateEmail: 'luis.marketing@gmail.com',
@@ -951,7 +1021,7 @@ async function createSampleApplications() {
       status: 'pending'
     },
     {
-      jobId: jobs[8]?.id, // Community Manager
+      jobId: jobs[8]?.id,
       userId: luis?.id,
       candidateName: 'Luis González Hernández',
       candidateEmail: 'luis.marketing@gmail.com',
@@ -964,7 +1034,7 @@ async function createSampleApplications() {
 
     // MARÍA - RRHH (2 aplicaciones RRHH)
     {
-      jobId: jobs[12]?.id, // Generalista de Recursos Humanos
+      jobId: jobs[12]?.id,
       userId: maria?.id,
       candidateName: 'María Sánchez Torres',
       candidateEmail: 'maria.rh@gmail.com',
@@ -976,7 +1046,7 @@ async function createSampleApplications() {
       notes: 'Muy buena entrevista. Verificar referencias.'
     },
     {
-      jobId: jobs[9]?.id, // Psicólogo Organizacional
+      jobId: jobs[9]?.id,
       userId: maria?.id,
       candidateName: 'María Sánchez Torres',
       candidateEmail: 'maria.rh@gmail.com',
@@ -988,7 +1058,7 @@ async function createSampleApplications() {
 
     // PEDRO - Junior (2 aplicaciones entry-level)
     {
-      jobId: jobs[5]?.id, // Customer Success Specialist
+      jobId: jobs[5]?.id,
       userId: pedro?.id,
       candidateName: 'Pedro Jiménez Ruiz',
       candidateEmail: 'pedro.junior@gmail.com',
@@ -998,7 +1068,7 @@ async function createSampleApplications() {
       status: 'pending'
     },
     {
-      jobId: jobs[3]?.id, // Reclutador IT
+      jobId: jobs[3]?.id,
       userId: pedro?.id,
       candidateName: 'Pedro Jiménez Ruiz',
       candidateEmail: 'pedro.junior@gmail.com',
@@ -1034,6 +1104,786 @@ async function createSampleApplications() {
   console.log(`\n✅ ${created} aplicaciones de ejemplo creadas\n`);
 }
 
+async function seedPricingMatrix() {
+  console.log('\n🎯 Poblando matriz de precios...\n');
+
+  // MATRIZ BASE: Perfil x Seniority x Modalidad
+  const baseMatrix = [
+    // TECNOLOGÍA (15 combinaciones)
+    {
+      profile: 'Tecnología',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 6
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 8
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 10
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 10
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 12
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 14
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 14
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 15
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 18
+    },
+    {
+      profile: 'Tecnología',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 18
+    },
+
+    // ARQUITECTURA (15 combinaciones - mismos precios que tecnología)
+    {
+      profile: 'Arquitectura',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 6
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 8
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 10
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 10
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 12
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 14
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 14
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 15
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 18
+    },
+    {
+      profile: 'Arquitectura',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 18
+    },
+
+    // DISEÑO GRÁFICO (15 combinaciones)
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 6
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 8
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 8
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 9
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 11
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 11
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 12
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 14
+    },
+    {
+      profile: 'Diseño Gráfico',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 14
+    },
+
+    // PROD AUDIOVISUAL (15 combinaciones - mismos precios que Diseño Gráfico)
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 6
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 8
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 8
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 9
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 11
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 11
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 12
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 14
+    },
+    {
+      profile: 'Prod Audiovisual',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 14
+    },
+
+    // EDUCACIÓN (15 combinaciones)
+    {
+      profile: 'Educación',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 3
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 4
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 6
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 6
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 9
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 9
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 10
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 12
+    },
+    {
+      profile: 'Educación',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 12
+    },
+
+    // ADMIN DE OFICINA (15 combinaciones)
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 3
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 4
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 7
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 7
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 7
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 10
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 10
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 11
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 13
+    },
+    {
+      profile: 'Admin de Oficina',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 13
+    },
+
+    // FINANZAS (15 combinaciones - mismos precios que Admin de Oficina)
+    {
+      profile: 'Finanzas',
+      seniority: 'Practicante',
+      workMode: 'remote',
+      location: null,
+      credits: 3
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Practicante',
+      workMode: 'hybrid',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Practicante',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 4
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Jr',
+      workMode: 'remote',
+      location: null,
+      credits: 4
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Jr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Jr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 5
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Middle',
+      workMode: 'remote',
+      location: null,
+      credits: 5
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Middle',
+      workMode: 'hybrid',
+      location: null,
+      credits: 7
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Middle',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 7
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Sr',
+      workMode: 'remote',
+      location: null,
+      credits: 7
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Sr',
+      workMode: 'hybrid',
+      location: null,
+      credits: 10
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Sr',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 10
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Director',
+      workMode: 'remote',
+      location: null,
+      credits: 11
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Director',
+      workMode: 'hybrid',
+      location: null,
+      credits: 13
+    },
+    {
+      profile: 'Finanzas',
+      seniority: 'Director',
+      workMode: 'presential',
+      location: 'Monterrey',
+      credits: 13
+    }
+  ];
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const price of baseMatrix) {
+    try {
+      await prisma.pricingMatrix.create({
+        data: price
+      });
+      created++;
+    } catch (error) {
+      skipped++;
+    }
+  }
+
+  console.log(`✨ Matriz de precios poblada:`);
+  console.log(`   Creados: ${created}`);
+  console.log(`   Saltados: ${skipped}`);
+  console.log(
+    `   Total: 105 combinaciones (7 perfiles x 5 seniorities x 3 modalidades)\n`
+  );
+}
+
+// =============================================
+// EJECUTAR SEED
+// =============================================
 main()
   .catch((e) => {
     console.error('❌ Error:', e);
