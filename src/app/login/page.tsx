@@ -1,3 +1,5 @@
+// RUTA: src/app/login/page.tsx
+
 'use client';
 
 import React, { useState, FormEvent } from 'react';
@@ -51,7 +53,7 @@ export default function LoginPage() {
         } else if (role === 'company') {
           window.location.href = '/company/dashboard';
         } else {
-          window.location.href = '/my-applications';
+          window.location.href = '/talents';
         }
       } else {
         setError(data.error || 'Error al iniciar sesión');
@@ -86,41 +88,74 @@ export default function LoginPage() {
 
         {/* Columna Derecha: Formulario */}
         <div className="w-full md:w-1/2 bg-soft-green p-10 flex flex-col justify-center items-center">
-          <div className="w-24 h-24 bg-lemon-green rounded-full flex items-center justify-center mb-4">
-            <Image src={logoIcon} alt="Logo" className="w-10 h-14" />
+          <div className="w-24 h-24 mb-4">
+            <Image
+              src={logoIcon}
+              alt="INAKAT Logo"
+              width={96}
+              height={96}
+              className="object-contain"
+            />
           </div>
-          <h2 className="text-white text-xl font-bold mb-6">INICIA SESIÓN</h2>
 
-          {error && (
-            <div className="w-full max-w-xs mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-              {error}
+          <h1 className="text-3xl font-bold text-white mb-2">Inicia sesión</h1>
+          <p className="text-white text-sm mb-6">
+            Accede a tu cuenta de INAKAT
+          </p>
+
+          <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-4">
+            {/* Mensaje de error */}
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
+
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className="block text-white text-sm mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-button-green"
+                placeholder="tu@email.com"
+              />
             </div>
-          )}
 
-          {/* Formulario */}
-          <form className="w-full max-w-xs space-y-4" onSubmit={handleSubmit}>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="E-mail"
-              className="w-full p-3 bg-white text-black border border-gray-300 rounded-full input-field"
-              required
-            />
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Contraseña"
-              className="w-full p-3 bg-white text-black border border-gray-300 rounded-full input-field"
-              required
-            />
+            {/* Contraseña */}
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-white text-sm mb-1"
+              >
+                Contraseña
+              </label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-button-green"
+                placeholder="••••••••"
+              />
+            </div>
 
-            {/* Olvidaste contraseña */}
-            <p className="text-white text-sm text-center cursor-pointer hover:underline">
-              ¿Olvidaste tu contraseña?
+            {/* Olvidaste tu contraseña */}
+            <p className="text-right">
+              <Link
+                href="/forgot-password"
+                className="text-white text-sm hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
             </p>
 
             {/* Botón Ingresar */}
@@ -157,15 +192,29 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {/* Registrarse */}
-            <div className="text-center mt-4 w-full">
-              <p className="text-white text-sm">¿No tienes una cuenta?</p>
+            {/* Registrarse - ACTUALIZADO con dos opciones */}
+            <div className="text-center mt-4 w-full space-y-3">
+              <p className="text-white text-sm font-semibold">
+                ¿No tienes una cuenta?
+              </p>
+
+              {/* Registro Candidato */}
+              <Link href="/register" className="w-full flex justify-center">
+                <button
+                  type="button"
+                  className="w-full bg-button-green text-white font-bold py-3 rounded-full hover:bg-green-700 transition"
+                >
+                  REGISTRARSE COMO CANDIDATO →
+                </button>
+              </Link>
+
+              {/* Registro Empresa */}
               <Link href="/companies" className="w-full flex justify-center">
                 <button
                   type="button"
-                  className="w-full bg-button-orange text-white font-bold py-3 rounded-full mt-2 hover:bg-orange-700"
+                  className="w-full bg-button-orange text-white font-bold py-3 rounded-full hover:bg-orange-700 transition"
                 >
-                  REGÍSTRATE →
+                  REGISTRAR EMPRESA →
                 </button>
               </Link>
             </div>
