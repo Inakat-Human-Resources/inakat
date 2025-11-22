@@ -102,7 +102,8 @@ export default function PurchaseCreditsPage() {
     try {
       setLoading(true);
 
-      const res = await fetch('/api/credits/purchase', {
+      // ✅ CORREGIDO: /api/credits/purchases (con 's')
+      const res = await fetch('/api/credits/purchases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,24 +201,13 @@ export default function PurchaseCreditsPage() {
                       <p className="text-gray-600 mb-4">
                         {pkg.credits === 1 ? 'crédito' : 'créditos'}
                       </p>
-
-                      <div className="text-3xl font-bold text-button-orange mb-2">
+                      <p className="text-3xl font-bold text-button-orange mb-2">
                         ${pkg.price.toLocaleString()}
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        ${pkg.pricePerCredit.toLocaleString()} / crédito
                       </p>
-
-                      {pkg.pricePerCredit < 4000 && (
-                        <p className="text-green-600 font-bold text-sm mt-2">
-                          ¡Ahorra $
-                          {(
-                            (4000 - pkg.pricePerCredit) *
-                            pkg.credits
-                          ).toLocaleString()}
-                          !
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-500">MXN</p>
+                      <p className="text-xs text-gray-400 mt-2">
+                        ${pkg.pricePerCredit.toLocaleString()} por crédito
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -227,20 +217,52 @@ export default function PurchaseCreditsPage() {
               <div className="text-center">
                 <button
                   onClick={() => setShowCheckout(true)}
-                  className="bg-button-orange text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-opacity-90 transition-all"
+                  className="bg-button-orange text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-opacity-90 transition-colors"
                 >
-                  Continuar al Pago
+                  Continuar al Pago →
                 </button>
+              </div>
+
+              {/* Info adicional */}
+              <div className="mt-12 bg-white rounded-xl p-6">
+                <h2 className="text-2xl font-bold mb-4">
+                  ¿Cómo funcionan los créditos?
+                </h2>
+                <ul className="space-y-3 text-gray-700">
+                  <li className="flex items-start gap-2">
+                    <span className="text-button-orange font-bold">✓</span>
+                    <span>
+                      Cada crédito te permite publicar 1 vacante activa
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-button-orange font-bold">✓</span>
+                    <span>
+                      Los créditos no expiran y puedes usarlos cuando los
+                      necesites
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-button-orange font-bold">✓</span>
+                    <span>Paquetes más grandes = mejor precio por crédito</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-button-orange font-bold">✓</span>
+                    <span>
+                      Métodos de pago: Tarjeta, OXXO, transferencia bancaria
+                    </span>
+                  </li>
+                </ul>
               </div>
             </>
           ) : (
             <>
-              {/* Resumen del Paquete */}
-              <div className="bg-white rounded-xl p-6 mb-6 shadow-lg">
+              {/* Resumen de compra */}
+              <div className="bg-white rounded-xl p-6 mb-6">
                 <h2 className="text-2xl font-bold mb-4">Resumen de Compra</h2>
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-gray-600">Paquete:</p>
+                    <p className="text-gray-600">Paquete seleccionado:</p>
                     <p className="text-xl font-bold">
                       {selectedPkg.credits}{' '}
                       {selectedPkg.credits === 1 ? 'crédito' : 'créditos'}

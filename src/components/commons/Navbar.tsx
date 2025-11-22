@@ -24,23 +24,36 @@ const Navbar = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Verificar si hay token en cookies
-    const token = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('auth-token='))
-      ?.split('=')[1];
-
-    if (token) {
+    // Verificar autenticación llamando al endpoint /api/auth/me
+    const checkAuth = async () => {
       try {
-        // Decodificar JWT (sin verificar, solo para UI)
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(window.atob(base64));
-        setUser(payload);
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include' // Importante: incluir cookies
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            // Mapear los datos del usuario al formato esperado
+            setUser({
+              userId: data.user.id,
+              email: data.user.email,
+              role: data.user.role,
+              nombre: data.user.nombre
+            });
+          }
+        } else {
+          // Si no está autenticado, limpiar el estado
+          setUser(null);
+        }
       } catch (error) {
-        console.error('Error parsing token:', error);
+        console.error('Error checking auth:', error);
+        setUser(null);
       }
-    }
+    };
+
+    checkAuth();
   }, [pathname]);
 
   // Cerrar dropdown al hacer click fuera
@@ -58,14 +71,22 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    // Borrar cookie
-    document.cookie =
-      'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
-    setUser(null);
-    setDropdownOpen(false);
-    router.push('/');
-    router.refresh();
+  const handleLogout = async () => {
+    try {
+      // Llamar al endpoint de logout
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Error logging out:', error);
+    } finally {
+      // Limpiar estado local y redirigir
+      setUser(null);
+      setDropdownOpen(false);
+      router.push('/');
+      router.refresh();
+    }
   };
 
   const getDashboardLink = () => {
@@ -214,10 +235,36 @@ const Navbar = () => {
                       {getDashboardLabel()}
                     </Link>
 
+                    {/* Comprar Créditos - Solo para empresas */}
+                    {user.role === 'company' && (
+                      <Link
+                        href="/credits/purchase"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 transition-colors border-t border-gray-100"
+                      >
+                        <svg
+                          className="w-4 h-4 text-button-orange"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span className="font-medium text-button-orange">
+                          Comprar Créditos
+                        </span>
+                      </Link>
+                    )}
+
                     {/* Logout */}
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
                     >
                       <LogOut className="w-4 h-4" />
                       Cerrar Sesión

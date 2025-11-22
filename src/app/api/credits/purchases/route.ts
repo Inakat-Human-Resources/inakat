@@ -1,3 +1,5 @@
+// RUTA: src/app/api/credits/purchases/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
@@ -51,31 +53,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Crear objeto de pago base
+    const paymentBody: any = {
+      transaction_amount: pkg.price,
+      description: `Paquete de ${pkg.credits} crédito${
+        pkg.credits > 1 ? 's' : ''
+      } - INAKAT`,
+      payment_method_id: paymentData.payment_method_id,
+      token: paymentData.token,
+      installments: paymentData.installments || 1,
+      payer: {
+        email: user.email,
+        identification: {
+          type: 'RFC',
+          number: user.companyRequest?.rfc || 'XAXX010101000'
+        }
+      },
+      metadata: {
+        user_id: payload.userId,
+        package_type: packageType,
+        credits: pkg.credits
+      }
+    };
+
+    // Solo agregar notification_url si estamos en producción
+    // En desarrollo local, localhost no funciona para webhooks
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (appUrl && !appUrl.includes('localhost')) {
+      paymentBody.notification_url = `${appUrl}/api/webhooks/mercadopago`;
+    }
+
     // Crear pago en Mercado Pago
     const paymentResult = await payment.create({
-      body: {
-        transaction_amount: pkg.price,
-        description: `Paquete de ${pkg.credits} crédito${
-          pkg.credits > 1 ? 's' : ''
-        } - INAKAT`,
-        payment_method_id: paymentData.payment_method_id,
-        token: paymentData.token, // Token del card_token de Mercado Pago
-        installments: paymentData.installments || 1,
-        payer: {
-          email: user.email,
-          identification: {
-            type: 'RFC',
-            number: user.companyRequest?.rfc || 'XAXX010101000'
-          }
-        },
-        notification_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/mercadopago`,
-        metadata: {
-          user_id: payload.userId,
-          package_type: packageType,
-          credits: pkg.credits
-        }
-      }
+      body: paymentBody
     });
+
+    console.log('✅ Payment created:', paymentResult.id, paymentResult.status);
 
     // Registrar compra en DB
     const purchase = await prisma.creditPurchase.create({
@@ -118,6 +131,10 @@ export async function POST(req: NextRequest) {
         }
       });
 
+      console.log(
+        `✅ Credits added: ${pkg.credits} credits to user ${payload.userId}`
+      );
+
       return NextResponse.json({
         success: true,
         status: 'approved',
@@ -131,7 +148,7 @@ export async function POST(req: NextRequest) {
     // Pago pendiente (ej: OXXO, transferencia)
     return NextResponse.json({
       success: true,
-      status: paymentResult.status, // 'pending', 'in_process'
+      status: paymentResult.status,
       purchase,
       message: 'Pago pendiente de confirmación',
       paymentId: paymentResult.id,
@@ -142,7 +159,7 @@ export async function POST(req: NextRequest) {
       }
     });
   } catch (error: any) {
-    console.error('Error processing purchase:', error);
+    console.error('❌ Error processing purchase:', error);
 
     // Errores específicos de Mercado Pago
     if (error.cause) {
