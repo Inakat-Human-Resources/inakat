@@ -27,11 +27,11 @@
     --radius: 0.5rem;
 
     /* Original project variables */
-    --primary-blue: #004AAD;
-    --primary-white: #FFFFFF;
-    --secondary-gray: #F4F4F4;
+    --primary-blue: #004aad;
+    --primary-white: #ffffff;
+    --secondary-gray: #f4f4f4;
     --text-black: #333333;
-    --accent-yellow: #FFD700;
+    --accent-yellow: #ffd700;
   }
 
   .dark {
@@ -65,12 +65,12 @@
   body {
     @apply bg-custom-beige text-text-black;
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+      'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+      'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding-top: 3em; /* Space for fixed navbar */
+    padding-top: 8em; /* Space for fixed navbar */
   }
 
   code {
