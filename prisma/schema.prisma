@@ -405,3 +405,80 @@ model Specialty {
   @@index([sortOrder])
   @@index([slug])
 }
+
+// =============================================
+// SISTEMA DE ASIGNACIONES (Reclutador + Especialista)
+// =============================================
+
+// NOTA: Actualizar el enum de roles en User:
+// role String @default("user") 
+// Valores válidos: "admin", "company", "user", "recruiter", "specialist"
+
+// Asignación de vacante a Reclutador y Especialista
+model JobAssignment {
+  id              Int       @id @default(autoincrement())
+  
+  // Vacante asignada
+  jobId           Int
+  job             Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Reclutador asignado (psicólogo)
+  recruiterId     Int?
+  recruiter       User?     @relation("RecruiterAssignments", fields: [recruiterId], references: [id])
+  
+  // Especialista asignado (técnico)
+  specialistId    Int?
+  specialist      User?     @relation("SpecialistAssignments", fields: [specialistId], references: [id])
+  
+  // Estados del proceso
+  // Reclutador: pending → reviewing → sent_to_specialist
+  recruiterStatus   String    @default("pending")
+  
+  // Especialista: pending → evaluating → sent_to_company
+  specialistStatus  String    @default("pending")
+  
+  // Notas
+  recruiterNotes    String?   @db.Text
+  specialistNotes   String?   @db.Text
+  
+  // Candidatos enviados al especialista (IDs separados por coma)
+  candidatesSentToSpecialist  String?
+  
+  // Candidatos enviados a la empresa (IDs separados por coma)
+  candidatesSentToCompany     String?
+  
+  // Timestamps
+  assignedAt        DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Seguimiento 45 días
+  followUpDate      DateTime?
+  followUpCompleted Boolean   @default(false)
+  followUpNotes     String?
+  
+  @@unique([jobId])
+  @@index([recruiterId])
+  @@index([specialistId])
+  @@index([recruiterStatus])
+  @@index([specialistStatus])
+}
+
+// =============================================
+// AGREGAR AL MODELO User (relaciones):
+// =============================================
+// Agregar estos campos al modelo User existente:
+//
+// // Especialidad (para specialists)
+// specialty         String?
+// 
+// // Relaciones de asignaciones
+// recruiterAssignments   JobAssignment[] @relation("RecruiterAssignments")
+// specialistAssignments  JobAssignment[] @relation("SpecialistAssignments")
+
+// =============================================
+// AGREGAR AL MODELO Job (relación):
+// =============================================
+// Agregar este campo al modelo Job existente:
+//
+// assignment        JobAssignment?
+

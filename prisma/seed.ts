@@ -275,6 +275,11 @@ async function main() {
   await seedSpecialties();
 
   // =============================================
+  // 2.9 POBLAR STAFF
+  // =============================================
+  await seedStaff();
+
+  // =============================================
   // 3. CREAR VACANTES (DISTRIBUIDAS ENTRE EMPRESAS)
   // =============================================
   console.log('\n💼 Creando vacantes de ejemplo...\n');
@@ -2078,6 +2083,187 @@ async function seedSpecialties() {
   }
 
   console.log('✅ Specialties seeded successfully!');
+}
+
+async function seedStaff() {
+  console.log('🌱 Creando especialistas y reclutadores...\n');
+
+  const defaultPassword = await bcrypt.hash('Staff2024!', 10);
+
+  // =============================================
+  // ESPECIALISTAS (de la lista de Lalo)
+  // =============================================
+  const specialists = [
+    {
+      email: 'ludim@inakat.com',
+      nombre: 'Ludim',
+      apellidoPaterno: 'Salo',
+      specialty: 'Tecnología',
+      role: 'specialist'
+    },
+    {
+      email: 'memo@inakat.com',
+      nombre: 'Memo',
+      apellidoPaterno: 'García',
+      specialty: 'Tecnología',
+      role: 'specialist'
+    },
+    {
+      email: 'alex@inakat.com',
+      nombre: 'Alex',
+      apellidoPaterno: 'Rodríguez',
+      specialty: 'Tecnología',
+      role: 'specialist'
+    },
+    {
+      email: 'denisse@inakat.com',
+      nombre: 'Denisse',
+      apellidoPaterno: 'López',
+      specialty: 'Diseño Gráfico',
+      role: 'specialist'
+    },
+    {
+      email: 'andre@inakat.com',
+      nombre: 'André',
+      apellidoPaterno: 'Martínez',
+      specialty: 'Producción Audiovisual',
+      role: 'specialist'
+    },
+    {
+      email: 'lalo@inakat.com',
+      nombre: 'Lalo',
+      apellidoPaterno: 'Hernández',
+      specialty: 'Project Management',
+      role: 'specialist'
+    },
+    {
+      email: 'mayela@inakat.com',
+      nombre: 'Mayela',
+      apellidoPaterno: 'Sánchez',
+      specialty: 'Marketing',
+      role: 'specialist'
+    },
+    {
+      email: 'omar@inakat.com',
+      nombre: 'Omar',
+      apellidoPaterno: 'Pérez',
+      specialty: 'Educación',
+      role: 'specialist'
+    }
+  ];
+
+  console.log('👨‍💻 Creando especialistas...');
+
+  let specialistsCreated = 0;
+  for (const data of specialists) {
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email }
+    });
+
+    if (existing) {
+      // Actualizar rol y especialidad si ya existe
+      await prisma.user.update({
+        where: { email: data.email },
+        data: {
+          role: 'specialist',
+          specialty: data.specialty
+        }
+      });
+      console.log(
+        `  ⏭️  ${data.nombre} ya existe, actualizado a especialista (${data.specialty})`
+      );
+    } else {
+      await prisma.user.create({
+        data: {
+          email: data.email,
+          password: defaultPassword,
+          nombre: data.nombre,
+          apellidoPaterno: data.apellidoPaterno,
+          role: 'specialist',
+          specialty: data.specialty,
+          isActive: true,
+          emailVerified: new Date()
+        }
+      });
+      specialistsCreated++;
+      console.log(`  ✅ ${data.nombre} - ${data.specialty}`);
+    }
+  }
+
+  // =============================================
+  // RECLUTADORES DE EJEMPLO (Lalo buscará freelancers)
+  // =============================================
+  const recruiters = [
+    {
+      email: 'reclutador1@inakat.com',
+      nombre: 'Reclutador',
+      apellidoPaterno: 'Demo',
+      role: 'recruiter'
+    },
+    {
+      email: 'reclutador2@inakat.com',
+      nombre: 'Patricia',
+      apellidoPaterno: 'González',
+      role: 'recruiter'
+    }
+  ];
+
+  console.log('\n👥 Creando reclutadores de prueba...');
+
+  let recruitersCreated = 0;
+  for (const data of recruiters) {
+    const existing = await prisma.user.findUnique({
+      where: { email: data.email }
+    });
+
+    if (existing) {
+      await prisma.user.update({
+        where: { email: data.email },
+        data: { role: 'recruiter' }
+      });
+      console.log(`  ⏭️  ${data.nombre} ya existe, actualizado a reclutador`);
+    } else {
+      await prisma.user.create({
+        data: {
+          email: data.email,
+          password: defaultPassword,
+          nombre: data.nombre,
+          apellidoPaterno: data.apellidoPaterno,
+          role: 'recruiter',
+          isActive: true,
+          emailVerified: new Date()
+        }
+      });
+      recruitersCreated++;
+      console.log(`  ✅ ${data.nombre} ${data.apellidoPaterno}`);
+    }
+  }
+
+  // =============================================
+  // RESUMEN
+  // =============================================
+  console.log('\n✨ ¡Staff creado exitosamente!\n');
+  console.log('📊 RESUMEN:');
+  console.log(`  • Especialistas: ${specialistsCreated} nuevos`);
+  console.log(`  • Reclutadores: ${recruitersCreated} nuevos`);
+
+  console.log('\n🔐 CREDENCIALES:');
+  console.log('   Password para todos: Staff2024!\n');
+
+  console.log('👨‍💻 ESPECIALISTAS:');
+  specialists.forEach((s) => {
+    console.log(`   • ${s.nombre} (${s.specialty}): ${s.email}`);
+  });
+
+  console.log('\n👥 RECLUTADORES:');
+  recruiters.forEach((r) => {
+    console.log(`   • ${r.nombre}: ${r.email}`);
+  });
+
+  console.log('\n🚀 Para probar:');
+  console.log('   Reclutador: http://localhost:3000/recruiter/dashboard');
+  console.log('   Especialista: http://localhost:3000/specialist/dashboard');
+  console.log('   Admin (asignar): http://localhost:3000/admin/assignments\n');
 }
 
 // =============================================
