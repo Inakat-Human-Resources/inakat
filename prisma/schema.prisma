@@ -37,6 +37,10 @@ model User {
   jobs              Job[]
   applications      Application[]
   creditPurchases   CreditPurchase[]
+
+  specialty               String?
+  recruiterAssignments    JobAssignment[] @relation("RecruiterAssignments")
+  specialistAssignments   JobAssignment[] @relation("SpecialistAssignments")
   
   @@index([email])
   @@index([role])
@@ -129,6 +133,8 @@ model Job {
   
   // Relación con aplicaciones
   applications    Application[]
+
+  assignment      JobAssignment?
   
   // Timestamps
   createdAt       DateTime  @default(now())

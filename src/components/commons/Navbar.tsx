@@ -99,6 +99,10 @@ const Navbar = () => {
         return '/admin/requests';
       case 'company':
         return '/company/dashboard';
+      case 'recruiter':
+        return '/recruiter/dashboard';
+      case 'specialist':
+        return '/specialist/dashboard';
       case 'user':
         return '/my-applications';
       default:
@@ -114,6 +118,10 @@ const Navbar = () => {
         return 'Panel Admin';
       case 'company':
         return 'Dashboard Empresa';
+      case 'recruiter':
+        return 'Dashboard Reclutador';
+      case 'specialist':
+        return 'Dashboard Especialista';
       case 'user':
         return 'Mis Aplicaciones';
       default:
@@ -143,6 +151,10 @@ const Navbar = () => {
         return 'Administrador';
       case 'company':
         return 'Empresa';
+      case 'recruiter':
+        return 'Reclutador';
+      case 'specialist':
+        return 'Especialista';
       case 'user':
         return 'Usuario';
       default:

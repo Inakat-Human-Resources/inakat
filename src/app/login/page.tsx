@@ -52,6 +52,10 @@ export default function LoginPage() {
           window.location.href = '/admin/requests';
         } else if (role === 'company') {
           window.location.href = '/company/dashboard';
+        } else if (role === 'recruiter') {
+          window.location.href = '/recruiter/dashboard';
+        } else if (role === 'specialist') {
+          window.location.href = '/specialist/dashboard';
         } else {
           window.location.href = '/talents';
         }
