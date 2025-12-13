@@ -25,8 +25,8 @@ export const companyRequestSchema = z.object({
   rfc: z
     .string()
     .regex(
-      /^[A-ZÑ&]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]$/,
-      'RFC inválido. Debe ser formato mexicano válido (ej: ABC123456A1A)'
+      /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/,
+      'RFC inválido. Debe ser formato mexicano válido (ej: ABC123456A1A o XAXX010101AAA)'
     ),
   direccionEmpresa: z.string().min(10, 'Dirección muy corta'),
   identificacionUrl: z.string().url().optional().or(z.literal('')),

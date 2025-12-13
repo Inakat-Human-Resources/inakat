@@ -89,8 +89,28 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error creating company request:", error);
+
+    // Manejar error de RFC duplicado (Prisma unique constraint violation)
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'P2002' &&
+      'meta' in error &&
+      error.meta &&
+      typeof error.meta === 'object' &&
+      'target' in error.meta &&
+      Array.isArray(error.meta.target) &&
+      error.meta.target.includes('rfc')
+    ) {
+      return NextResponse.json(
+        { error: "Ya existe una solicitud con este RFC. Por favor, verifica tus datos o contacta soporte." },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to submit company request" },
       { status: 500 }

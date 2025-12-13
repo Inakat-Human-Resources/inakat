@@ -179,6 +179,15 @@ const FormRegisterForQuotationSection = () => {
         throw new Error('Archivos requeridos no encontrados');
       }
 
+      // Validar tamaño de archivos (máximo 5MB)
+      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      if (formData.identificacion.size > MAX_FILE_SIZE) {
+        throw new Error('El archivo de identificación excede el tamaño máximo de 5MB');
+      }
+      if (formData.documentosConstitucion.size > MAX_FILE_SIZE) {
+        throw new Error('Los documentos de constitución exceden el tamaño máximo de 5MB');
+      }
+
       const idFormData = new FormData();
       idFormData.append('file', formData.identificacion);
 
@@ -187,7 +196,10 @@ const FormRegisterForQuotationSection = () => {
         body: idFormData
       });
 
-      if (!idUploadRes.ok) throw new Error('Error al subir identificación');
+      if (!idUploadRes.ok) {
+        const idErrorData = await idUploadRes.json().catch(() => ({}));
+        throw new Error(idErrorData.error || 'Error al subir identificación. Verifica el formato y tamaño del archivo.');
+      }
       const idData = await idUploadRes.json();
 
       const docFormData = new FormData();
@@ -198,7 +210,10 @@ const FormRegisterForQuotationSection = () => {
         body: docFormData
       });
 
-      if (!docUploadRes.ok) throw new Error('Error al subir documentos');
+      if (!docUploadRes.ok) {
+        const docErrorData = await docUploadRes.json().catch(() => ({}));
+        throw new Error(docErrorData.error || 'Error al subir documentos. Verifica el formato y tamaño del archivo.');
+      }
       const docData = await docUploadRes.json();
 
       const response = await fetch('/api/company-requests', {

@@ -3,8 +3,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { AlertCircle, Coins, Save, Send, Calculator } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle, Coins, Save, Send, Calculator, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface PricingOptions {
   profiles: string[];
@@ -20,6 +20,13 @@ interface UserInfo {
 
 const CreateJobForm = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editJobId = searchParams.get('edit');
+
+  // Estado para modo edición
+  const [isEditing, setIsEditing] = useState(false);
+  const [isLoadingJob, setIsLoadingJob] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -54,6 +61,14 @@ const CreateJobForm = () => {
     message: string;
   }>({ type: null, message: '' });
 
+  // Cargar datos de la vacante si estamos en modo edición
+  useEffect(() => {
+    if (editJobId) {
+      setIsEditing(true);
+      fetchJobData(editJobId);
+    }
+  }, [editJobId]);
+
   // Cargar opciones de pricing al montar
   useEffect(() => {
     fetchPricingOptions();
@@ -68,6 +83,51 @@ const CreateJobForm = () => {
       setCalculatedCost(0);
     }
   }, [formData.profile, formData.seniority, formData.workMode]);
+
+  const fetchJobData = async (jobId: string) => {
+    setIsLoadingJob(true);
+    setLoadError(null);
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setLoadError('La vacante no existe o fue eliminada.');
+        } else if (response.status === 403) {
+          setLoadError('No tienes permiso para editar esta vacante.');
+        } else {
+          setLoadError(data.error || 'Error al cargar la vacante.');
+        }
+        return;
+      }
+
+      if (data.success && data.data) {
+        const job = data.data;
+        setFormData({
+          title: job.title || '',
+          company: job.company || '',
+          location: job.location || '',
+          salary: job.salary || '',
+          jobType: job.jobType || 'Tiempo Completo',
+          workMode: job.workMode || 'presential',
+          description: job.description || '',
+          requirements: job.requirements || '',
+          companyRating: job.companyRating ? String(job.companyRating) : '',
+          profile: job.profile || '',
+          seniority: job.seniority || ''
+        });
+      } else {
+        setLoadError('Error al cargar los datos de la vacante.');
+      }
+    } catch (error) {
+      console.error('Error fetching job:', error);
+      setLoadError('Error de conexión. Intenta de nuevo.');
+    } finally {
+      setIsLoadingJob(false);
+    }
+  };
 
   const fetchPricingOptions = async () => {
     try {
@@ -125,8 +185,8 @@ const CreateJobForm = () => {
   ) => {
     e.preventDefault();
 
-    // Verificar créditos antes de publicar
-    if (publishNow && userInfo && userInfo.role !== 'admin') {
+    // Verificar créditos antes de publicar (solo para nuevas vacantes)
+    if (!isEditing && publishNow && userInfo && userInfo.role !== 'admin') {
       if (userInfo.credits < calculatedCost) {
         setShowInsufficientCreditsModal(true);
         return;
@@ -137,15 +197,19 @@ const CreateJobForm = () => {
     setSubmitStatus({ type: null, message: '' });
 
     try {
-      const response = await fetch('/api/jobs', {
-        method: 'POST',
+      // Usar PUT para edición, POST para creación
+      const url = isEditing ? `/api/jobs/${editJobId}` : '/api/jobs';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           companyRating: formData.companyRating
             ? parseFloat(formData.companyRating)
             : null,
-          publishNow
+          publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
         })
       });
 
@@ -157,8 +221,25 @@ const CreateJobForm = () => {
         return;
       }
 
+      if (response.status === 403) {
+        setSubmitStatus({
+          type: 'error',
+          message: 'No tienes permiso para editar esta vacante.'
+        });
+        return;
+      }
+
       if (data.success) {
-        if (data.status === 'active') {
+        if (isEditing) {
+          setSubmitStatus({
+            type: 'success',
+            message: '¡Vacante actualizada exitosamente!'
+          });
+          // Redirigir al dashboard después de 2 segundos
+          setTimeout(() => {
+            router.push('/company/dashboard');
+          }, 2000);
+        } else if (data.status === 'active') {
           setSubmitStatus({
             type: 'success',
             message: `¡Vacante publicada! Se descontaron ${data.creditCost} créditos.`
@@ -170,43 +251,49 @@ const CreateJobForm = () => {
               credits: userInfo.credits - data.creditCost
             });
           }
+          // Resetear formulario después de éxito
+          setTimeout(() => {
+            resetForm();
+          }, 2000);
         } else {
           setSubmitStatus({
             type: 'draft',
             message:
               'Vacante guardada como borrador. Puedes publicarla después.'
           });
+          setTimeout(() => {
+            resetForm();
+          }, 2000);
         }
-
-        // Resetear formulario después de éxito
-        setTimeout(() => {
-          setFormData({
-            title: '',
-            company: '',
-            location: '',
-            salary: '',
-            jobType: 'Tiempo Completo',
-            workMode: 'presential',
-            description: '',
-            requirements: '',
-            companyRating: '',
-            profile: '',
-            seniority: ''
-          });
-          setCalculatedCost(0);
-        }, 2000);
       } else {
-        throw new Error(data.error || 'Error al crear vacante');
+        throw new Error(data.error || `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`);
       }
     } catch (error) {
       setSubmitStatus({
         type: 'error',
         message:
-          error instanceof Error ? error.message : 'Error al crear vacante'
+          error instanceof Error ? error.message : `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      company: '',
+      location: '',
+      salary: '',
+      jobType: 'Tiempo Completo',
+      workMode: 'presential',
+      description: '',
+      requirements: '',
+      companyRating: '',
+      profile: '',
+      seniority: ''
+    });
+    setCalculatedCost(0);
   };
 
   const workModeLabels: Record<string, string> = {
@@ -219,18 +306,64 @@ const CreateJobForm = () => {
     ? userInfo.role === 'admin' || userInfo.credits >= calculatedCost
     : false;
 
+  // Mostrar loading mientras carga datos de vacante en modo edición
+  if (isLoadingJob) {
+    return (
+      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="w-12 h-12 text-button-green animate-spin mb-4" />
+          <p className="text-gray-600">Cargando datos de la vacante...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si no se pudo cargar la vacante
+  if (loadError) {
+    return (
+      <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
+        <div className="flex flex-col items-center justify-center py-12">
+          <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error al cargar</h2>
+          <p className="text-gray-600 mb-6">{loadError}</p>
+          <button
+            onClick={() => router.push('/company/dashboard')}
+            className="flex items-center gap-2 px-6 py-2 bg-button-green text-white rounded-lg hover:bg-green-700"
+          >
+            <ArrowLeft size={20} />
+            Volver al Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
       {/* Header con créditos */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-3xl font-bold">Publicar Nueva Vacante</h2>
+          {isEditing && (
+            <button
+              onClick={() => router.push('/company/dashboard')}
+              className="flex items-center gap-1 text-gray-600 hover:text-gray-900 mb-2 text-sm"
+            >
+              <ArrowLeft size={16} />
+              Volver al Dashboard
+            </button>
+          )}
+          <h2 className="text-3xl font-bold">
+            {isEditing ? 'Editar Vacante' : 'Publicar Nueva Vacante'}
+          </h2>
           <p className="text-gray-600 mt-1">
-            Completa la información de la vacante
+            {isEditing
+              ? 'Modifica la información de la vacante'
+              : 'Completa la información de la vacante'
+            }
           </p>
         </div>
 
-        {userInfo && userInfo.role !== 'admin' && (
+        {userInfo && userInfo.role !== 'admin' && !isEditing && (
           <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-right">
             <p className="text-sm text-gray-600">Tus créditos</p>
             <p className="text-2xl font-bold text-green-600 flex items-center gap-1">
@@ -394,12 +527,16 @@ const CreateJobForm = () => {
         <div className="bg-gray-50 p-6 rounded-lg border-2 border-dashed border-gray-300">
           <div className="flex items-center gap-2 mb-4">
             <Calculator className="text-button-green" size={24} />
-            <h3 className="text-lg font-bold">Cálculo de Créditos</h3>
+            <h3 className="text-lg font-bold">
+              {isEditing ? 'Categorización' : 'Cálculo de Créditos'}
+            </h3>
           </div>
 
           <p className="text-sm text-gray-600 mb-4">
-            El costo de publicación depende del perfil, nivel de experiencia y
-            modalidad.
+            {isEditing
+              ? 'Perfil y nivel de experiencia del puesto.'
+              : 'El costo de publicación depende del perfil, nivel de experiencia y modalidad.'
+            }
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -446,8 +583,8 @@ const CreateJobForm = () => {
             </div>
           </div>
 
-          {/* Costo calculado */}
-          {calculatedCost > 0 && (
+          {/* Costo calculado - Solo mostrar para creación */}
+          {!isEditing && calculatedCost > 0 && (
             <div
               className={`mt-4 p-4 rounded-lg flex items-center justify-between ${
                 hasEnoughCredits
@@ -475,7 +612,7 @@ const CreateJobForm = () => {
             </div>
           )}
 
-          {!hasEnoughCredits && calculatedCost > 0 && userInfo && (
+          {!isEditing && !hasEnoughCredits && calculatedCost > 0 && userInfo && (
             <div className="mt-3 flex items-center gap-2 text-red-600">
               <AlertCircle size={16} />
               <span className="text-sm">
@@ -521,34 +658,59 @@ const CreateJobForm = () => {
 
         {/* Botones de acción */}
         <div className="flex gap-4 pt-4">
-          {/* Guardar como borrador */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex-1 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-          >
-            <Save size={20} />
-            {isSubmitting ? 'GUARDANDO...' : 'GUARDAR BORRADOR'}
-          </button>
+          {isEditing ? (
+            <>
+              {/* Botón cancelar para edición */}
+              <button
+                type="button"
+                onClick={() => router.push('/company/dashboard')}
+                disabled={isSubmitting}
+                className="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                Cancelar
+              </button>
+              {/* Botón guardar cambios */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 bg-button-green text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                <Save size={20} />
+                {isSubmitting ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Guardar como borrador */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                <Save size={20} />
+                {isSubmitting ? 'GUARDANDO...' : 'GUARDAR BORRADOR'}
+              </button>
 
-          {/* Publicar ahora */}
-          <button
-            type="button"
-            onClick={(e) => handleSubmit(e, true)}
-            disabled={isSubmitting || !calculatedCost}
-            className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 ${
-              hasEnoughCredits
-                ? 'bg-button-green text-white hover:bg-green-700'
-                : 'bg-orange-500 text-white hover:bg-orange-600'
-            }`}
-          >
-            <Send size={20} />
-            {isSubmitting
-              ? 'PUBLICANDO...'
-              : hasEnoughCredits
-              ? `PUBLICAR (${calculatedCost} créditos)`
-              : 'COMPRAR CRÉDITOS Y PUBLICAR'}
-          </button>
+              {/* Publicar ahora */}
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={isSubmitting || !calculatedCost}
+                className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 ${
+                  hasEnoughCredits
+                    ? 'bg-button-green text-white hover:bg-green-700'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                }`}
+              >
+                <Send size={20} />
+                {isSubmitting
+                  ? 'PUBLICANDO...'
+                  : hasEnoughCredits
+                  ? `PUBLICAR (${calculatedCost} créditos)`
+                  : 'COMPRAR CRÉDITOS Y PUBLICAR'}
+              </button>
+            </>
+          )}
         </div>
       </form>
 

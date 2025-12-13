@@ -39,8 +39,13 @@ const ApplyJobModal = ({
     try {
       let cvUrl = null;
 
-      // 1. Subir CV si existe
+      // 1. Validar tamaño de CV si existe (máximo 5MB)
       if (cvFile) {
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        if (cvFile.size > MAX_FILE_SIZE) {
+          throw new Error('El archivo CV excede el tamaño máximo de 5MB');
+        }
+
         const cvFormData = new FormData();
         cvFormData.append('file', cvFile);
 
@@ -50,7 +55,9 @@ const ApplyJobModal = ({
         });
 
         if (!uploadRes.ok) {
-          throw new Error('Error al subir CV');
+          const uploadError = await uploadRes.json().catch(() => ({}));
+          console.error('CV upload failed:', uploadError);
+          throw new Error(uploadError.error || 'Error al subir CV. Verifica el formato y tamaño del archivo.');
         }
 
         const uploadData = await uploadRes.json();
@@ -58,20 +65,25 @@ const ApplyJobModal = ({
       }
 
       // 2. Crear aplicación
+      const applicationPayload = {
+        jobId,
+        candidateName: formData.candidateName,
+        candidateEmail: formData.candidateEmail,
+        candidatePhone: formData.candidatePhone || null,
+        coverLetter: formData.coverLetter || null,
+        cvUrl
+      };
+
+      console.log('Sending application:', { jobId, email: formData.candidateEmail });
+
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobId,
-          candidateName: formData.candidateName,
-          candidateEmail: formData.candidateEmail,
-          candidatePhone: formData.candidatePhone || null,
-          coverLetter: formData.coverLetter || null,
-          cvUrl
-        })
+        body: JSON.stringify(applicationPayload)
       });
 
       const data = await response.json();
+      console.log('Application response:', data);
 
       if (data.success) {
         // Resetear formulario
@@ -86,9 +98,18 @@ const ApplyJobModal = ({
         onSuccess();
         onClose();
       } else {
-        setError(data.error || 'Error al enviar aplicación');
+        console.error('Application failed:', data);
+        // Mensajes de error más específicos
+        if (response.status === 409) {
+          setError('Ya has aplicado a esta vacante anteriormente con este email.');
+        } else if (response.status === 404) {
+          setError('La vacante ya no está disponible.');
+        } else {
+          setError(data.error || 'Error al enviar aplicación. Por favor intenta nuevamente.');
+        }
       }
     } catch (err) {
+      console.error('Application error:', err);
       setError(
         err instanceof Error ? err.message : 'Error al procesar la solicitud'
       );
