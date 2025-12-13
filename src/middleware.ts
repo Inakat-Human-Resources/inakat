@@ -95,6 +95,54 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
+  // Verificar permisos de RECLUTADOR para rutas específicas
+  const isRecruiterRoute =
+    pathname.startsWith('/api/recruiter/') || pathname.startsWith('/recruiter/');
+
+  if (
+    isRecruiterRoute &&
+    payload.role !== 'recruiter' &&
+    payload.role !== 'admin'
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No tienes permisos de reclutador para acceder a este recurso.'
+        },
+        { status: 403 }
+      );
+    }
+    return NextResponse.redirect(
+      new URL('/unauthorized?reason=no-permission', request.url)
+    );
+  }
+
+  // Verificar permisos de ESPECIALISTA para rutas específicas
+  const isSpecialistRoute =
+    pathname.startsWith('/api/specialist/') ||
+    pathname.startsWith('/specialist/');
+
+  if (
+    isSpecialistRoute &&
+    payload.role !== 'specialist' &&
+    payload.role !== 'admin'
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'No tienes permisos de especialista para acceder a este recurso.'
+        },
+        { status: 403 }
+      );
+    }
+    return NextResponse.redirect(
+      new URL('/unauthorized?reason=no-permission', request.url)
+    );
+  }
+
   // Verificar permisos de USER para rutas específicas
   const isUserRoute =
     pathname.startsWith('/api/my-applications') ||
@@ -171,10 +219,14 @@ export const config = {
     '/api/my-applications',
     '/api/candidate/:path*',
     '/api/profile',
+    '/api/recruiter/:path*',
+    '/api/specialist/:path*',
     '/admin/:path*',
     '/company/:path*',
     '/my-applications',
     '/candidate/:path*',
+    '/recruiter/:path*',
+    '/specialist/:path*',
     '/profile'
   ],
   runtime: 'nodejs'

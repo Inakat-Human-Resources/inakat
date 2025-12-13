@@ -254,6 +254,31 @@ export async function PUT(request: Request) {
       }
     });
 
+    // Si envía a la empresa, actualizar también el status de las Applications
+    if (status === 'sent_to_company' && candidateIds && candidateIds.length > 0) {
+      // Obtener emails de los candidatos seleccionados
+      const selectedCandidates = await prisma.candidate.findMany({
+        where: { id: { in: candidateIds } },
+        select: { email: true }
+      });
+
+      const candidateEmails = selectedCandidates.map((c) => c.email.toLowerCase());
+
+      if (candidateEmails.length > 0) {
+        // Actualizar Applications para que la empresa las vea
+        await prisma.application.updateMany({
+          where: {
+            jobId: assignment.jobId,
+            candidateEmail: { in: candidateEmails }
+          },
+          data: {
+            status: 'sent_to_company',
+            updatedAt: new Date()
+          }
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Asignación actualizada',

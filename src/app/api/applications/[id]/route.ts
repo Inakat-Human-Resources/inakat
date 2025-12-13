@@ -83,9 +83,12 @@ export async function PATCH(
     const validStatuses = [
       'pending',
       'reviewing',
+      'sent_to_specialist',
+      'sent_to_company',
       'interviewed',
       'rejected',
-      'accepted'
+      'accepted',
+      'injected_by_admin'
     ];
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json(

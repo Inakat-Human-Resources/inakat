@@ -192,7 +192,145 @@ async function main() {
   }
 
   // =============================================
-  // 2.5 CREAR USUARIOS NORMALES (APLICANTES)
+  // 2.5 RECLUTADORES DE PRUEBA
+  // =============================================
+  console.log('\n👥 Creando reclutadores de prueba...');
+  const recruiterPassword = await bcrypt.hash('Recruiter2024!', 10);
+
+  const recruiter1 = await prisma.user.upsert({
+    where: { email: 'reclutador1@inakat.com' },
+    update: {},
+    create: {
+      email: 'reclutador1@inakat.com',
+      password: recruiterPassword,
+      nombre: 'María',
+      apellidoPaterno: 'García',
+      apellidoMaterno: 'López',
+      role: 'recruiter',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+  console.log(`✅ Reclutador creado: ${recruiter1.email}`);
+
+  const recruiter2 = await prisma.user.upsert({
+    where: { email: 'reclutador2@inakat.com' },
+    update: {},
+    create: {
+      email: 'reclutador2@inakat.com',
+      password: recruiterPassword,
+      nombre: 'Juan',
+      apellidoPaterno: 'Pérez',
+      apellidoMaterno: 'Martínez',
+      role: 'recruiter',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+  console.log(`✅ Reclutador creado: ${recruiter2.email}`);
+
+  // =============================================
+  // 2.6 ESPECIALISTAS DE PRUEBA
+  // =============================================
+  console.log('\n🔧 Creando especialistas de prueba...');
+  const specialistPassword = await bcrypt.hash('Specialist2024!', 10);
+
+  const specialist1 = await prisma.user.upsert({
+    where: { email: 'especialista.tech@inakat.com' },
+    update: {},
+    create: {
+      email: 'especialista.tech@inakat.com',
+      password: specialistPassword,
+      nombre: 'Carlos',
+      apellidoPaterno: 'Rodríguez',
+      apellidoMaterno: 'Sánchez',
+      role: 'specialist',
+      specialty: 'Tecnología',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+  console.log(`✅ Especialista creado: ${specialist1.email} (Tecnología)`);
+
+  const specialist2 = await prisma.user.upsert({
+    where: { email: 'especialista.diseno@inakat.com' },
+    update: {},
+    create: {
+      email: 'especialista.diseno@inakat.com',
+      password: specialistPassword,
+      nombre: 'Ana',
+      apellidoPaterno: 'López',
+      apellidoMaterno: 'Fernández',
+      role: 'specialist',
+      specialty: 'Diseño Gráfico',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+  console.log(`✅ Especialista creado: ${specialist2.email} (Diseño Gráfico)`);
+
+  const specialist3 = await prisma.user.upsert({
+    where: { email: 'especialista.finanzas@inakat.com' },
+    update: {},
+    create: {
+      email: 'especialista.finanzas@inakat.com',
+      password: specialistPassword,
+      nombre: 'Roberto',
+      apellidoPaterno: 'Hernández',
+      role: 'specialist',
+      specialty: 'Finanzas',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+  console.log(`✅ Especialista creado: ${specialist3.email} (Finanzas)`);
+
+  // =============================================
+  // 2.7 CANDIDATO CON CUENTA DE PRUEBA
+  // =============================================
+  console.log('\n🎯 Creando candidato con cuenta...');
+  const candidatePassword = await bcrypt.hash('Candidate2024!', 10);
+
+  const candidateUser = await prisma.user.upsert({
+    where: { email: 'candidato.test@gmail.com' },
+    update: {},
+    create: {
+      email: 'candidato.test@gmail.com',
+      password: candidatePassword,
+      nombre: 'Roberto',
+      apellidoPaterno: 'Sánchez',
+      apellidoMaterno: 'Gómez',
+      role: 'candidate',
+      isActive: true,
+      emailVerified: new Date()
+    }
+  });
+
+  // Crear el Candidate vinculado
+  await prisma.candidate.upsert({
+    where: { email: 'candidato.test@gmail.com' },
+    update: { userId: candidateUser.id },
+    create: {
+      nombre: 'Roberto',
+      apellidoPaterno: 'Sánchez',
+      apellidoMaterno: 'Gómez',
+      email: 'candidato.test@gmail.com',
+      telefono: '5512345678',
+      sexo: 'M',
+      universidad: 'UNAM',
+      carrera: 'Ingeniería en Computación',
+      nivelEstudios: 'Licenciatura',
+      profile: 'Tecnología',
+      seniority: 'Jr',
+      source: 'manual',
+      status: 'available',
+      userId: candidateUser.id
+    }
+  });
+  console.log(`✅ Candidato con cuenta creado: ${candidateUser.email}`);
+
+  // =============================================
+  // 2.8 CREAR USUARIOS NORMALES (APLICANTES)
   // =============================================
   console.log('\n👤 Creando usuarios normales (aplicantes)...');
 
@@ -897,6 +1035,18 @@ Responsabilidades:
   console.log('     Password: Company123!');
   console.log('     Créditos: 50');
   console.log('     Vacantes: 6 (negocios/finanzas)');
+  console.log('\n  👥 RECLUTADORES (Password: Recruiter2024!):');
+  console.log('     reclutador1@inakat.com');
+  console.log('     reclutador2@inakat.com');
+
+  console.log('\n  🔧 ESPECIALISTAS (Password: Specialist2024!):');
+  console.log('     especialista.tech@inakat.com (Tecnología)');
+  console.log('     especialista.diseno@inakat.com (Diseño Gráfico)');
+  console.log('     especialista.finanzas@inakat.com (Finanzas)');
+
+  console.log('\n  🎯 CANDIDATO CON CUENTA (Password: Candidate2024!):');
+  console.log('     candidato.test@gmail.com');
+
   console.log('\n  👤 USUARIOS NORMALES (Password: User123!):');
   console.log('     carlos.dev@gmail.com - Desarrollador');
   console.log('     ana.designer@gmail.com - Diseñadora');
@@ -906,7 +1056,9 @@ Responsabilidades:
   console.log('\n🚀 Para probar:');
   console.log('   Admin: http://localhost:3000/admin/requests');
   console.log('   Empresa: http://localhost:3000/company/dashboard');
-  console.log('   Usuario: http://localhost:3000/my-applications\n');
+  console.log('   Usuario: http://localhost:3000/my-applications');
+  console.log('   Reclutador: http://localhost:3000/recruiter/dashboard');
+  console.log('   Especialista: http://localhost:3000/specialist/dashboard\n');
 }
 
 async function createSampleApplications() {
