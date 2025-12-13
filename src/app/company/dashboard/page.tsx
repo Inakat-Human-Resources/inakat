@@ -1,3 +1,5 @@
+// RUTA: src/app/company/dashboard/page.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -15,6 +17,26 @@ import {
 import StatCard from '@/components/company/StatCard';
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
 import CompanyApplicationsTable from '@/components/company/CompanyApplicationsTable';
+import JobDetailModal from '@/components/company/JobDetailModal';
+
+interface Job {
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  jobType: string;
+  workMode: string;
+  description: string;
+  requirements?: string;
+  status: string;
+  profile?: string;
+  seniority?: string;
+  createdAt: string;
+  _count?: {
+    applications: number;
+  };
+}
 
 interface DashboardData {
   company: {
@@ -46,9 +68,8 @@ interface DashboardData {
     };
   };
   recentApplications: any[];
-  topJobs: any[];
   jobStats: any[];
-  allJobs: any[];
+  allJobs: Job[];
 }
 
 export default function CompanyDashboard() {
@@ -56,6 +77,10 @@ export default function CompanyDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal state
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [showJobModal, setShowJobModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -95,7 +120,12 @@ export default function CompanyDashboard() {
   };
 
   const handleViewJob = (jobId: number) => {
-    router.push(`/talents?jobId=${jobId}`);
+    if (!data) return;
+    const job = data.allJobs.find(j => j.id === jobId);
+    if (job) {
+      setSelectedJob(job);
+      setShowJobModal(true);
+    }
   };
 
   const handleEditJob = (jobId: number) => {
@@ -269,41 +299,6 @@ export default function CompanyDashboard() {
           />
         </div>
 
-        {/* Vacantes con más aplicaciones */}
-        {data.topJobs.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Vacantes con más aplicaciones
-            </h2>
-            <div className="space-y-3">
-              {data.topJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">
-                      {job.title}
-                    </p>
-                    <p className="text-xs text-gray-500">{job.location}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-800 text-sm font-bold rounded-full">
-                      {job.applicationCount}
-                    </span>
-                    <button
-                      onClick={() => handleViewJob(job.id)}
-                      className="text-sm text-button-orange hover:text-button-dark-green font-medium"
-                    >
-                      Ver →
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Tabla de Vacantes */}
         <div className="mb-8">
           <CompanyJobsTable
@@ -323,6 +318,13 @@ export default function CompanyDashboard() {
           />
         </div>
       </div>
+
+      {/* Job Detail Modal */}
+      <JobDetailModal
+        job={selectedJob}
+        isOpen={showJobModal}
+        onClose={() => setShowJobModal(false)}
+      />
     </div>
   );
 }

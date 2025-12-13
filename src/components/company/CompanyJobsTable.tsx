@@ -12,7 +12,9 @@ interface Job {
   jobType: string;
   workMode: string;
   createdAt: string;
-  applicationCount: number;
+  _count?: {
+    applications: number;
+  };
 }
 
 interface CompanyJobsTableProps {
@@ -154,7 +156,7 @@ export default function CompanyJobsTable({
                   <td className="px-6 py-4">{getStatusBadge(job.status)}</td>
                   <td className="px-6 py-4">
                     <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 text-sm font-semibold rounded-full">
-                      {job.applicationCount}
+                      {job._count?.applications ?? 0}
                     </span>
                   </td>
                   <td className="px-6 py-4">

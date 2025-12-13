@@ -3,6 +3,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   X,
   Plus,
@@ -12,7 +13,8 @@ import {
   Briefcase,
   Link as LinkIcon,
   Save,
-  Loader2
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 
 interface Experience {
@@ -41,6 +43,7 @@ const CandidateForm = ({
 }: CandidateFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [existingCandidateId, setExistingCandidateId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState('personal');
 
   // Datos personales
@@ -254,10 +257,18 @@ const CandidateForm = ({
         onSuccess();
         onClose();
       } else {
-        setError(result.error || 'Error al guardar candidato');
+        // Si es error 409 (candidato existente), mostrar mensaje especial
+        if (response.status === 409 && result.existingCandidateId) {
+          setError(result.error);
+          setExistingCandidateId(result.existingCandidateId);
+        } else {
+          setError(result.error || 'Error al guardar candidato');
+          setExistingCandidateId(null);
+        }
       }
     } catch (err) {
       setError('Error de conexión');
+      setExistingCandidateId(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -350,7 +361,27 @@ const CandidateForm = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
           {error && (
             <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
+              <p>{error}</p>
+              {existingCandidateId && (
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <Link
+                    href={`/admin/candidates?search=${encodeURIComponent(email)}`}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    onClick={onClose}
+                  >
+                    <ExternalLink size={14} />
+                    Buscar en Banco de Candidatos
+                  </Link>
+                  <Link
+                    href="/admin/assign-candidates"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                    onClick={onClose}
+                  >
+                    <ExternalLink size={14} />
+                    Ir a Asignar Candidatos
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

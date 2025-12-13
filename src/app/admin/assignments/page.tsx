@@ -83,6 +83,7 @@ export default function AssignmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Filtro
   const [statusFilter, setStatusFilter] = useState('all');
@@ -147,6 +148,7 @@ export default function AssignmentsPage() {
     try {
       setSavingJobId(jobId);
       setError(null);
+      setWarning(null);
 
       const response = await fetch('/api/admin/assignments', {
         method: 'POST',
@@ -164,6 +166,12 @@ export default function AssignmentsPage() {
         setSuccess('Asignación guardada');
         fetchAssignments();
         setTimeout(() => setSuccess(null), 3000);
+
+        // Mostrar warning si existe (especialidad no coincide)
+        if (data.warning) {
+          setWarning(data.warning);
+          setTimeout(() => setWarning(null), 8000);
+        }
       } else {
         setError(data.error);
       }
@@ -260,6 +268,19 @@ export default function AssignmentsPage() {
           <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
             <CheckCircle size={20} />
             {success}
+          </div>
+        )}
+
+        {warning && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-yellow-700">
+            <AlertCircle size={20} />
+            <span className="flex-1">{warning}</span>
+            <button
+              onClick={() => setWarning(null)}
+              className="text-yellow-400 hover:text-yellow-600"
+            >
+              ×
+            </button>
           </div>
         )}
 

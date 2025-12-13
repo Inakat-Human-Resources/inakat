@@ -229,6 +229,9 @@ export async function POST(request: Request) {
     }
 
     // Verificar que el especialista existe y tiene el rol correcto
+    // También verificar si su especialidad coincide con el perfil de la vacante
+    let specialtyWarning: string | null = null;
+
     if (specialistId) {
       const specialist = await prisma.user.findUnique({
         where: { id: specialistId }
@@ -239,6 +242,13 @@ export async function POST(request: Request) {
           { success: false, error: 'Especialista no válido' },
           { status: 400 }
         );
+      }
+
+      // Validar que la especialidad del especialista coincide con el perfil de la vacante
+      if (specialist.specialty && job.profile) {
+        if (specialist.specialty !== job.profile) {
+          specialtyWarning = `Advertencia: La especialidad del especialista (${specialist.specialty}) no coincide con el perfil de la vacante (${job.profile}). La asignación se realizó de todas formas.`;
+        }
       }
     }
 
@@ -276,6 +286,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Asignación guardada exitosamente',
+      warning: specialtyWarning,
       data: assignment
     });
   } catch (error) {

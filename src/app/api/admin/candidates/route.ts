@@ -227,7 +227,12 @@ export async function POST(request: Request) {
 
     if (existingCandidate) {
       return NextResponse.json(
-        { success: false, error: 'Ya existe un candidato con ese email' },
+        {
+          success: false,
+          error: `Ya existe un candidato con ese email (ID: ${existingCandidate.id}). Puedes encontrarlo en el Banco de Candidatos y asignarlo a una vacante desde "Asignar Candidatos".`,
+          existingCandidateId: existingCandidate.id,
+          suggestion: 'Ir a /admin/candidates para buscar al candidato o /admin/assign-candidates para asignarlo a una vacante.'
+        },
         { status: 409 }
       );
     }

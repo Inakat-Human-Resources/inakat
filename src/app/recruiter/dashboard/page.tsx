@@ -389,6 +389,19 @@ export default function RecruiterDashboard() {
                 {/* Contenido expandido */}
                 {expandedId === assignment.id && (
                   <div className="border-t p-4">
+                    {/* Descripción de la vacante */}
+                    {assignment.job.description && (
+                      <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+                        <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                          <FileText size={16} />
+                          Descripción de la Vacante
+                        </h4>
+                        <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                          {assignment.job.description}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Info del especialista asignado */}
                     {assignment.specialist && (
                       <div className="mb-4 p-3 bg-purple-50 rounded-lg">
