@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
 
 // Middleware para verificar que es admin
 async function verifyAdmin() {
@@ -204,7 +205,8 @@ export async function POST(request: Request) {
       linkedinUrl,
       source,
       notas,
-      experiences // Array de experiencias
+      experiences, // Array de experiencias
+      password // Opcional: para crear cuenta de candidato
     } = body;
 
     // Validaciones básicas
@@ -218,9 +220,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verificar email único
+    // Verificar email único en candidatos
     const existingCandidate = await prisma.candidate.findUnique({
-      where: { email }
+      where: { email: email.toLowerCase() }
     });
 
     if (existingCandidate) {
@@ -228,6 +230,49 @@ export async function POST(request: Request) {
         { success: false, error: 'Ya existe un candidato con ese email' },
         { status: 409 }
       );
+    }
+
+    // Si viene password, verificar que no exista usuario con ese email
+    let userId = null;
+    let accountCreated = false;
+
+    if (password) {
+      // Validar longitud mínima de password
+      if (password.length < 8) {
+        return NextResponse.json(
+          { success: false, error: 'La contraseña debe tener al menos 8 caracteres' },
+          { status: 400 }
+        );
+      }
+
+      // Verificar que no exista usuario con ese email
+      const existingUser = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() }
+      });
+
+      if (existingUser) {
+        return NextResponse.json(
+          { success: false, error: 'Ya existe un usuario con ese email' },
+          { status: 409 }
+        );
+      }
+
+      // Crear usuario con role="candidate"
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const newUser = await prisma.user.create({
+        data: {
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          nombre,
+          apellidoPaterno: apellidoPaterno || null,
+          apellidoMaterno: apellidoMaterno || null,
+          role: 'candidate',
+          isActive: true
+        }
+      });
+
+      userId = newUser.id;
+      accountCreated = true;
     }
 
     // Calcular años de experiencia si hay experiencias
@@ -248,13 +293,13 @@ export async function POST(request: Request) {
       añosExperiencia = Math.round(totalMonths / 12);
     }
 
-    // Crear candidato con experiencias
+    // Crear candidato con experiencias y vinculación a usuario si aplica
     const candidate = await prisma.candidate.create({
       data: {
         nombre,
         apellidoPaterno,
         apellidoMaterno: apellidoMaterno || null,
-        email,
+        email: email.toLowerCase(),
         telefono: telefono || null,
         sexo: sexo || null,
         fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
@@ -269,6 +314,7 @@ export async function POST(request: Request) {
         source: source || 'manual',
         notas: notas || null,
         añosExperiencia,
+        userId, // Vincular con usuario si se creó cuenta
         experiences:
           experiences && experiences.length > 0
             ? {
@@ -285,14 +331,27 @@ export async function POST(request: Request) {
             : undefined
       },
       include: {
-        experiences: true
+        experiences: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true
+          }
+        }
       }
     });
+
+    // Mensaje según si se creó cuenta o no
+    const message = accountCreated
+      ? 'Candidato creado exitosamente con cuenta de acceso'
+      : 'Candidato creado exitosamente (sin cuenta de acceso)';
 
     return NextResponse.json(
       {
         success: true,
-        message: 'Candidato creado exitosamente',
+        message,
+        accountCreated,
         data: candidate
       },
       { status: 201 }

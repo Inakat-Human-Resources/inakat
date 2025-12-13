@@ -41,7 +41,10 @@ model User {
   specialty               String?
   recruiterAssignments    JobAssignment[] @relation("RecruiterAssignments")
   specialistAssignments   JobAssignment[] @relation("SpecialistAssignments")
-  
+
+  // Relación con Candidate (para role="candidate")
+  candidate               Candidate?
+
   @@index([email])
   @@index([role])
   @@index([isActive])
@@ -322,15 +325,20 @@ model Candidate {
   
   // Estado
   status          String    @default("available") // "available", "in_process", "hired", "inactive"
-  
+
   // Timestamps
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  
+
   // Relaciones
   experiences     Experience[]
-  
+
+  // Vincular con cuenta de usuario (opcional, para que candidato pueda loguearse)
+  userId          Int?      @unique
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([email])
+  @@index([userId])
   @@index([sexo])
   @@index([universidad])
   @@index([profile])
@@ -416,9 +424,9 @@ model Specialty {
 // SISTEMA DE ASIGNACIONES (Reclutador + Especialista)
 // =============================================
 
-// NOTA: Actualizar el enum de roles en User:
-// role String @default("user") 
-// Valores válidos: "admin", "company", "user", "recruiter", "specialist"
+// NOTA: Roles válidos en User:
+// role String @default("user")
+// Valores válidos: "admin", "company", "user", "recruiter", "specialist", "candidate"
 
 // Asignación de vacante a Reclutador y Especialista
 model JobAssignment {

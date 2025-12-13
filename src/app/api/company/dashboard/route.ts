@@ -80,12 +80,22 @@ export async function GET(request: Request) {
     const closedJobs = jobs.filter((job) => job.status === 'closed').length;
     const draftJobs = jobs.filter((job) => job.status === 'draft').length;
 
-    // 4. Obtener todas las aplicaciones a las vacantes de esta empresa
+    // 4. Obtener SOLO las aplicaciones visibles para la empresa
+    // La empresa SOLO ve candidatos que han sido enviados por el Especialista
+    // Status permitidos: "sent_to_company", "interviewed", "accepted", "rejected"
     const jobIds = jobs.map((job) => job.id);
+
+    const COMPANY_VISIBLE_STATUSES = [
+      'sent_to_company',
+      'interviewed',
+      'accepted',
+      'rejected'
+    ];
 
     const allApplications = await prisma.application.findMany({
       where: {
-        jobId: { in: jobIds }
+        jobId: { in: jobIds },
+        status: { in: COMPANY_VISIBLE_STATUSES }
       },
       include: {
         job: {
@@ -100,13 +110,11 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
-    // 5. Calcular estadísticas de aplicaciones
+    // 5. Calcular estadísticas de aplicaciones (solo las visibles para empresa)
     const totalApplications = allApplications.length;
-    const pendingApplications = allApplications.filter(
-      (app) => app.status === 'pending'
-    ).length;
-    const reviewingApplications = allApplications.filter(
-      (app) => app.status === 'reviewing'
+    // Para empresa: "sent_to_company" = Nuevos candidatos
+    const newCandidates = allApplications.filter(
+      (app) => app.status === 'sent_to_company'
     ).length;
     const interviewedApplications = allApplications.filter(
       (app) => app.status === 'interviewed'
@@ -135,7 +143,7 @@ export async function GET(request: Request) {
       .sort((a, b) => b.applicationCount - a.applicationCount)
       .slice(0, 5);
 
-    // 8. Estadísticas por vacante
+    // 8. Estadísticas por vacante (solo candidatos visibles para empresa)
     const jobStats = jobs.map((job) => {
       const jobApplications = allApplications.filter(
         (app) => app.jobId === job.id
@@ -144,11 +152,14 @@ export async function GET(request: Request) {
       return {
         jobId: job.id,
         jobTitle: job.title,
-        totalApplications: jobApplications.length,
-        pendingApplications: jobApplications.filter(
-          (app) => app.status === 'pending'
+        totalCandidates: jobApplications.length,
+        newCandidates: jobApplications.filter(
+          (app) => app.status === 'sent_to_company'
         ).length,
-        acceptedApplications: jobApplications.filter(
+        interviewedCandidates: jobApplications.filter(
+          (app) => app.status === 'interviewed'
+        ).length,
+        acceptedCandidates: jobApplications.filter(
           (app) => app.status === 'accepted'
         ).length
       };
@@ -173,8 +184,7 @@ export async function GET(request: Request) {
           },
           applications: {
             total: totalApplications,
-            pending: pendingApplications,
-            reviewing: reviewingApplications,
+            newCandidates, // Candidatos enviados por especialista, sin revisar
             interviewed: interviewedApplications,
             accepted: acceptedApplications,
             rejected: rejectedApplications

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { X, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ApplyJobModalProps {
   jobId: number;
@@ -10,6 +10,12 @@ interface ApplyJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+interface ExistingApplication {
+  status: string;
+  statusLabel: string;
+  appliedAt: string;
 }
 
 const ApplyJobModal = ({
@@ -30,6 +36,47 @@ const ApplyJobModal = ({
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [existingApplication, setExistingApplication] = useState<ExistingApplication | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // Verificar si el email ya aplicó
+  const checkExistingApplication = useCallback(async (email: string) => {
+    if (!email || !email.includes('@')) {
+      setExistingApplication(null);
+      return;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const response = await fetch(
+        `/api/applications/check?jobId=${jobId}&email=${encodeURIComponent(email)}`
+      );
+      const data = await response.json();
+
+      if (data.success && data.hasApplied) {
+        setExistingApplication(data.application);
+      } else {
+        setExistingApplication(null);
+      }
+    } catch (err) {
+      console.error('Error checking application:', err);
+      setExistingApplication(null);
+    } finally {
+      setCheckingEmail(false);
+    }
+  }, [jobId]);
+
+  // Debounce para verificar email
+  const handleEmailChange = (email: string) => {
+    setFormData({ ...formData, candidateEmail: email });
+    setExistingApplication(null);
+  };
+
+  const handleEmailBlur = () => {
+    if (formData.candidateEmail) {
+      checkExistingApplication(formData.candidateEmail);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,13 +222,41 @@ const ApplyJobModal = ({
               <input
                 type="email"
                 value={formData.candidateEmail}
-                onChange={(e) =>
-                  setFormData({ ...formData, candidateEmail: e.target.value })
-                }
+                onChange={(e) => handleEmailChange(e.target.value)}
+                onBlur={handleEmailBlur}
                 placeholder="juan.perez@email.com"
-                className="w-full p-3 border border-gray-300 rounded-lg"
+                className={`w-full p-3 border rounded-lg ${
+                  existingApplication
+                    ? 'border-amber-400 bg-amber-50'
+                    : 'border-gray-300'
+                }`}
                 required
               />
+              {checkingEmail && (
+                <p className="text-sm text-gray-500 mt-1">Verificando...</p>
+              )}
+              {existingApplication && (
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        Ya aplicaste a esta vacante
+                      </p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        Estado actual: <span className="font-semibold">{existingApplication.statusLabel}</span>
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1">
+                        Fecha de aplicación: {new Date(existingApplication.appliedAt).toLocaleDateString('es-MX', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Teléfono */}
@@ -249,10 +324,10 @@ const ApplyJobModal = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !!existingApplication}
               className="flex-1 px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
             >
-              {isSubmitting ? 'Enviando...' : 'Enviar Aplicación'}
+              {isSubmitting ? 'Enviando...' : existingApplication ? 'Ya aplicaste' : 'Enviar Aplicación'}
             </button>
           </div>
         </form>

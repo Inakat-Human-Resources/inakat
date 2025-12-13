@@ -54,17 +54,17 @@ export default function CompanyApplicationsTable({
   }
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      reviewing: 'bg-blue-100 text-blue-800',
+    // Status visibles para empresa con labels amigables
+    const badges: Record<string, string> = {
+      sent_to_company: 'bg-blue-100 text-blue-800',
       interviewed: 'bg-purple-100 text-purple-800',
       accepted: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800'
+      rejected: 'bg-gray-100 text-gray-800'
     };
 
-    const labels = {
-      pending: 'Pendiente',
-      reviewing: 'En revisión',
+    // Labels amigables para la empresa
+    const labels: Record<string, string> = {
+      sent_to_company: 'Nuevo Candidato',
       interviewed: 'Entrevistado',
       accepted: 'Aceptado',
       rejected: 'Rechazado'
@@ -73,10 +73,10 @@ export default function CompanyApplicationsTable({
     return (
       <span
         className={`px-2 py-1 text-xs font-semibold rounded-full ${
-          badges[status as keyof typeof badges] || badges.pending
+          badges[status] || 'bg-gray-100 text-gray-800'
         }`}
       >
-        {labels[status as keyof typeof labels] || status}
+        {labels[status] || status}
       </span>
     );
   };
@@ -98,7 +98,7 @@ export default function CompanyApplicationsTable({
           Mis Aplicaciones
         </h2>
 
-        {/* Filtros de estado */}
+        {/* Filtros de estado (solo status visibles para empresa) */}
         <div className="flex flex-wrap gap-2 mb-4">
           <button
             onClick={() => setFilterStatus('all')}
@@ -108,29 +108,18 @@ export default function CompanyApplicationsTable({
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Todas ({applications.length})
+            Todos ({applications.length})
           </button>
           <button
-            onClick={() => setFilterStatus('pending')}
+            onClick={() => setFilterStatus('sent_to_company')}
             className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'pending'
+              filterStatus === 'sent_to_company'
                 ? 'bg-button-orange text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Pendientes (
-            {applications.filter((a) => a.status === 'pending').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('reviewing')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'reviewing'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            En revisión (
-            {applications.filter((a) => a.status === 'reviewing').length})
+            Nuevos (
+            {applications.filter((a) => a.status === 'sent_to_company').length})
           </button>
           <button
             onClick={() => setFilterStatus('interviewed')}
@@ -142,6 +131,28 @@ export default function CompanyApplicationsTable({
           >
             Entrevistados (
             {applications.filter((a) => a.status === 'interviewed').length})
+          </button>
+          <button
+            onClick={() => setFilterStatus('accepted')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              filterStatus === 'accepted'
+                ? 'bg-button-orange text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Aceptados (
+            {applications.filter((a) => a.status === 'accepted').length})
+          </button>
+          <button
+            onClick={() => setFilterStatus('rejected')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              filterStatus === 'rejected'
+                ? 'bg-button-orange text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Rechazados (
+            {applications.filter((a) => a.status === 'rejected').length})
           </button>
         </div>
 
@@ -246,8 +257,7 @@ export default function CompanyApplicationsTable({
                         }
                         className="text-xs font-semibold rounded-full px-2 py-1 border border-gray-300 focus:ring-2 focus:ring-button-orange focus:border-button-orange"
                       >
-                        <option value="pending">Pendiente</option>
-                        <option value="reviewing">En revisión</option>
+                        <option value="sent_to_company">Nuevo Candidato</option>
                         <option value="interviewed">Entrevistado</option>
                         <option value="accepted">Aceptado</option>
                         <option value="rejected">Rechazado</option>

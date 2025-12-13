@@ -113,6 +113,39 @@ export function middleware(request: NextRequest) {
     );
   }
 
+  // Verificar permisos de CANDIDATO para rutas específicas
+  const isCandidateRoute =
+    pathname.startsWith('/api/candidate/') ||
+    pathname.startsWith('/candidate/');
+
+  if (
+    isCandidateRoute &&
+    payload.role !== 'candidate' &&
+    payload.role !== 'admin'
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No tienes permisos de candidato para acceder a este recurso.'
+        },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.redirect(
+      new URL('/unauthorized?reason=no-permission', request.url)
+    );
+  }
+
+  // Rutas de PERFIL - accesibles para cualquier usuario autenticado
+  // No necesita verificación adicional de rol, solo autenticación (ya verificada arriba)
+  const isProfileRoute =
+    pathname.startsWith('/api/profile') || pathname === '/profile';
+
+  // Si es ruta de perfil, solo necesita estar autenticado (ya verificado)
+  // No hay restricción de rol adicional
+
   // Agregar información del usuario a los headers para uso en API routes
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-user-id', payload.userId.toString());
@@ -136,9 +169,13 @@ export const config = {
     '/api/company-requests/:path*',
     '/api/company/:path*',
     '/api/my-applications',
+    '/api/candidate/:path*',
+    '/api/profile',
     '/admin/:path*',
     '/company/:path*',
-    '/my-applications'
+    '/my-applications',
+    '/candidate/:path*',
+    '/profile'
   ],
   runtime: 'nodejs'
 };
