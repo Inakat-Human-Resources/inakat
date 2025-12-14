@@ -89,8 +89,9 @@ export async function GET(request: Request) {
     });
 
     // Obtener candidatos de la base de datos (para asignar a vacantes)
+    // Incluir candidatos 'available' (default) e 'in_process' (ya en proceso)
     const candidates = await prisma.candidate.findMany({
-      where: { status: 'active' },
+      where: { status: { in: ['available', 'in_process'] } },
       include: {
         experiences: {
           orderBy: { fechaInicio: 'desc' },
@@ -216,28 +217,46 @@ export async function PUT(request: Request) {
       }
     });
 
-    // Si envía al especialista, actualizar también el status de las Applications
+    // Si envía al especialista, crear/actualizar Applications
     if (status === 'sent_to_specialist' && candidateIds && candidateIds.length > 0) {
-      // Obtener emails de los candidatos seleccionados
+      // Obtener datos de los candidatos seleccionados
       const selectedCandidates = await prisma.candidate.findMany({
         where: { id: { in: candidateIds } },
-        select: { email: true }
+        select: { id: true, email: true, nombre: true, apellidoPaterno: true }
       });
 
-      const candidateEmails = selectedCandidates.map((c) => c.email.toLowerCase());
+      // Para cada candidato, crear Application si no existe (upsert)
+      for (const candidate of selectedCandidates) {
+        const candidateEmail = candidate.email.toLowerCase();
 
-      if (candidateEmails.length > 0) {
-        // Actualizar Applications para que el especialista las vea
-        await prisma.application.updateMany({
+        // Buscar si ya existe la Application
+        const existingApp = await prisma.application.findFirst({
           where: {
             jobId: assignment.jobId,
-            candidateEmail: { in: candidateEmails }
-          },
-          data: {
-            status: 'sent_to_specialist',
-            updatedAt: new Date()
+            candidateEmail: candidateEmail
           }
         });
+
+        if (!existingApp) {
+          // Crear Application para candidato del banco
+          await prisma.application.create({
+            data: {
+              jobId: assignment.jobId,
+              candidateEmail: candidateEmail,
+              candidateName: `${candidate.nombre} ${candidate.apellidoPaterno || ''}`.trim(),
+              status: 'sent_to_specialist'
+            }
+          });
+        } else {
+          // Actualizar Application existente
+          await prisma.application.update({
+            where: { id: existingApp.id },
+            data: {
+              status: 'sent_to_specialist',
+              updatedAt: new Date()
+            }
+          });
+        }
       }
     }
 

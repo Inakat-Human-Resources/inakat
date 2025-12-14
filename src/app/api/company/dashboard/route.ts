@@ -43,6 +43,7 @@ export async function GET(request: Request) {
         nombre: true,
         apellidoPaterno: true,
         apellidoMaterno: true,
+        credits: true,
         companyRequest: {
           select: {
             nombreEmpresa: true,
@@ -173,6 +174,7 @@ export async function GET(request: Request) {
           userId: user.id,
           userName: `${user.nombre} ${user.apellidoPaterno || ''}`,
           email: user.email,
+          credits: user.credits,
           companyInfo: user.companyRequest
         },
         stats: {

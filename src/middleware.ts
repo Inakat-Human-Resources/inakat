@@ -53,6 +53,8 @@ export function middleware(request: NextRequest) {
   // Verificar permisos de ADMIN para rutas específicas
   const isAdminRoute =
     pathname.startsWith('/api/company-requests') ||
+    pathname.startsWith('/api/applications') ||
+    pathname.startsWith('/applications') ||
     pathname.startsWith('/admin');
 
   if (isAdminRoute && payload.role !== 'admin') {
@@ -215,6 +217,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/api/company-requests/:path*',
+    '/api/applications/:path*',
     '/api/company/:path*',
     '/api/my-applications',
     '/api/candidate/:path*',
@@ -222,6 +225,7 @@ export const config = {
     '/api/recruiter/:path*',
     '/api/specialist/:path*',
     '/admin/:path*',
+    '/applications/:path*',
     '/company/:path*',
     '/my-applications',
     '/candidate/:path*',
