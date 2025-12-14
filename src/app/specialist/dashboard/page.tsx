@@ -23,8 +23,19 @@ import {
   AlertCircle,
   Save,
   Star,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
+
+interface Application {
+  id: number;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string | null;
+  status: string;
+  createdAt: string;
+  cvUrl: string | null;
+}
 
 interface Candidate {
   id: number;
@@ -55,6 +66,7 @@ interface Assignment {
   candidatesSentToSpecialist: string | null;
   candidatesSentToCompany: string | null;
   candidates: Candidate[];
+  applications?: Application[];
   job: {
     id: number;
     title: string;
@@ -190,6 +202,35 @@ export default function SpecialistDashboard() {
       setError('Error al actualizar');
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleDiscardApplication = async (applicationId: number) => {
+    const reason = prompt('¿Motivo del descarte? (opcional)');
+    if (reason === null) return; // Usuario canceló
+
+    try {
+      setError(null);
+      const response = await fetch('/api/specialist/dashboard', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discardApplicationId: applicationId,
+          discardReason: reason || 'Sin motivo especificado'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Candidato descartado');
+        fetchDashboard();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError('Error al descartar candidato');
     }
   };
 
@@ -568,6 +609,48 @@ export default function SpecialistDashboard() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Applications en proceso (para descartar) */}
+                    {assignment.applications &&
+                      assignment.applications.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                            <FileText size={16} />
+                            Aplicaciones en proceso ({assignment.applications.length})
+                          </h4>
+                          <div className="border rounded-lg divide-y">
+                            {assignment.applications.map((app) => (
+                              <div
+                                key={app.id}
+                                className="p-3 flex items-center justify-between hover:bg-gray-50"
+                              >
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {app.candidateName}
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {app.candidateEmail}
+                                  </p>
+                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                    {app.status === 'sent_to_specialist'
+                                      ? 'Por evaluar'
+                                      : app.status === 'evaluating'
+                                        ? 'En evaluación'
+                                        : app.status}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDiscardApplication(app.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Descartar candidato"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                     {/* Acciones */}
                     <div className="flex flex-wrap gap-2">

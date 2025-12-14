@@ -54,6 +54,7 @@ export function middleware(request: NextRequest) {
   const isAdminRoute =
     pathname.startsWith('/api/company-requests') ||
     pathname.startsWith('/api/applications') ||
+    pathname.startsWith('/api/admin/') ||
     pathname.startsWith('/applications') ||
     pathname.startsWith('/admin');
 
@@ -150,7 +151,12 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/my-applications') ||
     pathname.startsWith('/my-applications');
 
-  if (isUserRoute && payload.role !== 'user' && payload.role !== 'admin') {
+  if (
+    isUserRoute &&
+    payload.role !== 'user' &&
+    payload.role !== 'candidate' &&
+    payload.role !== 'admin'
+  ) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
         { success: false, error: 'No tienes permisos de usuario.' },
@@ -218,6 +224,7 @@ export const config = {
   matcher: [
     '/api/company-requests/:path*',
     '/api/applications/:path*',
+    '/api/admin/:path*',
     '/api/company/:path*',
     '/api/my-applications',
     '/api/candidate/:path*',

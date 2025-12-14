@@ -21,8 +21,20 @@ import {
   FileText,
   Loader2,
   AlertCircle,
-  Save
+  Save,
+  XCircle,
+  Trash2
 } from 'lucide-react';
+
+interface Application {
+  id: number;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string | null;
+  status: string;
+  createdAt: string;
+  cvUrl: string | null;
+}
 
 interface Assignment {
   id: number;
@@ -38,6 +50,7 @@ interface Assignment {
     profile: string;
     seniority: string;
     description: string;
+    applications?: Application[];
     user: {
       nombre: string;
       companyRequest?: {
@@ -184,6 +197,35 @@ export default function RecruiterDashboard() {
       setError('Error al actualizar');
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleDiscardApplication = async (applicationId: number) => {
+    const reason = prompt('¿Motivo del descarte? (opcional)');
+    if (reason === null) return; // Usuario canceló
+
+    try {
+      setError(null);
+      const response = await fetch('/api/recruiter/dashboard', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discardApplicationId: applicationId,
+          discardReason: reason || 'Sin motivo especificado'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Candidato descartado');
+        fetchDashboard();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(data.error);
+      }
+    } catch (err) {
+      setError('Error al descartar candidato');
     }
   };
 
@@ -487,6 +529,50 @@ export default function RecruiterDashboard() {
                         )}
                       </div>
                     </div>
+
+                    {/* Candidatos en proceso (Applications existentes) */}
+                    {assignment.job.applications &&
+                      assignment.job.applications.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                            <Users size={16} />
+                            Candidatos en proceso ({assignment.job.applications.length})
+                          </h4>
+                          <div className="border rounded-lg divide-y">
+                            {assignment.job.applications.map((app) => (
+                              <div
+                                key={app.id}
+                                className="p-3 flex items-center justify-between hover:bg-gray-50"
+                              >
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {app.candidateName}
+                                  </p>
+                                  <p className="text-sm text-gray-500">
+                                    {app.candidateEmail}
+                                  </p>
+                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                    {app.status === 'pending'
+                                      ? 'Pendiente'
+                                      : app.status === 'reviewing'
+                                        ? 'En revisión'
+                                        : app.status === 'sent_to_specialist'
+                                          ? 'Enviado a especialista'
+                                          : app.status}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleDiscardApplication(app.id)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Descartar candidato"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                     {/* Acciones */}
                     <div className="flex flex-wrap gap-2">

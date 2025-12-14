@@ -74,6 +74,12 @@ export async function GET(request: Request) {
                   }
                 }
               }
+            },
+            applications: {
+              where: {
+                status: { in: ['sent_to_specialist', 'evaluating'] }
+              },
+              orderBy: { createdAt: 'desc' }
             }
           }
         },
@@ -115,7 +121,8 @@ export async function GET(request: Request) {
 
         return {
           ...assignment,
-          candidates
+          candidates,
+          applications: assignment.job.applications || []
         };
       })
     );
@@ -178,7 +185,61 @@ export async function PUT(request: Request) {
 
     const { user } = auth;
     const body = await request.json();
-    const { assignmentId, status, notes, candidateIds } = body;
+    const { assignmentId, status, notes, candidateIds, discardApplicationId, discardReason } = body;
+
+    // Acción: Descartar candidato individual
+    if (discardApplicationId) {
+      const application = await prisma.application.findUnique({
+        where: { id: discardApplicationId },
+        include: { job: true }
+      });
+
+      if (!application) {
+        return NextResponse.json(
+          { success: false, error: 'Aplicación no encontrada' },
+          { status: 404 }
+        );
+      }
+
+      // Verificar que el especialista tiene asignación a este job
+      const hasAssignment = await prisma.jobAssignment.findFirst({
+        where: { jobId: application.jobId, specialistId: user.id }
+      });
+
+      if (!hasAssignment && user.role !== 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'No tienes permiso para descartar este candidato' },
+          { status: 403 }
+        );
+      }
+
+      // Actualizar Application a discarded
+      const discardedApp = await prisma.application.update({
+        where: { id: discardApplicationId },
+        data: {
+          status: 'discarded',
+          updatedAt: new Date()
+        }
+      });
+
+      // Si hay razón, guardarla en las notas del especialista
+      if (discardReason && hasAssignment) {
+        const currentNotes = hasAssignment.specialistNotes || '';
+        const newNote = `[DESCARTADO: ${application.candidateName}] ${discardReason}`;
+        await prisma.jobAssignment.update({
+          where: { id: hasAssignment.id },
+          data: {
+            specialistNotes: currentNotes ? `${currentNotes}\n${newNote}` : newNote
+          }
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Candidato descartado',
+        data: discardedApp
+      });
+    }
 
     if (!assignmentId) {
       return NextResponse.json(

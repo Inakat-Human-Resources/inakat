@@ -88,7 +88,9 @@ export async function PATCH(
       'interviewed',
       'rejected',
       'accepted',
-      'injected_by_admin'
+      'injected_by_admin',
+      'discarded',
+      'archived'
     ];
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json(

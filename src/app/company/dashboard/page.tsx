@@ -10,7 +10,6 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  FileText,
   TrendingUp,
   AlertCircle,
   Coins
@@ -62,14 +61,14 @@ interface DashboardData {
     };
     applications: {
       total: number;
-      pending: number;
-      reviewing: number;
+      newCandidates: number; // Candidatos enviados por especialista (pendientes de revisar)
       interviewed: number;
       accepted: number;
       rejected: number;
     };
   };
   recentApplications: any[];
+  allApplications: any[];
   jobStats: any[];
   allJobs: Job[];
 }
@@ -275,8 +274,8 @@ export default function CompanyDashboard() {
             color="blue"
           />
           <StatCard
-            title="Pendientes de Revisar"
-            value={data.stats.applications.pending}
+            title="Nuevos Candidatos"
+            value={data.stats.applications.newCandidates}
             icon={Clock}
             color="orange"
           />
@@ -289,13 +288,7 @@ export default function CompanyDashboard() {
         </div>
 
         {/* Estadísticas Secundarias */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard
-            title="En Revisión"
-            value={data.stats.applications.reviewing}
-            icon={FileText}
-            color="blue"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <StatCard
             title="Entrevistados"
             value={data.stats.applications.interviewed}
@@ -320,10 +313,10 @@ export default function CompanyDashboard() {
           />
         </div>
 
-        {/* Tabla de Aplicaciones Recientes */}
+        {/* Tabla de Todas las Aplicaciones */}
         <div>
           <CompanyApplicationsTable
-            applications={data.recentApplications}
+            applications={data.allApplications}
             onView={handleViewApplication}
             onStatusChange={handleApplicationStatusChange}
           />

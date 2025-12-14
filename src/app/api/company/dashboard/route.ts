@@ -111,6 +111,56 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
+    // 4.1 Enriquecer aplicaciones con datos de Candidate y JobAssignment
+    const enrichedApplications = await Promise.all(
+      allApplications.map(async (app) => {
+        // Buscar candidato por email
+        const candidate = await prisma.candidate.findFirst({
+          where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
+          include: {
+            experiences: {
+              orderBy: { fechaInicio: 'desc' },
+              take: 3
+            }
+          }
+        });
+
+        // Buscar JobAssignment para obtener notas
+        const jobAssignment = await prisma.jobAssignment.findFirst({
+          where: { jobId: app.jobId }
+        });
+
+        return {
+          ...app,
+          candidateProfile: candidate
+            ? {
+                id: candidate.id,
+                nombre: candidate.nombre,
+                apellidoPaterno: candidate.apellidoPaterno,
+                apellidoMaterno: candidate.apellidoMaterno,
+                email: candidate.email,
+                telefono: candidate.telefono,
+                sexo: candidate.sexo,
+                fechaNacimiento: candidate.fechaNacimiento,
+                universidad: candidate.universidad,
+                carrera: candidate.carrera,
+                nivelEstudios: candidate.nivelEstudios,
+                añosExperiencia: candidate.añosExperiencia,
+                profile: candidate.profile,
+                seniority: candidate.seniority,
+                experienciasRecientes: candidate.experiences,
+                cvUrl: candidate.cvUrl,
+                linkedinUrl: candidate.linkedinUrl,
+                portafolioUrl: candidate.portafolioUrl,
+                notas: candidate.notas
+              }
+            : null,
+          recruiterNotes: jobAssignment?.recruiterNotes || null,
+          specialistNotes: jobAssignment?.specialistNotes || null
+        };
+      })
+    );
+
     // 5. Calcular estadísticas de aplicaciones (solo las visibles para empresa)
     const totalApplications = allApplications.length;
     // Para empresa: "sent_to_company" = Nuevos candidatos
@@ -127,8 +177,8 @@ export async function GET(request: Request) {
       (app) => app.status === 'rejected'
     ).length;
 
-    // 6. Aplicaciones recientes (últimas 5)
-    const recentApplications = allApplications.slice(0, 5);
+    // 6. Aplicaciones recientes (últimas 5) - con datos enriquecidos
+    const recentApplications = enrichedApplications.slice(0, 5);
 
     // 7. Vacantes con más aplicaciones (top 5)
     const jobsWithApplicationCount = jobs.map((job) => ({
@@ -193,6 +243,7 @@ export async function GET(request: Request) {
           }
         },
         recentApplications,
+        allApplications: enrichedApplications, // Todas las aplicaciones con datos completos
         topJobs,
         jobStats,
         allJobs: jobs.map((job) => ({
