@@ -77,9 +77,24 @@ export async function GET(request: Request) {
             },
             applications: {
               where: {
+                // Mostrar candidatos enviados por el reclutador que NO han sido enviados a la empresa ni descartados
+                // sent_to_specialist = enviados por reclutador, evaluating = en evaluación técnica
+                // Excluir: sent_to_company, discarded, archived
                 status: { in: ['sent_to_specialist', 'evaluating'] }
               },
-              orderBy: { createdAt: 'desc' }
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true,
+                candidateName: true,
+                candidateEmail: true,
+                candidatePhone: true,
+                cvUrl: true,
+                coverLetter: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                notes: true
+              }
             }
           }
         },
@@ -95,7 +110,7 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: 'desc' }
     });
 
-    // Para cada asignación, obtener los candidatos enviados
+    // Para cada asignación, obtener los candidatos enviados y enriquecer applications
     const assignmentsWithCandidates = await Promise.all(
       assignments.map(async (assignment) => {
         let candidates: any[] = [];
@@ -112,17 +127,55 @@ export async function GET(request: Request) {
               include: {
                 experiences: {
                   orderBy: { fechaInicio: 'desc' },
-                  take: 3
+                  take: 5
                 }
               }
             });
           }
         }
 
+        // Enriquecer applications con datos del Candidate (si existe en el banco)
+        const enrichedApplications = await Promise.all(
+          (assignment.job.applications || []).map(async (app) => {
+            // Buscar si hay un Candidate con este email
+            const candidateFromBank = await prisma.candidate.findFirst({
+              where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
+              select: {
+                id: true,
+                universidad: true,
+                carrera: true,
+                nivelEstudios: true,
+                añosExperiencia: true,
+                profile: true,
+                seniority: true,
+                linkedinUrl: true,
+                portafolioUrl: true,
+                cvUrl: true,
+                telefono: true,
+                sexo: true,
+                fechaNacimiento: true,
+                source: true,
+                notas: true,
+                experiences: {
+                  orderBy: { fechaInicio: 'desc' },
+                  take: 5
+                }
+              }
+            });
+
+            return {
+              ...app,
+              candidateProfile: candidateFromBank
+            };
+          })
+        );
+
         return {
           ...assignment,
           candidates,
-          applications: assignment.job.applications || []
+          applications: enrichedApplications,
+          // Incluir notas del reclutador para que el especialista las vea
+          recruiterNotes: assignment.recruiterNotes
         };
       })
     );
@@ -315,22 +368,25 @@ export async function PUT(request: Request) {
       }
     });
 
-    // Si envía a la empresa, actualizar también el status de las Applications
-    if (status === 'sent_to_company' && candidateIds && candidateIds.length > 0) {
+    // Si envía candidatos a la empresa
+    if (candidateIds && candidateIds.length > 0) {
       // Obtener emails de los candidatos seleccionados
       const selectedCandidates = await prisma.candidate.findMany({
         where: { id: { in: candidateIds } },
-        select: { email: true }
+        select: { id: true, email: true }
       });
 
       const candidateEmails = selectedCandidates.map((c) => c.email.toLowerCase());
 
       if (candidateEmails.length > 0) {
-        // Actualizar Applications para que la empresa las vea
+        // Actualizar Applications SOLO de los candidatos seleccionados
+        // Los no seleccionados permanecen con status 'sent_to_specialist' o 'evaluating'
         await prisma.application.updateMany({
           where: {
             jobId: assignment.jobId,
-            candidateEmail: { in: candidateEmails }
+            candidateEmail: { in: candidateEmails },
+            // Solo actualizar si aún no han sido enviados a la empresa
+            status: { in: ['sent_to_specialist', 'evaluating'] }
           },
           data: {
             status: 'sent_to_company',
@@ -338,6 +394,27 @@ export async function PUT(request: Request) {
           }
         });
       }
+
+      // IMPORTANTE: Actualizar candidatos enviados previamente para concatenar, no reemplazar
+      const previouslySent = assignment.candidatesSentToCompany || '';
+      const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];
+      const allSentIds = [...new Set([...previousIds, ...candidateIds])]; // Combinar sin duplicados
+
+      await prisma.jobAssignment.update({
+        where: { id: assignmentId },
+        data: {
+          candidatesSentToCompany: allSentIds.join(','),
+          // Solo cambiar a sent_to_company si se especificó el status
+          ...(status === 'sent_to_company' ? {
+            specialistStatus: 'sent_to_company',
+            followUpDate: (() => {
+              const date = new Date();
+              date.setDate(date.getDate() + 45);
+              return date;
+            })()
+          } : {})
+        }
+      });
     }
 
     return NextResponse.json({

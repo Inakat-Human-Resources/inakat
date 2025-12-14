@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { X, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { X, AlertCircle, CheckCircle, User, Loader2 } from 'lucide-react';
 
 interface ApplyJobModalProps {
   jobId: number;
@@ -16,6 +16,15 @@ interface ExistingApplication {
   status: string;
   statusLabel: string;
   appliedAt: string;
+}
+
+interface CandidateProfile {
+  nombre?: string;
+  apellidoPaterno?: string;
+  apellidoMaterno?: string;
+  email: string;
+  telefono?: string;
+  cvUrl?: string;
 }
 
 const ApplyJobModal = ({
@@ -34,10 +43,77 @@ const ApplyJobModal = ({
   });
 
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [profileCvUrl, setProfileCvUrl] = useState<string | null>(null);
+  const [useProfileCv, setUseProfileCv] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [existingApplication, setExistingApplication] = useState<ExistingApplication | null>(null);
   const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // Estado para datos pre-llenados del perfil
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  // Cargar datos del perfil si el usuario está logueado
+  useEffect(() => {
+    if (isOpen) {
+      loadUserProfile();
+    }
+  }, [isOpen]);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoadingProfile(true);
+
+      const response = await fetch('/api/profile', {
+        credentials: 'include'
+      });
+
+      if (response.status === 401) {
+        // Usuario no logueado - no es error, simplemente no pre-llenamos
+        setLoadingProfile(false);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data.candidate) {
+        const candidate = data.data.candidate;
+
+        // Construir nombre completo
+        const fullName = [
+          candidate.nombre,
+          candidate.apellidoPaterno,
+          candidate.apellidoMaterno
+        ].filter(Boolean).join(' ');
+
+        // Pre-llenar formulario
+        setFormData({
+          candidateName: fullName || '',
+          candidateEmail: data.data.email || '',
+          candidatePhone: candidate.telefono || '',
+          coverLetter: ''
+        });
+
+        // Si tiene CV en el perfil, ofrecer usarlo
+        if (candidate.cvUrl) {
+          setProfileCvUrl(candidate.cvUrl);
+          setUseProfileCv(true);
+        }
+
+        setProfileLoaded(true);
+
+        // Verificar si ya aplicó con este email
+        if (data.data.email) {
+          checkExistingApplication(data.data.email);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading profile:', err);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   // Verificar si el email ya aplicó
   const checkExistingApplication = useCallback(async (email: string) => {
@@ -86,8 +162,12 @@ const ApplyJobModal = ({
     try {
       let cvUrl = null;
 
-      // 1. Validar tamaño de CV si existe (máximo 5MB)
-      if (cvFile) {
+      // Determinar qué CV usar
+      if (useProfileCv && profileCvUrl) {
+        // Usar CV del perfil
+        cvUrl = profileCvUrl;
+      } else if (cvFile) {
+        // Subir nuevo CV
         const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
         if (cvFile.size > MAX_FILE_SIZE) {
           throw new Error('El archivo CV excede el tamaño máximo de 5MB');
@@ -141,6 +221,9 @@ const ApplyJobModal = ({
           coverLetter: ''
         });
         setCvFile(null);
+        setProfileCvUrl(null);
+        setUseProfileCv(false);
+        setProfileLoaded(false);
 
         onSuccess();
         onClose();
@@ -165,6 +248,23 @@ const ApplyJobModal = ({
     }
   };
 
+  const handleClose = () => {
+    // Resetear todo al cerrar
+    setFormData({
+      candidateName: '',
+      candidateEmail: '',
+      candidatePhone: '',
+      coverLetter: ''
+    });
+    setCvFile(null);
+    setProfileCvUrl(null);
+    setUseProfileCv(false);
+    setProfileLoaded(false);
+    setExistingApplication(null);
+    setError('');
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -181,7 +281,7 @@ const ApplyJobModal = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-400 hover:text-gray-600"
           >
             <X size={24} />
@@ -190,6 +290,21 @@ const ApplyJobModal = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6">
+          {/* Mensaje de datos cargados del perfil */}
+          {profileLoaded && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">
+              <User className="w-5 h-5" />
+              <span>Datos cargados desde tu perfil. Puedes modificarlos si lo deseas.</span>
+            </div>
+          )}
+
+          {loadingProfile && (
+            <div className="mb-4 p-4 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Cargando datos de tu perfil...</span>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
               {error}
@@ -280,19 +395,53 @@ const ApplyJobModal = ({
               <label className="block text-sm font-semibold mb-2">
                 Curriculum Vitae (opcional)
               </label>
-              <input
-                type="file"
-                onChange={(e) => setCvFile(e.target.files?.[0] || null)}
-                accept=".pdf,.doc,.docx"
-                className="w-full p-3 border border-gray-300 rounded-lg"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Formatos aceptados: PDF, DOC, DOCX (máx. 5MB)
-              </p>
-              {cvFile && (
-                <p className="text-sm text-green-600 mt-2">
-                  ✓ Archivo seleccionado: {cvFile.name}
-                </p>
+
+              {/* Opción de usar CV del perfil */}
+              {profileCvUrl && (
+                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useProfileCv}
+                      onChange={(e) => {
+                        setUseProfileCv(e.target.checked);
+                        if (e.target.checked) setCvFile(null);
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-blue-800">
+                      Usar el CV de mi perfil
+                    </span>
+                  </label>
+                  <a
+                    href={profileCvUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline ml-6"
+                  >
+                    Ver mi CV actual
+                  </a>
+                </div>
+              )}
+
+              {/* Subir nuevo CV */}
+              {!useProfileCv && (
+                <>
+                  <input
+                    type="file"
+                    onChange={(e) => setCvFile(e.target.files?.[0] || null)}
+                    accept=".pdf,.doc,.docx"
+                    className="w-full p-3 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Formatos aceptados: PDF, DOC, DOCX (máx. 5MB)
+                  </p>
+                  {cvFile && (
+                    <p className="text-sm text-green-600 mt-2">
+                      ✓ Archivo seleccionado: {cvFile.name}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -317,7 +466,7 @@ const ApplyJobModal = ({
           <div className="flex gap-4 mt-6">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
             >
               Cancelar
@@ -325,9 +474,18 @@ const ApplyJobModal = ({
             <button
               type="submit"
               disabled={isSubmitting || !!existingApplication}
-              className="flex-1 px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              className="flex-1 px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
             >
-              {isSubmitting ? 'Enviando...' : existingApplication ? 'Ya aplicaste' : 'Enviar Aplicación'}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Enviando...
+                </>
+              ) : existingApplication ? (
+                'Ya aplicaste'
+              ) : (
+                'Enviar Aplicación'
+              )}
             </button>
           </div>
         </form>

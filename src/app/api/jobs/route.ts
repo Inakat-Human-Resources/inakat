@@ -127,13 +127,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calcular costo en créditos
+    // Calcular costo en créditos - USAR LA MISMA LÓGICA QUE /api/pricing/calculate
     let creditCost = 0;
     if (profile && seniority && workMode) {
+      // Buscar precio exacto (sin location, ya que el frontend no lo envía)
       const pricing = await prisma.pricingMatrix.findFirst({
-        where: { profile, seniority, workMode, isActive: true }
+        where: {
+          profile,
+          seniority,
+          workMode,
+          location: null, // Buscar sin location para coincidir con frontend
+          isActive: true
+        }
       });
-      creditCost = pricing?.credits || 5;
+      // Usar el precio encontrado o el valor por defecto (5) - DEBE COINCIDIR CON /api/pricing/calculate
+      creditCost = pricing?.credits ?? 5;
     }
 
     let initialStatus = 'draft';

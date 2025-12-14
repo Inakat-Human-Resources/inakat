@@ -221,6 +221,25 @@ model PricingMatrix {
 }
 
 // =============================================
+// PAQUETES DE CRÉDITOS (Configurables por Admin)
+// =============================================
+model CreditPackage {
+  id              Int      @id @default(autoincrement())
+  name            String   // "1 Crédito", "Pack 10", etc.
+  credits         Int      // Cantidad de créditos
+  price           Float    // Precio en MXN
+  pricePerCredit  Float    // Precio por crédito (calculado)
+  badge           String?  // "MÁS POPULAR", "PROMOCIÓN", null
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+// =============================================
 // COMPRAS DE CRÉDITOS
 // =============================================
 model CreditPurchase {

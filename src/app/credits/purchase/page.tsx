@@ -5,44 +5,79 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
+import { Loader2, AlertCircle } from 'lucide-react';
 
-const PACKAGES = [
-  { id: 'single', credits: 1, price: 4000, pricePerCredit: 4000 },
-  {
-    id: 'pack_10',
-    credits: 10,
-    price: 35000,
-    pricePerCredit: 3500,
-    popular: true
-  },
-  { id: 'pack_15', credits: 15, price: 50000, pricePerCredit: 3333 },
-  {
-    id: 'pack_20',
-    credits: 20,
-    price: 65000,
-    pricePerCredit: 3250,
-    promo: true
-  }
+interface CreditPackage {
+  id: number;
+  name: string;
+  credits: number;
+  price: number;
+  pricePerCredit: number;
+  badge: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+// Paquetes por defecto (fallback si la API falla)
+const DEFAULT_PACKAGES: CreditPackage[] = [
+  { id: 1, name: '1 Crédito', credits: 1, price: 4000, pricePerCredit: 4000, badge: null, isActive: true, sortOrder: 1 },
+  { id: 2, name: 'Pack 10', credits: 10, price: 35000, pricePerCredit: 3500, badge: 'MÁS POPULAR', isActive: true, sortOrder: 2 },
+  { id: 3, name: 'Pack 15', credits: 15, price: 50000, pricePerCredit: 3333, badge: null, isActive: true, sortOrder: 3 },
+  { id: 4, name: 'Pack 20', credits: 20, price: 65000, pricePerCredit: 3250, badge: 'PROMOCIÓN', isActive: true, sortOrder: 4 }
 ];
 
 export default function PurchaseCreditsPage() {
   const router = useRouter();
-  const [selectedPackage, setSelectedPackage] = useState('pack_10');
+  const [packages, setPackages] = useState<CreditPackage[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingPackages, setLoadingPackages] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
   const [mp, setMp] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const selectedPkg = PACKAGES.find((p) => p.id === selectedPackage)!;
+  // Cargar paquetes desde la API
+  useEffect(() => {
+    fetchPackages();
+  }, []);
+
+  const fetchPackages = async () => {
+    try {
+      setLoadingPackages(true);
+      const response = await fetch('/api/admin/credit-packages?activeOnly=true');
+      const data = await response.json();
+
+      if (data.success && data.data.length > 0) {
+        setPackages(data.data);
+        // Seleccionar el paquete con badge "MÁS POPULAR" o el segundo por defecto
+        const popularPkg = data.data.find((p: CreditPackage) => p.badge === 'MÁS POPULAR');
+        setSelectedPackageId(popularPkg?.id || data.data[Math.min(1, data.data.length - 1)]?.id);
+      } else {
+        // Usar paquetes por defecto si no hay en la BD
+        setPackages(DEFAULT_PACKAGES);
+        setSelectedPackageId(2); // Pack 10 por defecto
+      }
+    } catch (err) {
+      console.error('Error fetching packages:', err);
+      setPackages(DEFAULT_PACKAGES);
+      setSelectedPackageId(2);
+    } finally {
+      setLoadingPackages(false);
+    }
+  };
+
+  const selectedPkg = packages.find((p) => p.id === selectedPackageId);
 
   useEffect(() => {
     if (
       showCheckout &&
+      selectedPkg &&
       typeof window !== 'undefined' &&
       (window as any).MercadoPago
     ) {
       initMercadoPago();
     }
-  }, [showCheckout]);
+  }, [showCheckout, selectedPkg]);
 
   const initMercadoPago = async () => {
     try {
@@ -66,7 +101,7 @@ export default function PurchaseCreditsPage() {
 
       await bricksBuilder.create('cardPayment', 'mp-checkout-container', {
         initialization: {
-          amount: selectedPkg.price
+          amount: selectedPkg?.price || 0
         },
         customization: {
           visual: {
@@ -107,7 +142,8 @@ export default function PurchaseCreditsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          packageType: selectedPackage,
+          packageId: selectedPackageId,
+          packageType: `pack_${selectedPkg?.credits}`, // Mantener compatibilidad
           paymentData: {
             token: formData.token,
             payment_method_id: formData.payment_method_id,
@@ -168,60 +204,80 @@ export default function PurchaseCreditsPage() {
           {!showCheckout ? (
             <>
               {/* Selección de Paquete */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                {PACKAGES.map((pkg) => (
-                  <div
-                    key={pkg.id}
-                    onClick={() => setSelectedPackage(pkg.id)}
-                    className={`
-                      relative bg-white rounded-xl p-6 cursor-pointer border-2 transition-all
-                      ${
-                        selectedPackage === pkg.id
-                          ? 'border-button-orange shadow-lg scale-105'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }
-                    `}
-                  >
-                    {pkg.popular && (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-button-orange text-white px-4 py-1 rounded-full text-sm font-bold">
-                        MÁS POPULAR
-                      </div>
-                    )}
+              {loadingPackages ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="animate-spin text-button-orange" size={40} />
+                  <span className="ml-3 text-gray-600">Cargando paquetes...</span>
+                </div>
+              ) : packages.length === 0 ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
+                  <AlertCircle className="mx-auto text-yellow-600 mb-2" size={40} />
+                  <p className="text-yellow-800">No hay paquetes disponibles en este momento.</p>
+                </div>
+              ) : (
+                <div className={`grid grid-cols-1 gap-6 mb-8 ${
+                  packages.length === 1 ? 'md:grid-cols-1 max-w-sm mx-auto' :
+                  packages.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' :
+                  packages.length === 3 ? 'md:grid-cols-3' :
+                  'md:grid-cols-4'
+                }`}>
+                  {packages.map((pkg) => (
+                    <div
+                      key={pkg.id}
+                      onClick={() => setSelectedPackageId(pkg.id)}
+                      className={`
+                        relative bg-white rounded-xl p-6 cursor-pointer border-2 transition-all
+                        ${
+                          selectedPackageId === pkg.id
+                            ? 'border-button-orange shadow-lg scale-105'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }
+                      `}
+                    >
+                      {pkg.badge === 'MÁS POPULAR' && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-button-orange text-white px-4 py-1 rounded-full text-sm font-bold">
+                          MÁS POPULAR
+                        </div>
+                      )}
 
-                    {pkg.promo && (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-1 rounded-full text-sm font-bold">
-                        PROMOCIÓN
-                      </div>
-                    )}
+                      {pkg.badge === 'PROMOCIÓN' && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-1 rounded-full text-sm font-bold">
+                          PROMOCIÓN
+                        </div>
+                      )}
 
-                    <div className="text-center">
-                      <h3 className="text-5xl font-bold text-title-dark mb-2">
-                        {pkg.credits}
-                      </h3>
-                      <p className="text-gray-600 mb-4">
-                        {pkg.credits === 1 ? 'crédito' : 'créditos'}
-                      </p>
-                      <p className="text-3xl font-bold text-button-orange mb-2">
-                        ${pkg.price.toLocaleString()}
-                      </p>
-                      <p className="text-sm text-gray-500">MXN</p>
-                      <p className="text-xs text-gray-400 mt-2">
-                        ${pkg.pricePerCredit.toLocaleString()} por crédito
-                      </p>
+                      <div className="text-center">
+                        <h3 className="text-5xl font-bold text-title-dark mb-2">
+                          {pkg.credits}
+                        </h3>
+                        <p className="text-gray-600 mb-4">
+                          {pkg.credits === 1 ? 'crédito' : 'créditos'}
+                        </p>
+                        <p className="text-3xl font-bold text-button-orange mb-2">
+                          ${pkg.price.toLocaleString()}
+                        </p>
+                        <p className="text-sm text-gray-500">MXN</p>
+                        <p className="text-xs text-gray-400 mt-2">
+                          ${Math.round(pkg.pricePerCredit).toLocaleString()} por crédito
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Botón Continuar */}
-              <div className="text-center">
-                <button
-                  onClick={() => setShowCheckout(true)}
-                  className="bg-button-orange text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-opacity-90 transition-colors"
-                >
-                  Continuar al Pago →
-                </button>
-              </div>
+              {packages.length > 0 && selectedPkg && (
+                <div className="text-center">
+                  <button
+                    onClick={() => setShowCheckout(true)}
+                    disabled={loadingPackages}
+                    className="bg-button-orange text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                  >
+                    Continuar al Pago →
+                  </button>
+                </div>
+              )}
 
               {/* Info adicional */}
               <div className="mt-12 bg-white rounded-xl p-6">
@@ -255,7 +311,7 @@ export default function PurchaseCreditsPage() {
                 </ul>
               </div>
             </>
-          ) : (
+          ) : selectedPkg ? (
             <>
               {/* Resumen de compra */}
               <div className="bg-white rounded-xl p-6 mb-6">
@@ -264,7 +320,7 @@ export default function PurchaseCreditsPage() {
                   <div>
                     <p className="text-gray-600">Paquete seleccionado:</p>
                     <p className="text-xl font-bold">
-                      {selectedPkg.credits}{' '}
+                      {selectedPkg.name} - {selectedPkg.credits}{' '}
                       {selectedPkg.credits === 1 ? 'crédito' : 'créditos'}
                     </p>
                   </div>
@@ -306,10 +362,21 @@ export default function PurchaseCreditsPage() {
                   bancaria
                 </p>
                 <p className="mt-2">
-                  🔒 Pago seguro procesado por Mercado Pago
+                  Pago seguro procesado por Mercado Pago
                 </p>
               </div>
             </>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
+              <AlertCircle className="mx-auto text-yellow-600 mb-2" size={40} />
+              <p className="text-yellow-800">No se ha seleccionado ningún paquete.</p>
+              <button
+                onClick={() => setShowCheckout(false)}
+                className="mt-4 text-blue-600 hover:underline"
+              >
+                ← Volver a seleccionar paquete
+              </button>
+            </div>
           )}
         </div>
       </div>

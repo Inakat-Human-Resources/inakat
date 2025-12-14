@@ -12,12 +12,17 @@ import {
   TrendingUp,
   RefreshCw,
   ChevronDown,
+  ChevronUp,
   Eye,
   ArrowRight,
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  ArrowUpDown,
+  DollarSign,
+  Settings,
+  Layers
 } from 'lucide-react';
 
 interface Job {
@@ -68,6 +73,10 @@ export default function AdminDashboardPage() {
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estado para ordenamiento de tabla
+  const [sortField, setSortField] = useState<string>('createdAt');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     fetchDashboardData();
@@ -148,6 +157,90 @@ export default function AdminDashboardPage() {
       setIsLoading(false);
     }
   };
+
+  // Función para manejar ordenamiento
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Ordenar jobs filtrados
+  const sortedJobs = [...filteredJobs].sort((a, b) => {
+    let aVal: any;
+    let bVal: any;
+
+    switch (sortField) {
+      case 'title':
+        aVal = a.title?.toLowerCase() || '';
+        bVal = b.title?.toLowerCase() || '';
+        break;
+      case 'company':
+        aVal = a.company?.toLowerCase() || '';
+        bVal = b.company?.toLowerCase() || '';
+        break;
+      case 'location':
+        aVal = a.location?.toLowerCase() || '';
+        bVal = b.location?.toLowerCase() || '';
+        break;
+      case 'createdAt':
+        aVal = new Date(a.createdAt).getTime();
+        bVal = new Date(b.createdAt).getTime();
+        break;
+      case 'applications':
+        aVal = a._count?.applications || 0;
+        bVal = b._count?.applications || 0;
+        break;
+      case 'status':
+        aVal = a.status || '';
+        bVal = b.status || '';
+        break;
+      default:
+        aVal = '';
+        bVal = '';
+    }
+
+    let comparison = 0;
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      comparison = aVal.localeCompare(bVal);
+    } else {
+      comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    }
+
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  // Componente para header ordenable
+  const SortableHeader = ({
+    field,
+    children,
+    className = ''
+  }: {
+    field: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <th
+      onClick={() => handleSort(field)}
+      className={`px-4 py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none transition-colors ${className}`}
+    >
+      <div className="flex items-center gap-1 justify-start">
+        {children}
+        {sortField === field ? (
+          sortDirection === 'asc' ? (
+            <ChevronUp size={14} className="text-blue-600" />
+          ) : (
+            <ChevronDown size={14} className="text-blue-600" />
+          )
+        ) : (
+          <ArrowUpDown size={14} className="text-gray-400" />
+        )}
+      </div>
+    </th>
+  );
 
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
@@ -258,62 +351,118 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Accesos rápidos */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Accesos rápidos - Grid responsive 2 columnas en móvil, 4 en desktop */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
           <Link
             href="/admin/requests"
-            className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow flex items-center gap-3"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
           >
-            <div className="p-3 bg-orange-100 rounded-lg">
-              <Building2 className="text-orange-600" size={24} />
+            <div className="p-2 md:p-3 bg-orange-100 rounded-lg flex-shrink-0">
+              <Building2 className="text-orange-600" size={20} />
             </div>
-            <div>
-              <p className="font-semibold">Solicitudes</p>
-              <p className="text-sm text-gray-500">Empresas</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Solicitudes</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Empresas</p>
             </div>
-            <ArrowRight className="ml-auto text-gray-400" size={20} />
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
 
           <Link
             href="/admin/candidates"
-            className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow flex items-center gap-3"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
           >
-            <div className="p-3 bg-green-100 rounded-lg">
-              <Users className="text-green-600" size={24} />
+            <div className="p-2 md:p-3 bg-green-100 rounded-lg flex-shrink-0">
+              <Users className="text-green-600" size={20} />
             </div>
-            <div>
-              <p className="font-semibold">Candidatos</p>
-              <p className="text-sm text-gray-500">Banco talentos</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Candidatos</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Banco talentos</p>
             </div>
-            <ArrowRight className="ml-auto text-gray-400" size={20} />
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
 
           <Link
             href="/admin/assign-candidates"
-            className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow flex items-center gap-3"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
           >
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <TrendingUp className="text-blue-600" size={24} />
+            <div className="p-2 md:p-3 bg-blue-100 rounded-lg flex-shrink-0">
+              <TrendingUp className="text-blue-600" size={20} />
             </div>
-            <div>
-              <p className="font-semibold">Asignar</p>
-              <p className="text-sm text-gray-500">Candidatos</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Asignar</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Candidatos</p>
             </div>
-            <ArrowRight className="ml-auto text-gray-400" size={20} />
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
 
           <Link
             href="/admin/users"
-            className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow flex items-center gap-3"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
           >
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Users className="text-purple-600" size={24} />
+            <div className="p-2 md:p-3 bg-purple-100 rounded-lg flex-shrink-0">
+              <Users className="text-purple-600" size={20} />
             </div>
-            <div>
-              <p className="font-semibold">Usuarios</p>
-              <p className="text-sm text-gray-500">Internos</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Usuarios</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Internos</p>
             </div>
-            <ArrowRight className="ml-auto text-gray-400" size={20} />
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
+          </Link>
+
+          <Link
+            href="/admin/pricing"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
+          >
+            <div className="p-2 md:p-3 bg-emerald-100 rounded-lg flex-shrink-0">
+              <DollarSign className="text-emerald-600" size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Precios</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Matriz créditos</p>
+            </div>
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
+          </Link>
+
+          <Link
+            href="/admin/credit-packages"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
+          >
+            <div className="p-2 md:p-3 bg-cyan-100 rounded-lg flex-shrink-0">
+              <Layers className="text-cyan-600" size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Paquetes</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Créditos</p>
+            </div>
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
+          </Link>
+
+          <Link
+            href="/admin/specialties"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
+          >
+            <div className="p-2 md:p-3 bg-indigo-100 rounded-lg flex-shrink-0">
+              <Settings className="text-indigo-600" size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Perfiles</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Especialidades</p>
+            </div>
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
+          </Link>
+
+          <Link
+            href="/admin/assignments"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
+          >
+            <div className="p-2 md:p-3 bg-pink-100 rounded-lg flex-shrink-0">
+              <Briefcase className="text-pink-600" size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm md:text-base truncate">Asignaciones</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Vacantes</p>
+            </div>
+            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
         </div>
 
@@ -354,17 +503,17 @@ export default function AdminDashboardPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Vacante</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Empresa</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ubicación</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Candidatos</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Fecha</th>
+                  <SortableHeader field="title" className="text-left">Vacante</SortableHeader>
+                  <SortableHeader field="company" className="text-left">Empresa</SortableHeader>
+                  <SortableHeader field="location" className="text-left">Ubicación</SortableHeader>
+                  <SortableHeader field="applications">Candidatos</SortableHeader>
+                  <SortableHeader field="status">Estado</SortableHeader>
+                  <SortableHeader field="createdAt">Fecha</SortableHeader>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredJobs.length === 0 ? (
+                {sortedJobs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                       <Briefcase className="mx-auto mb-2 text-gray-400" size={40} />
@@ -375,7 +524,7 @@ export default function AdminDashboardPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredJobs.slice(0, 20).map(job => (
+                  sortedJobs.slice(0, 20).map(job => (
                     <tr key={job.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div>
@@ -433,10 +582,10 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Footer */}
-          {filteredJobs.length > 20 && (
+          {sortedJobs.length > 20 && (
             <div className="p-4 border-t text-center">
               <p className="text-sm text-gray-500">
-                Mostrando 20 de {filteredJobs.length} vacantes
+                Mostrando 20 de {sortedJobs.length} vacantes
               </p>
             </div>
           )}

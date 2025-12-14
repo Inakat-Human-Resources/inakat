@@ -75,7 +75,10 @@ export async function GET(request: Request) {
             },
             applications: {
               where: {
-                status: { notIn: ['discarded', 'archived'] }
+                // Mostrar candidatos que NO han sido enviados al especialista ni descartados
+                // pending = recién aplicó, reviewing = en revisión por reclutador
+                // Excluir: sent_to_specialist, sent_to_company, discarded, archived
+                status: { in: ['pending', 'reviewing'] }
               },
               orderBy: { createdAt: 'desc' }
             }
@@ -94,6 +97,54 @@ export async function GET(request: Request) {
       orderBy: { assignedAt: 'desc' }
     });
 
+    // Enriquecer applications con datos del Candidate (si existe en el banco)
+    const enrichedAssignments = await Promise.all(
+      assignments.map(async (assignment) => {
+        const enrichedApplications = await Promise.all(
+          assignment.job.applications.map(async (app) => {
+            // Buscar si hay un Candidate con este email
+            const candidateFromBank = await prisma.candidate.findFirst({
+              where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
+              select: {
+                id: true,
+                universidad: true,
+                carrera: true,
+                nivelEstudios: true,
+                añosExperiencia: true,
+                profile: true,
+                seniority: true,
+                linkedinUrl: true,
+                portafolioUrl: true,
+                cvUrl: true,
+                telefono: true,
+                sexo: true,
+                fechaNacimiento: true,
+                source: true,
+                notas: true,
+                experiences: {
+                  orderBy: { fechaInicio: 'desc' },
+                  take: 5
+                }
+              }
+            });
+
+            return {
+              ...app,
+              candidateProfile: candidateFromBank
+            };
+          })
+        );
+
+        return {
+          ...assignment,
+          job: {
+            ...assignment.job,
+            applications: enrichedApplications
+          }
+        };
+      })
+    );
+
     // Obtener candidatos de la base de datos (para asignar a vacantes)
     // Incluir candidatos 'available' (default) e 'in_process' (ya en proceso)
     const candidates = await prisma.candidate.findMany({
@@ -101,7 +152,7 @@ export async function GET(request: Request) {
       include: {
         experiences: {
           orderBy: { fechaInicio: 'desc' },
-          take: 3
+          take: 5
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -126,7 +177,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       data: {
-        assignments,
+        assignments: enrichedAssignments,
         candidates,
         stats,
         recruiter: {
@@ -277,15 +328,15 @@ export async function PUT(request: Request) {
       }
     });
 
-    // Si envía al especialista, crear/actualizar Applications
-    if (status === 'sent_to_specialist' && candidateIds && candidateIds.length > 0) {
+    // Si envía candidatos al especialista
+    if (candidateIds && candidateIds.length > 0) {
       // Obtener datos de los candidatos seleccionados
       const selectedCandidates = await prisma.candidate.findMany({
         where: { id: { in: candidateIds } },
         select: { id: true, email: true, nombre: true, apellidoPaterno: true }
       });
 
-      // Para cada candidato, crear Application si no existe (upsert)
+      // Para cada candidato seleccionado, crear Application o actualizar a sent_to_specialist
       for (const candidate of selectedCandidates) {
         const candidateEmail = candidate.email.toLowerCase();
 
@@ -307,8 +358,8 @@ export async function PUT(request: Request) {
               status: 'sent_to_specialist'
             }
           });
-        } else {
-          // Actualizar Application existente
+        } else if (existingApp.status !== 'sent_to_specialist' && existingApp.status !== 'sent_to_company') {
+          // Solo actualizar si no ha sido enviado ya
           await prisma.application.update({
             where: { id: existingApp.id },
             data: {
@@ -318,6 +369,20 @@ export async function PUT(request: Request) {
           });
         }
       }
+
+      // IMPORTANTE: Actualizar candidatos enviados previamente para concatenar, no reemplazar
+      const previouslySent = assignment.candidatesSentToSpecialist || '';
+      const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];
+      const allSentIds = [...new Set([...previousIds, ...candidateIds])]; // Combinar sin duplicados
+
+      await prisma.jobAssignment.update({
+        where: { id: assignmentId },
+        data: {
+          candidatesSentToSpecialist: allSentIds.join(','),
+          // Solo cambiar a sent_to_specialist si se especificó el status
+          ...(status === 'sent_to_specialist' ? { recruiterStatus: 'sent_to_specialist', specialistStatus: 'pending' } : {})
+        }
+      });
     }
 
     return NextResponse.json({

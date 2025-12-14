@@ -30,7 +30,13 @@ async function getAuthenticatedUser() {
       password: true,
       credits: true,
       createdAt: true,
-      candidate: true,
+      candidate: {
+        include: {
+          experiences: {
+            orderBy: { fechaInicio: 'desc' }
+          }
+        }
+      },
       companyRequest: {
         select: {
           nombreEmpresa: true
@@ -85,13 +91,18 @@ export async function GET() {
         apellidoPaterno: user.candidate.apellidoPaterno,
         apellidoMaterno: user.candidate.apellidoMaterno,
         telefono: user.candidate.telefono,
+        fechaNacimiento: user.candidate.fechaNacimiento,
+        sexo: user.candidate.sexo,
         universidad: user.candidate.universidad,
         carrera: user.candidate.carrera,
         nivelEstudios: user.candidate.nivelEstudios,
+        añosExperiencia: user.candidate.añosExperiencia,
         profile: user.candidate.profile,
         seniority: user.candidate.seniority,
         linkedinUrl: user.candidate.linkedinUrl,
-        portafolioUrl: user.candidate.portafolioUrl
+        portafolioUrl: user.candidate.portafolioUrl,
+        cvUrl: user.candidate.cvUrl,
+        experiences: user.candidate.experiences || []
       };
     }
 
@@ -183,18 +194,31 @@ export async function PUT(request: Request) {
     // Actualizar datos de candidato si existen y se proporcionaron
     if (candidateData && user.candidate) {
       const {
+        nombre: candidateNombre,
+        apellidoPaterno,
+        apellidoMaterno,
         telefono,
+        fechaNacimiento,
+        sexo,
         universidad,
         carrera,
         nivelEstudios,
         profile,
         seniority,
         linkedinUrl,
-        portafolioUrl
+        portafolioUrl,
+        cvUrl
       } = candidateData;
 
       const updateCandidateData: any = {};
+      if (candidateNombre !== undefined) updateCandidateData.nombre = candidateNombre;
+      if (apellidoPaterno !== undefined) updateCandidateData.apellidoPaterno = apellidoPaterno;
+      if (apellidoMaterno !== undefined) updateCandidateData.apellidoMaterno = apellidoMaterno;
       if (telefono !== undefined) updateCandidateData.telefono = telefono;
+      if (fechaNacimiento !== undefined) {
+        updateCandidateData.fechaNacimiento = fechaNacimiento ? new Date(fechaNacimiento) : null;
+      }
+      if (sexo !== undefined) updateCandidateData.sexo = sexo;
       if (universidad !== undefined) updateCandidateData.universidad = universidad;
       if (carrera !== undefined) updateCandidateData.carrera = carrera;
       if (nivelEstudios !== undefined) updateCandidateData.nivelEstudios = nivelEstudios;
@@ -202,6 +226,7 @@ export async function PUT(request: Request) {
       if (seniority !== undefined) updateCandidateData.seniority = seniority;
       if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = linkedinUrl;
       if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = portafolioUrl;
+      if (cvUrl !== undefined) updateCandidateData.cvUrl = cvUrl;
 
       if (Object.keys(updateCandidateData).length > 0) {
         await prisma.candidate.update({

@@ -16,6 +16,7 @@ interface PricingOptions {
 interface UserInfo {
   credits: number;
   role: string;
+  companyName?: string; // Nombre de la empresa pre-cargado
 }
 
 const CreateJobForm = () => {
@@ -146,10 +147,32 @@ const CreateJobForm = () => {
       const response = await fetch('/api/auth/me');
       const data = await response.json();
       if (data.success && data.user) {
-        setUserInfo({
+        const userInfoData: UserInfo = {
           credits: data.user.credits || 0,
           role: data.user.role
-        });
+        };
+
+        // Si es empresa, obtener el nombre de la empresa para pre-llenar
+        if (data.user.role === 'company') {
+          try {
+            const companyRes = await fetch('/api/company/profile');
+            const companyData = await companyRes.json();
+            if (companyData.success && companyData.data?.nombreEmpresa) {
+              userInfoData.companyName = companyData.data.nombreEmpresa;
+              // Pre-llenar el campo company solo si está vacío (no en modo edición)
+              if (!editJobId) {
+                setFormData(prev => ({
+                  ...prev,
+                  company: companyData.data.nombreEmpresa
+                }));
+              }
+            }
+          } catch (companyError) {
+            console.error('Error fetching company profile:', companyError);
+          }
+        }
+
+        setUserInfo(userInfoData);
       }
     } catch (error) {
       console.error('Error fetching user info:', error);
@@ -242,7 +265,7 @@ const CreateJobForm = () => {
         } else if (data.status === 'active') {
           setSubmitStatus({
             type: 'success',
-            message: `¡Vacante publicada! Se descontaron ${data.creditCost} créditos.`
+            message: `¡Vacante publicada! Se descontaron ${data.creditCost} créditos. Redirigiendo...`
           });
           // Actualizar créditos del usuario
           if (userInfo) {
@@ -251,19 +274,20 @@ const CreateJobForm = () => {
               credits: userInfo.credits - data.creditCost
             });
           }
-          // Resetear formulario después de éxito
+          // Redirigir al dashboard después de mostrar el mensaje
           setTimeout(() => {
-            resetForm();
-          }, 2000);
+            router.push('/company/dashboard');
+          }, 1500);
         } else {
           setSubmitStatus({
             type: 'draft',
             message:
-              'Vacante guardada como borrador. Puedes publicarla después.'
+              'Vacante guardada como borrador. Redirigiendo al dashboard...'
           });
+          // Redirigir al dashboard después de guardar borrador
           setTimeout(() => {
-            resetForm();
-          }, 2000);
+            router.push('/company/dashboard');
+          }, 1500);
         }
       } else {
         throw new Error(data.error || `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`);
@@ -416,16 +440,33 @@ const CreateJobForm = () => {
             <label className="block text-sm font-semibold mb-2">
               Nombre de la Empresa *
             </label>
-            <input
-              type="text"
-              value={formData.company}
-              onChange={(e) =>
-                setFormData({ ...formData, company: e.target.value })
-              }
-              placeholder="ej. Tech Corp"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
-              required
-            />
+            {userInfo?.role === 'company' && userInfo?.companyName ? (
+              // Campo readonly para empresas con nombre pre-cargado
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.company}
+                  readOnly
+                  className="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                  required
+                />
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                  Auto
+                </span>
+              </div>
+            ) : (
+              // Campo editable para admin u otros roles
+              <input
+                type="text"
+                value={formData.company}
+                onChange={(e) =>
+                  setFormData({ ...formData, company: e.target.value })
+                }
+                placeholder="ej. Tech Corp"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                required
+              />
+            )}
           </div>
 
           <div>

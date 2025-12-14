@@ -23,8 +23,29 @@ import {
   AlertCircle,
   Save,
   XCircle,
-  Trash2
+  Trash2,
+  Eye
 } from 'lucide-react';
+import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
+
+interface CandidateProfile {
+  id?: number;
+  universidad?: string;
+  carrera?: string;
+  nivelEstudios?: string;
+  añosExperiencia?: number;
+  profile?: string;
+  seniority?: string;
+  linkedinUrl?: string;
+  portafolioUrl?: string;
+  cvUrl?: string;
+  telefono?: string;
+  sexo?: string;
+  fechaNacimiento?: string;
+  source?: string;
+  notas?: string;
+  experiences?: any[];
+}
 
 interface Application {
   id: number;
@@ -34,6 +55,9 @@ interface Application {
   status: string;
   createdAt: string;
   cvUrl: string | null;
+  coverLetter?: string;
+  notes?: string;
+  candidateProfile?: CandidateProfile | null;
 }
 
 interface Assignment {
@@ -84,6 +108,10 @@ interface Candidate {
   seniority: string | null;
   cvUrl: string | null;
   linkedinUrl: string | null;
+  portafolioUrl: string | null;
+  notas: string | null;
+  source: string | null;
+  status: string;
   experiences: any[];
 }
 
@@ -115,6 +143,11 @@ export default function RecruiterDashboard() {
   }>({});
   const [notes, setNotes] = useState<{ [assignmentId: number]: string }>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+
+  // Modal de perfil de candidato
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [selectedBankCandidate, setSelectedBankCandidate] = useState<Candidate | null>(null);
 
   useEffect(() => {
     fetchDashboard();
@@ -242,6 +275,24 @@ export default function RecruiterDashboard() {
       ...selectedCandidates,
       [assignmentId]: newSelection
     });
+  };
+
+  const openApplicationProfile = (application: Application) => {
+    setSelectedApplication(application);
+    setSelectedBankCandidate(null);
+    setProfileModalOpen(true);
+  };
+
+  const openBankCandidateProfile = (candidate: Candidate) => {
+    setSelectedBankCandidate(candidate);
+    setSelectedApplication(null);
+    setProfileModalOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setProfileModalOpen(false);
+    setSelectedApplication(null);
+    setSelectedBankCandidate(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -487,9 +538,9 @@ export default function RecruiterDashboard() {
                           </p>
                         ) : (
                           candidates.map((candidate) => (
-                            <label
+                            <div
                               key={candidate.id}
-                              className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer"
+                              className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b last:border-b-0"
                             >
                               <input
                                 type="checkbox"
@@ -502,7 +553,7 @@ export default function RecruiterDashboard() {
                                     candidate.id
                                   )
                                 }
-                                className="w-4 h-4 text-button-green rounded"
+                                className="w-4 h-4 text-button-green rounded cursor-pointer"
                               />
                               <div className="flex-1">
                                 <p className="font-medium text-gray-900">
@@ -524,7 +575,15 @@ export default function RecruiterDashboard() {
                                   )}
                                 </div>
                               </div>
-                            </label>
+                              <button
+                                onClick={() => openBankCandidateProfile(candidate)}
+                                className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors flex items-center gap-1 text-sm"
+                                title="Ver perfil completo"
+                              >
+                                <Eye size={16} />
+                                <span className="hidden sm:inline">Ver Perfil</span>
+                              </button>
+                            </div>
                           ))
                         )}
                       </div>
@@ -544,30 +603,47 @@ export default function RecruiterDashboard() {
                                 key={app.id}
                                 className="p-3 flex items-center justify-between hover:bg-gray-50"
                               >
-                                <div>
+                                <div className="flex-1">
                                   <p className="font-medium text-gray-900">
                                     {app.candidateName}
                                   </p>
                                   <p className="text-sm text-gray-500">
                                     {app.candidateEmail}
                                   </p>
-                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                                    {app.status === 'pending'
-                                      ? 'Pendiente'
-                                      : app.status === 'reviewing'
-                                        ? 'En revisión'
-                                        : app.status === 'sent_to_specialist'
-                                          ? 'Enviado a especialista'
-                                          : app.status}
-                                  </span>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                      {app.status === 'pending'
+                                        ? 'Pendiente'
+                                        : app.status === 'reviewing'
+                                          ? 'En revisión'
+                                          : app.status === 'sent_to_specialist'
+                                            ? 'Enviado a especialista'
+                                            : app.status}
+                                    </span>
+                                    {app.candidateProfile && (
+                                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                                        En banco de talentos
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <button
-                                  onClick={() => handleDiscardApplication(app.id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Descartar candidato"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => openApplicationProfile(app)}
+                                    className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors flex items-center gap-1 text-sm"
+                                    title="Ver perfil completo"
+                                  >
+                                    <Eye size={16} />
+                                    <span className="hidden sm:inline">Ver Perfil</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDiscardApplication(app.id)}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Descartar candidato"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -643,6 +719,15 @@ export default function RecruiterDashboard() {
           )}
         </div>
       </div>
+
+      {/* Modal de perfil de candidato */}
+      <CandidateProfileModal
+        application={selectedApplication}
+        candidate={selectedBankCandidate}
+        isOpen={profileModalOpen}
+        onClose={closeProfileModal}
+        showRecruiterNotes={false}
+      />
     </div>
   );
 }

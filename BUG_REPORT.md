@@ -1,234 +1,346 @@
-# Reporte de Bugs - INAKAT
+# 🐛 Reporte de Bugs - INAKAT
 
-Fecha: 2025-12-13
-Analizado por: Claude Code
-
----
-
-## Bug 1: Registro de Empresa falla
-
-### Problema reportado
-Usuario reporta: "debe autenticarse" y "Error en el documento de identificación"
-
-### Archivos afectados
-- `src/components/sections/companies/FormRegisterForQuotationSection.tsx` (líneas 148-262)
-- `src/app/api/company-requests/route.ts`
-- `src/app/api/upload/route.ts`
-
-### Causa raíz identificada
-
-**NO es un bug de autenticación.** El endpoint `/api/company-requests` NO requiere autenticación (es público).
-
-El problema real está en el **flujo de subida de archivos**:
-
-1. **El formulario requiere archivos pero el API los marca como opcionales:**
-   - En `FormRegisterForQuotationSection.tsx` líneas 154-161, valida que `identificacion` y `documentosConstitucion` sean requeridos
-   - Sin embargo, en `company-requests/route.ts` líneas 79-80, los campos `identificacionUrl` y `documentosConstitucionUrl` son opcionales
-
-2. **El error "Error en el documento de identificación" ocurre cuando:**
-   - El upload a `/api/upload` falla (línea 185-190)
-   - Posibles causas:
-     - Token de Vercel Blob no configurado en producción
-     - Archivo excede 5MB
-     - Tipo MIME no permitido (solo PDF, JPG, PNG)
-
-3. **El mensaje "debe autenticarse" podría ocurrir si:**
-   - La API de upload en Vercel Blob requiere autenticación que no está configurada
-   - El error genérico del catch muestra un mensaje confuso
-
-### Propuesta de fix
-
-1. **Agregar mejor manejo de errores en upload:**
-```typescript
-// En FormRegisterForQuotationSection.tsx, después de línea 190
-if (!idUploadRes.ok) {
-  const errorData = await idUploadRes.json();
-  throw new Error(errorData.error || 'Error al subir identificación');
-}
-```
-
-2. **Verificar variable de entorno `BLOB_READ_WRITE_TOKEN`** esté configurada en producción
-
-3. **Agregar validación de tamaño en frontend** antes de subir:
-```typescript
-if (formData.identificacion && formData.identificacion.size > 5 * 1024 * 1024) {
-  setErrors({ identificacion: 'El archivo excede 5MB' });
-  return;
-}
-```
+**Última actualización:** 14 de Diciembre 2024  
+**Analizado por:** Claude (Supervisor) + Claude Code  
+**Tests actuales:** 258 pasando ✅
 
 ---
 
-## Bug 2: Postulación de Candidato no se registra
+## 📊 Resumen de Estado
 
-### Problema reportado
-Usuario aplica pero no se guarda la aplicación
-
-### Archivos afectados
-- `src/components/sections/talents/ApplyJobModal.tsx`
-- `src/components/sections/talents/SearchPositionsSection.tsx`
-- `src/app/api/applications/route.ts`
-
-### Causa raíz identificada
-
-**El código del frontend y backend está correcto.** Después de revisar:
-
-1. `ApplyJobModal.tsx` - El flujo de submit es correcto (líneas 34-98)
-2. `SearchPositionsSection.tsx` - Pasa el `jobId` correctamente (línea 181)
-3. `applications/route.ts` - Crea la aplicación correctamente
-
-**Posibles causas del problema reportado:**
-
-1. **Error silencioso en el upload de CV:**
-   - Si el usuario sube un CV y el upload falla, el error podría no mostrarse correctamente
-   - El try-catch en líneas 47-58 podría fallar silenciosamente
-
-2. **El usuario ya había aplicado antes:**
-   - El API valida duplicados (líneas 112-127) y retorna error si ya existe una aplicación con el mismo email para la misma vacante
-   - El mensaje "Ya has aplicado a esta vacante anteriormente" podría no mostrarse claramente
-
-3. **Vacante no está activa:**
-   - Si la vacante cambió a `closed` mientras el usuario llenaba el formulario
-
-4. **Problema con `parseInt(jobId)`:**
-   - En `route.ts` línea 93 y 114, se usa `parseInt(jobId)` pero el modal envía `jobId` como número directamente
-   - Esto NO debería causar problema, pero vale la pena verificar
-
-### Propuesta de fix
-
-1. **Agregar logging en producción** para debug:
-```typescript
-// En ApplyJobModal.tsx, después de línea 74
-console.log('Application response:', data);
-```
-
-2. **Mejorar manejo de errores del API:**
-```typescript
-// En ApplyJobModal.tsx, línea 88
-if (data.success) {
-  // ...
-} else {
-  console.error('Application failed:', data);
-  setError(data.error || 'Error al enviar aplicación');
-}
-```
-
-3. **Verificar en la base de datos** si las aplicaciones SÍ se están guardando (el usuario podría no ver la confirmación)
+| Fecha       | Bugs Reportados | Resueltos | Pendientes |
+| ----------- | --------------- | --------- | ---------- |
+| 12 Dic 2024 | 13              | ✅ 13     | 0          |
+| 13 Dic 2024 | 15              | 🚧 0      | 15         |
 
 ---
 
-## Bug 3: Botón Editar Vacante lleva a Crear
+# ✅ BUGS RESUELTOS (12-13 Dic 2024)
 
-### Problema reportado
-Al hacer clic en "Editar" en una vacante, lleva a la página de crear vacante nueva en lugar de editar la existente.
+## Fase 1: Bugs Iniciales de Eduardo
 
-### Archivos afectados
-- `src/components/company/CompanyJobsTable.tsx` (línea 173)
-- `src/app/company/dashboard/page.tsx` (líneas 101-103)
-- `src/app/create-job/page.tsx`
-- `src/components/sections/jobs/CreateJobForm.tsx`
+### ✅ Bug 1: Botón Editar Vacante llevaba a Crear
 
-### Causa raíz identificada
+- **Archivo:** `src/components/sections/jobs/CreateJobForm.tsx`
+- **Fix:** Implementado `useSearchParams()` para detectar modo edición y cargar datos de vacante existente
 
-**El bug está confirmado.** El problema es:
+### ✅ Bug 2: RFC validación inconsistente
 
-1. **En `CompanyJobsTable.tsx`:**
-   - El botón de editar llama a `onEdit(job.id)` correctamente (línea 173)
+- **Archivos:** Frontend y backend
+- **Fix:** Unificado regex de validación en ambos lugares
 
-2. **En `dashboard/page.tsx`:**
-   - `handleEditJob` navega a `/create-job?edit=${jobId}` (líneas 101-103)
-   - Esto es correcto, pasa el ID en query params
+### ✅ Bug 3: Upload sin validación de tamaño
 
-3. **El problema está en `CreateJobForm.tsx`:**
-   - **NO lee el parámetro `edit` de la URL**
-   - El componente siempre muestra un formulario vacío
-   - No hay lógica para cargar datos de una vacante existente
-   - No usa `useSearchParams()` para obtener el ID
+- **Archivo:** `src/app/api/upload/route.ts`
+- **Fix:** Validación de 5MB implementada
 
-### Propuesta de fix
+### ✅ Bug 4: Postulaciones sin logging
 
-1. **En `CreateJobForm.tsx`, agregar:**
-```typescript
-'use client';
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+- **Archivo:** `src/app/api/applications/route.ts`
+- **Fix:** Console.log agregados para debug
 
-const CreateJobForm = () => {
-  const searchParams = useSearchParams();
-  const editJobId = searchParams.get('edit');
-  const [isEditing, setIsEditing] = useState(false);
+### ✅ Bug 5: RFC duplicado sin mensaje claro
 
-  // Cargar datos de la vacante si estamos editando
-  useEffect(() => {
-    if (editJobId) {
-      setIsEditing(true);
-      fetchJobData(editJobId);
-    }
-  }, [editJobId]);
-
-  const fetchJobData = async (jobId: string) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}`);
-      const data = await response.json();
-      if (data.success) {
-        setFormData({
-          title: data.data.title,
-          company: data.data.company,
-          location: data.data.location,
-          // ... resto de campos
-        });
-      }
-    } catch (error) {
-      console.error('Error loading job:', error);
-    }
-  };
-```
-
-2. **Modificar el submit para usar PUT en modo edición:**
-```typescript
-const handleSubmit = async (e, publishNow) => {
-  // ...
-  const method = isEditing ? 'PUT' : 'POST';
-  const url = isEditing ? `/api/jobs/${editJobId}` : '/api/jobs';
-
-  const response = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(/* ... */)
-  });
-```
-
-3. **Actualizar el título del formulario:**
-```tsx
-<h2 className="text-3xl font-bold">
-  {isEditing ? 'Editar Vacante' : 'Publicar Nueva Vacante'}
-</h2>
-```
-
----
-
-## Resumen de Prioridades
-
-| Bug | Severidad | Esfuerzo | Recomendación |
-|-----|-----------|----------|---------------|
-| Bug 1 | Alta | Medio | Verificar config de Vercel Blob y mejorar mensajes de error |
-| Bug 2 | Media | Bajo | Agregar logging y verificar en DB |
-| Bug 3 | Alta | Alto | Implementar modo edición en CreateJobForm |
-
----
-
-## Bugs adicionales encontrados
-
-### Bug 4: RFC duplicado no manejado correctamente
 - **Archivo:** `src/app/api/company-requests/route.ts`
-- **Problema:** Si se envía un RFC duplicado, el error P2002 de Prisma no se maneja específicamente
-- **Fix:** Agregar catch específico para error de constraint único
+- **Fix:** Manejo específico de error P2002 con mensaje amigable
 
-### Bug 5: Validación de RFC inconsistente
-- **Archivos:**
-  - `src/components/sections/companies/FormRegisterForQuotationSection.tsx` (línea 69)
-  - `src/lib/validations.ts` (línea 27)
-- **Problema:** El regex de validación de RFC es diferente en frontend vs backend
-- **Frontend:** `/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/`
-- **Backend:** `/^[A-ZÑ&]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]$/`
-- **Fix:** Unificar la validación en ambos lugares
+---
+
+## Fase 2-4: Flujo Conectado
+
+### ✅ Bug 6: validStatuses incompleto
+
+- **Archivo:** `src/app/api/applications/[id]/route.ts`
+- **Fix:** Agregados: `sent_to_specialist`, `sent_to_company`, `injected_by_admin`, `discarded`, `archived`
+
+### ✅ Bug 7: Reclutador NO actualizaba Application.status
+
+- **Archivo:** `src/app/api/recruiter/dashboard/route.ts`
+- **Fix:** Al enviar a especialista, actualiza status a `sent_to_specialist`
+
+### ✅ Bug 8: Especialista NO actualizaba Application.status
+
+- **Archivo:** `src/app/api/specialist/dashboard/route.ts`
+- **Fix:** Al enviar a empresa, actualiza status a `sent_to_company`
+
+### ✅ Bug 9: Middleware no protegía recruiter/specialist
+
+- **Archivo:** `src/middleware.ts`
+- **Fix:** Agregadas rutas al matcher y verificación de roles
+
+### ✅ Bug 10: Reclutador buscaba status 'active' (incorrecto)
+
+- **Archivo:** `src/app/api/recruiter/dashboard/route.ts`
+- **Fix:** Cambiado a buscar status `available` o `in_process`
+
+### ✅ Bug 11: Aprobar empresa NO creaba User
+
+- **Archivo:** `src/app/api/company-requests/[id]/route.ts`
+- **Fix:** Ahora crea User automáticamente con password temporal
+
+### ✅ Bug 12: Candidatos del banco sin Application
+
+- **Archivo:** `src/app/api/recruiter/dashboard/route.ts`
+- **Fix:** Crea Application automáticamente si no existe
+
+### ✅ Bug 13: Empresa no veía créditos
+
+- **Archivos:** API y dashboard de empresa
+- **Fix:** Agregado campo `credits` al response y UI
+
+---
+
+# 🔴 BUGS PENDIENTES (13 Dic 2024 - Reporte de Eduardo)
+
+## 🔴 Prioridad CRÍTICA
+
+### Bug P1: Error al subir archivo en registro de empresa
+
+**Módulo:** Empresa  
+**Reportado por:** Eduardo  
+**Descripción:** Al registrarse como empresa, sigue dando error al subir archivo de identificación
+
+**Archivos a revisar:**
+
+- `src/app/api/upload/route.ts`
+- `src/app/api/company-requests/route.ts`
+- `src/components/sections/companies/FormRegisterForQuotationSection.tsx`
+
+**Posibles causas:**
+
+- Token de Vercel Blob no configurado
+- Validación de tipo MIME muy estricta
+- Error en manejo de FormData
+
+**Propuesta de fix:**
+
+```typescript
+// Agregar mejor logging y manejo de errores
+try {
+  const blob = await put(filename, file, { access: 'public' });
+  console.log('Upload exitoso:', blob.url);
+} catch (error) {
+  console.error('Error detallado upload:', error);
+  // Retornar mensaje específico
+}
+```
+
+---
+
+### Bug P2: Calculadora de créditos incorrecta
+
+**Módulo:** Empresa  
+**Reportado por:** Eduardo  
+**Descripción:** La calculadora mostró 5 créditos pero se descontaron 6
+
+**Archivos a revisar:**
+
+- `src/components/sections/jobs/CreateJobForm.tsx` (cálculo frontend)
+- `src/app/api/jobs/route.ts` (descuento backend)
+- `src/app/api/pricing/route.ts` (consulta de precios)
+
+**Causa probable:**
+
+- Frontend y backend usan lógicas diferentes para calcular
+- Fallback diferente cuando no encuentra precio exacto
+
+**Propuesta de fix:**
+
+- Unificar la función de cálculo en un solo lugar (`src/lib/pricing.ts`)
+- Importarla tanto en frontend como backend
+- Asegurar que ambos usen el mismo fallback
+
+---
+
+### Bug P3: Reclutador/Especialista solo pueden enviar una vez
+
+**Módulo:** Reclutador, Especialista  
+**Reportado por:** Eduardo  
+**Descripción:** Después de enviar candidatos, los que no seleccioné ya no puedo enviarlos
+
+**Archivos a revisar:**
+
+- `src/app/api/recruiter/dashboard/route.ts`
+- `src/app/api/specialist/dashboard/route.ts`
+
+**Causa probable:**
+
+- El query filtra candidatos por status y excluye los que ya están "en proceso"
+- Después de enviar algunos, el status de los demás cambia
+
+**Propuesta de fix:**
+
+```typescript
+// En lugar de filtrar por status específico, filtrar por "no enviado"
+where: {
+  status: {
+    notIn: ['sent_to_specialist', 'sent_to_company', 'discarded'];
+  }
+}
+```
+
+---
+
+## 🟠 Prioridad ALTA
+
+### Bug P4: Admin - Definir precios de paquetes de créditos
+
+**Módulo:** Admin  
+**Tipo:** Feature nuevo  
+**Descripción:** Admin debe poder configurar precios de paquetes:
+
+- 1 crédito = $4,000 MXN
+- 10 créditos = $35,000 MXN ("MÁS POPULAR")
+- 15 créditos = $50,000 MXN
+- 20 créditos = $65,000 MXN ("PROMOCIÓN")
+
+**Archivos a crear:**
+
+- `prisma/schema.prisma` - Modelo CreditPackage
+- `src/app/api/admin/credit-packages/route.ts`
+- `src/app/admin/credit-packages/page.tsx`
+
+---
+
+### Bug P5: Reclutador no ve info completa del candidato
+
+**Módulo:** Reclutador  
+**Descripción:** Solo ve nombre y email, necesita ver CV, universidad, experiencia
+
+**Archivos a modificar:**
+
+- `src/app/api/recruiter/dashboard/route.ts` - Incluir más campos
+- `src/app/recruiter/dashboard/page.tsx` - Mostrar modal con detalles
+
+---
+
+### Bug P6: Especialista no ve info completa del candidato
+
+**Módulo:** Especialista  
+**Descripción:** Igual que reclutador, más las notas del reclutador
+
+**Archivos a modificar:**
+
+- `src/app/api/specialist/dashboard/route.ts`
+- `src/app/specialist/dashboard/page.tsx`
+
+---
+
+## 🟡 Prioridad MEDIA
+
+### Bug P7: Empresa - No pedir nombre al crear vacante
+
+**Módulo:** Empresa  
+**Descripción:** La empresa tiene que escribir su nombre otra vez al crear vacante
+
+**Archivo:** `src/components/sections/jobs/CreateJobForm.tsx`
+**Fix:** Pre-llenar campo `company` desde el usuario logueado
+
+---
+
+### Bug P8: Empresa - Redirigir después de crear vacante
+
+**Módulo:** Empresa  
+**Descripción:** Después de crear vacante, no redirige a ningún lado
+
+**Archivo:** `src/components/sections/jobs/CreateJobForm.tsx`
+**Fix:** `router.push('/company/dashboard')` después de éxito
+
+---
+
+### Bug P9: Admin - Ordenar tabla de vacantes
+
+**Módulo:** Admin  
+**Descripción:** Poder ordenar por Vacante, Empresa, Ubicación, Fecha
+
+**Archivo:** `src/app/admin/page.tsx`
+**Fix:** Headers clickeables con estado de ordenamiento
+
+---
+
+### Bug P10: Admin - Opciones en dos columnas
+
+**Módulo:** Admin  
+**Descripción:** Con zoom, no se ven todas las opciones
+
+**Archivo:** `src/app/admin/page.tsx`
+**Fix:** Grid de 2 columnas responsive
+
+---
+
+### Bug P11: Candidato - Perfil completo editable
+
+**Módulo:** Candidato  
+**Descripción:** Poder editar: Nombre, Apellidos, Edad, Celular, Correo, Password, Ubicación
+
+**Archivos:**
+
+- `src/app/profile/page.tsx`
+- `src/app/api/profile/route.ts`
+
+---
+
+### Bug P12: Candidato - Experiencia laboral en perfil
+
+**Módulo:** Candidato  
+**Descripción:** Poder agregar/editar experiencia laboral
+
+**Archivos a crear:**
+
+- `src/app/api/profile/experience/route.ts`
+- Componente de CRUD de experiencias
+
+---
+
+### Bug P13: Candidato - Anexar documentos
+
+**Módulo:** Candidato  
+**Descripción:** Poder subir CV, Cartas de Recomendación, Otros
+
+**Archivos:**
+
+- `src/app/profile/page.tsx`
+- `src/app/api/profile/documents/route.ts`
+
+---
+
+### Bug P14: Candidato - Usar datos del perfil al postularse
+
+**Módulo:** Candidato  
+**Descripción:** Al postularse, incluir automáticamente la info del perfil
+
+**Archivo:** `src/app/api/applications/route.ts`
+**Fix:** Si el usuario tiene Candidate, usar esos datos
+
+---
+
+### Bug P15: Status "Enviado a especialista" irreversible
+
+**Módulo:** Reclutador  
+**Descripción:** Una vez enviado, no se puede cambiar a otro status
+
+**Nota de Eduardo:** "Ya se envió, ya se chingó" - Esto es comportamiento esperado según Lalo
+
+---
+
+## 📋 Próximos Pasos
+
+1. **Resolver bugs P1-P3** (críticos) - Bloquean funcionalidad core
+2. **Implementar P4** (paquetes de créditos) - Feature solicitado
+3. **Resolver P5-P6** (info de candidato) - Mejora importante
+4. **Resolver P7-P14** (mejoras UX) - Pueden esperar
+
+---
+
+## 📝 Notas de Referencia
+
+Eduardo compartió capturas de OCC (www.occ.com.mx) como referencia de UX:
+
+- Dashboard de empresa con vacantes
+- Vista de candidatos con tabs: "Por revisar", "Me interesan", "Descartados"
+- Acciones por candidato: "Me interesa", "Descartar"
+- Lista de vacantes: Activas, En pausa, Expiradas, Borradores
+
+---
+
+_Generado el 14 de Diciembre 2024_

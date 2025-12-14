@@ -418,6 +418,11 @@ async function main() {
   await seedStaff();
 
   // =============================================
+  // 2.95 POBLAR PAQUETES DE CRÉDITOS
+  // =============================================
+  await seedCreditPackages();
+
+  // =============================================
   // 3. CREAR VACANTES (DISTRIBUIDAS ENTRE EMPRESAS)
   // =============================================
   console.log('\n💼 Creando vacantes de ejemplo...\n');
@@ -1010,6 +1015,7 @@ Responsabilidades:
     `  • Vacantes: ${jobsCreated} nuevas creadas (18 total distribuidas)`
   );
   console.log(`  • Matriz de precios: 105 combinaciones`);
+  console.log(`  • Paquetes de créditos: 4 (1, 10, 15, 20 créditos)`);
   console.log(`  • Aplicaciones: Ver detalles arriba`);
   console.log(`  • Solicitudes pendientes: ${requestsCreated}`);
 
@@ -2416,6 +2422,80 @@ async function seedStaff() {
   console.log('   Reclutador: http://localhost:3000/recruiter/dashboard');
   console.log('   Especialista: http://localhost:3000/specialist/dashboard');
   console.log('   Admin (asignar): http://localhost:3000/admin/assignments\n');
+}
+
+// =============================================
+// PAQUETES DE CRÉDITOS
+// =============================================
+async function seedCreditPackages() {
+  console.log('\n💳 Poblando paquetes de créditos...\n');
+
+  const packages = [
+    {
+      name: '1 Crédito',
+      credits: 1,
+      price: 4000,
+      pricePerCredit: 4000,
+      badge: null,
+      sortOrder: 1,
+      isActive: true
+    },
+    {
+      name: 'Pack 10',
+      credits: 10,
+      price: 35000,
+      pricePerCredit: 3500,
+      badge: 'MÁS POPULAR',
+      sortOrder: 2,
+      isActive: true
+    },
+    {
+      name: 'Pack 15',
+      credits: 15,
+      price: 50000,
+      pricePerCredit: 3333.33,
+      badge: null,
+      sortOrder: 3,
+      isActive: true
+    },
+    {
+      name: 'Pack 20',
+      credits: 20,
+      price: 65000,
+      pricePerCredit: 3250,
+      badge: 'PROMOCIÓN',
+      sortOrder: 4,
+      isActive: true
+    }
+  ];
+
+  let created = 0;
+  let updated = 0;
+
+  for (const pkg of packages) {
+    const existing = await prisma.creditPackage.findFirst({
+      where: { credits: pkg.credits }
+    });
+
+    if (existing) {
+      await prisma.creditPackage.update({
+        where: { id: existing.id },
+        data: pkg
+      });
+      updated++;
+      console.log(`  ⏭️  ${pkg.name} ya existe, actualizado`);
+    } else {
+      await prisma.creditPackage.create({
+        data: pkg
+      });
+      created++;
+      console.log(`  ✅ ${pkg.name} - $${pkg.price.toLocaleString()} MXN (${pkg.credits} créditos)`);
+    }
+  }
+
+  console.log(`\n✨ Paquetes de créditos:`);
+  console.log(`   Creados: ${created}`);
+  console.log(`   Actualizados: ${updated}\n`);
 }
 
 // =============================================

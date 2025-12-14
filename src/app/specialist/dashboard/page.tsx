@@ -24,8 +24,29 @@ import {
   Save,
   Star,
   ExternalLink,
-  Trash2
+  Trash2,
+  Eye
 } from 'lucide-react';
+import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
+
+interface CandidateProfile {
+  id?: number;
+  universidad?: string;
+  carrera?: string;
+  nivelEstudios?: string;
+  añosExperiencia?: number;
+  profile?: string;
+  seniority?: string;
+  linkedinUrl?: string;
+  portafolioUrl?: string;
+  cvUrl?: string;
+  telefono?: string;
+  sexo?: string;
+  fechaNacimiento?: string;
+  source?: string;
+  notas?: string;
+  experiences?: any[];
+}
 
 interface Application {
   id: number;
@@ -35,6 +56,9 @@ interface Application {
   status: string;
   createdAt: string;
   cvUrl: string | null;
+  coverLetter?: string;
+  notes?: string;
+  candidateProfile?: CandidateProfile | null;
 }
 
 interface Candidate {
@@ -53,7 +77,10 @@ interface Candidate {
   seniority: string | null;
   cvUrl: string | null;
   linkedinUrl: string | null;
+  portafolioUrl: string | null;
   notas: string | null;
+  source: string | null;
+  status: string;
   experiences: any[];
 }
 
@@ -120,6 +147,12 @@ export default function SpecialistDashboard() {
   }>({});
   const [notes, setNotes] = useState<{ [assignmentId: number]: string }>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+
+  // Modal de perfil de candidato
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [selectedBankCandidate, setSelectedBankCandidate] = useState<Candidate | null>(null);
+  const [currentRecruiterNotes, setCurrentRecruiterNotes] = useState<string>('');
 
   useEffect(() => {
     fetchDashboard();
@@ -247,6 +280,27 @@ export default function SpecialistDashboard() {
       ...selectedCandidates,
       [assignmentId]: newSelection
     });
+  };
+
+  const openApplicationProfile = (application: Application, recruiterNotes?: string) => {
+    setSelectedApplication(application);
+    setSelectedBankCandidate(null);
+    setCurrentRecruiterNotes(recruiterNotes || '');
+    setProfileModalOpen(true);
+  };
+
+  const openBankCandidateProfile = (candidate: Candidate, recruiterNotes?: string) => {
+    setSelectedBankCandidate(candidate);
+    setSelectedApplication(null);
+    setCurrentRecruiterNotes(recruiterNotes || '');
+    setProfileModalOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setProfileModalOpen(false);
+    setSelectedApplication(null);
+    setSelectedBankCandidate(null);
+    setCurrentRecruiterNotes('');
   };
 
   const getStatusBadge = (status: string) => {
@@ -603,6 +657,15 @@ export default function SpecialistDashboard() {
                                         ))}
                                     </div>
                                   )}
+
+                                {/* Botón Ver Perfil Completo */}
+                                <button
+                                  onClick={() => openBankCandidateProfile(candidate, assignment.recruiterNotes || '')}
+                                  className="mt-3 px-3 py-1.5 text-[#2b5d62] border border-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors flex items-center gap-1 text-sm"
+                                >
+                                  <Eye size={16} />
+                                  Ver Perfil Completo
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -624,28 +687,45 @@ export default function SpecialistDashboard() {
                                 key={app.id}
                                 className="p-3 flex items-center justify-between hover:bg-gray-50"
                               >
-                                <div>
+                                <div className="flex-1">
                                   <p className="font-medium text-gray-900">
                                     {app.candidateName}
                                   </p>
                                   <p className="text-sm text-gray-500">
                                     {app.candidateEmail}
                                   </p>
-                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-                                    {app.status === 'sent_to_specialist'
-                                      ? 'Por evaluar'
-                                      : app.status === 'evaluating'
-                                        ? 'En evaluación'
-                                        : app.status}
-                                  </span>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                      {app.status === 'sent_to_specialist'
+                                        ? 'Por evaluar'
+                                        : app.status === 'evaluating'
+                                          ? 'En evaluación'
+                                          : app.status}
+                                    </span>
+                                    {app.candidateProfile && (
+                                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                                        En banco de talentos
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <button
-                                  onClick={() => handleDiscardApplication(app.id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Descartar candidato"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => openApplicationProfile(app, assignment.recruiterNotes || '')}
+                                    className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors flex items-center gap-1 text-sm"
+                                    title="Ver perfil completo"
+                                  >
+                                    <Eye size={16} />
+                                    <span className="hidden sm:inline">Ver Perfil</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDiscardApplication(app.id)}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Descartar candidato"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -721,6 +801,16 @@ export default function SpecialistDashboard() {
           )}
         </div>
       </div>
+
+      {/* Modal de perfil de candidato */}
+      <CandidateProfileModal
+        application={selectedApplication}
+        candidate={selectedBankCandidate}
+        isOpen={profileModalOpen}
+        onClose={closeProfileModal}
+        recruiterNotes={currentRecruiterNotes}
+        showRecruiterNotes={true}
+      />
     </div>
   );
 }
