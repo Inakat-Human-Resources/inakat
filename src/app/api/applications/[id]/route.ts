@@ -83,6 +83,7 @@ export async function PATCH(
     const validStatuses = [
       'pending',
       'reviewing',
+      'evaluating',          // En evaluación por especialista
       'sent_to_specialist',
       'sent_to_company',
       'company_interested',  // Empresa marcó "Me interesa"

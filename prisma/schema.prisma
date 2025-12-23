@@ -21,7 +21,7 @@ model User {
   nombre            String
   apellidoPaterno   String?
   apellidoMaterno   String?
-  role              String    @default("user") // "admin", "company", "user"
+  role              String    @default("user") // "admin", "company", "user", "recruiter", "specialist", "candidate", "vendor"
   isActive          Boolean   @default(true)
   emailVerified     DateTime?
   lastLogin         DateTime?
@@ -180,7 +180,7 @@ model Application {
   coverLetter     String?   @db.Text
 
   // Estado
-  status          String    @default("pending") // "pending", "reviewing", "sent_to_specialist", "sent_to_company", "company_interested", "interviewed", "rejected", "accepted"
+  status          String    @default("pending") // "pending", "reviewing", "evaluating", "sent_to_specialist", "sent_to_company", "company_interested", "interviewed", "rejected", "accepted", "injected_by_admin", "discarded", "archived"
   notes           String?   @db.Text
 
   // Timestamps

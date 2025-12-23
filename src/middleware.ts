@@ -232,6 +232,11 @@ export function middleware(request: NextRequest) {
  */
 export const config = {
   matcher: [
+    // Base routes (sin :path*) para proteger la ruta raíz
+    '/api/company-requests',
+    '/api/applications',
+    '/api/upload',
+    // Sub-routes con :path* para proteger rutas anidadas
     '/api/company-requests/:path*',
     '/api/applications/:path*',
     '/api/admin/:path*',

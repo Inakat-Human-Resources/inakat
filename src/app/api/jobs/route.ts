@@ -23,6 +23,13 @@ export async function GET(request: Request) {
 
     if (!includeDrafts) {
       where.status = status;
+      // Filtrar vacantes expiradas de la búsqueda pública
+      if (status === 'active') {
+        where.OR = [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
+        ];
+      }
     }
 
     if (userId) {
@@ -30,11 +37,19 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { company: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } }
+      // Combinar búsqueda con filtro de expiración usando AND
+      where.AND = [
+        ...(where.OR ? [{ OR: where.OR }] : []),
+        {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { company: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } }
+          ]
+        }
       ];
+      // Limpiar el OR original si ya se movió a AND
+      if (where.OR) delete where.OR;
     }
 
     if (location) {

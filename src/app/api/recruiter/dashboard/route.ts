@@ -77,8 +77,9 @@ export async function GET(request: Request) {
               where: {
                 // Mostrar candidatos que NO han sido enviados al especialista ni descartados
                 // pending = recién aplicó, reviewing = en revisión por reclutador
+                // injected_by_admin = candidato inyectado por admin
                 // Excluir: sent_to_specialist, sent_to_company, discarded, archived
-                status: { in: ['pending', 'reviewing'] }
+                status: { in: ['pending', 'reviewing', 'injected_by_admin'] }
               },
               orderBy: { createdAt: 'desc' }
             }
@@ -301,6 +302,14 @@ export async function PUT(request: Request) {
     const updateData: any = {};
 
     if (status) {
+      // Validar que hay especialista asignado antes de enviar
+      if (status === 'sent_to_specialist' && !assignment.specialistId) {
+        return NextResponse.json(
+          { success: false, error: 'No hay especialista asignado a esta vacante. Solicita al admin que asigne uno.' },
+          { status: 400 }
+        );
+      }
+
       updateData.recruiterStatus = status;
 
       // Si envía al especialista, actualizar estado del especialista también
