@@ -15,6 +15,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Excepción: POST a applications es público (candidatos aplican a vacantes)
+  if (pathname === '/api/applications' && request.method === 'POST') {
+    return NextResponse.next();
+  }
+
+  // Excepción: GET a applications/check es público (verificar si ya aplicó)
+  if (pathname === '/api/applications/check' && request.method === 'GET') {
+    return NextResponse.next();
+  }
+
   // Obtener token de las cookies
   const token = request.cookies.get('auth-token')?.value;
 
