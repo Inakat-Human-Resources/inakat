@@ -6,7 +6,6 @@ import {
   Download,
   Mail,
   Phone,
-  MapPin,
   Briefcase,
   GraduationCap,
   ChevronDown,
@@ -14,7 +13,13 @@ import {
   ExternalLink,
   MessageSquare,
   User,
-  Globe
+  Globe,
+  Heart,
+  XCircle,
+  CheckCircle,
+  Users,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 
 interface Experience {
@@ -72,12 +77,14 @@ interface CompanyApplicationsTableProps {
   onStatusChange?: (applicationId: number, newStatus: string) => void;
 }
 
+type CandidateTab = 'pending' | 'interested' | 'rejected' | 'all';
+
 export default function CompanyApplicationsTable({
   applications,
   onView,
   onStatusChange
 }: CompanyApplicationsTableProps) {
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<CandidateTab>('pending');
   const [selectedJobFilter, setSelectedJobFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -86,14 +93,18 @@ export default function CompanyApplicationsTable({
     new Set(applications.map((app) => app.job.title))
   );
 
-  // Filtrar aplicaciones
-  let filteredApplications = applications;
+  // Categorizar aplicaciones
+  const categorizedApps = {
+    pending: applications.filter(app => app.status === 'sent_to_company'),
+    interested: applications.filter(app => app.status === 'company_interested'),
+    rejected: applications.filter(app => app.status === 'rejected'),
+    interviewed: applications.filter(app => app.status === 'interviewed'),
+    accepted: applications.filter(app => app.status === 'accepted'),
+    all: applications
+  };
 
-  if (filterStatus !== 'all') {
-    filteredApplications = filteredApplications.filter(
-      (app) => app.status === filterStatus
-    );
-  }
+  // Filtrar por tab y por vacante
+  let filteredApplications = categorizedApps[activeTab];
 
   if (selectedJobFilter !== 'all') {
     filteredApplications = filteredApplications.filter(
@@ -101,28 +112,27 @@ export default function CompanyApplicationsTable({
     );
   }
 
+  const tabs: { key: CandidateTab; label: string; count: number; icon: React.ReactNode }[] = [
+    { key: 'pending', label: 'Por revisar', count: categorizedApps.pending.length, icon: <Users className="w-4 h-4" /> },
+    { key: 'interested', label: 'Me interesan', count: categorizedApps.interested.length, icon: <Heart className="w-4 h-4" /> },
+    { key: 'rejected', label: 'Descartados', count: categorizedApps.rejected.length, icon: <XCircle className="w-4 h-4" /> },
+    { key: 'all', label: 'Todos', count: applications.length, icon: null }
+  ];
+
   const getStatusBadge = (status: string) => {
-    const badges: Record<string, string> = {
-      sent_to_company: 'bg-blue-100 text-blue-800',
-      interviewed: 'bg-purple-100 text-purple-800',
-      accepted: 'bg-green-100 text-green-800',
-      rejected: 'bg-gray-100 text-gray-800'
+    const badges: Record<string, { bg: string; text: string; label: string }> = {
+      sent_to_company: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Por revisar' },
+      company_interested: { bg: 'bg-pink-100', text: 'text-pink-800', label: 'Me interesa' },
+      interviewed: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Entrevistado' },
+      accepted: { bg: 'bg-green-100', text: 'text-green-800', label: 'Aceptado' },
+      rejected: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Descartado' }
     };
 
-    const labels: Record<string, string> = {
-      sent_to_company: 'Nuevo Candidato',
-      interviewed: 'Entrevistado',
-      accepted: 'Aceptado',
-      rejected: 'Rechazado'
-    };
+    const badge = badges[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
 
     return (
-      <span
-        className={`px-2 py-1 text-xs font-semibold rounded-full ${
-          badges[status] || 'bg-gray-100 text-gray-800'
-        }`}
-      >
-        {labels[status] || status}
+      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badge.bg} ${badge.text}`}>
+        {badge.label}
       </span>
     );
   };
@@ -142,68 +152,47 @@ export default function CompanyApplicationsTable({
 
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200">
-      {/* Header con filtros */}
+      {/* Header con tabs */}
       <div className="p-6 border-b border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">
-          Mis Aplicaciones
+          Candidatos
         </h2>
 
-        {/* Filtros de estado */}
+        {/* Tabs principales estilo OCC */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={() => setFilterStatus('all')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'all'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Todos ({applications.length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('sent_to_company')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'sent_to_company'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Nuevos (
-            {applications.filter((a) => a.status === 'sent_to_company').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('interviewed')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'interviewed'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Entrevistados (
-            {applications.filter((a) => a.status === 'interviewed').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('accepted')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'accepted'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Aceptados (
-            {applications.filter((a) => a.status === 'accepted').length})
-          </button>
-          <button
-            onClick={() => setFilterStatus('rejected')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              filterStatus === 'rejected'
-                ? 'bg-button-orange text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Rechazados (
-            {applications.filter((a) => a.status === 'rejected').length})
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2 ${
+                activeTab === tab.key
+                  ? 'bg-button-orange text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+              <span className={`px-2 py-0.5 text-xs rounded-full ${
+                activeTab === tab.key
+                  ? 'bg-white/20 text-white'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Estadísticas rápidas */}
+        <div className="flex flex-wrap gap-4 mb-4 text-sm text-gray-600">
+          <span className="flex items-center gap-1">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+            {categorizedApps.accepted.length} aceptados
+          </span>
+          <span className="flex items-center gap-1">
+            <MessageSquare className="w-4 h-4 text-purple-600" />
+            {categorizedApps.interviewed.length} entrevistados
+          </span>
         </div>
 
         {/* Filtro por vacante */}
@@ -228,104 +217,196 @@ export default function CompanyApplicationsTable({
         )}
       </div>
 
-      {/* Lista de aplicaciones */}
+      {/* Lista de candidatos */}
       <div className="divide-y divide-gray-200">
         {filteredApplications.length === 0 ? (
-          <div className="px-6 py-8 text-center text-gray-500">
-            No hay aplicaciones con los filtros seleccionados
+          <div className="px-6 py-12 text-center text-gray-500">
+            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-lg font-medium">No hay candidatos en esta categoría</p>
+            <p className="text-sm">Los candidatos aparecerán aquí cuando sean asignados a tus vacantes</p>
           </div>
         ) : (
           filteredApplications.map((application) => (
             <div key={application.id} className="hover:bg-gray-50">
-              {/* Fila principal */}
-              <div className="px-6 py-4 flex items-center justify-between">
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                  {/* Candidato */}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {application.candidateName}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
+              {/* Fila principal - Card estilo */}
+              <div className="px-6 py-4">
+                <div className="flex items-start justify-between">
+                  {/* Info del candidato */}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {application.candidateName}
+                      </h3>
+                      {getStatusBadge(application.status)}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-2">
                       <a
                         href={`mailto:${application.candidateEmail}`}
-                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-button-orange"
+                        className="flex items-center gap-1 hover:text-button-orange"
                       >
-                        <Mail className="w-3 h-3" />
+                        <Mail className="w-4 h-4" />
                         {application.candidateEmail}
                       </a>
-                    </div>
-                  </div>
-
-                  {/* Vacante */}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {application.job.title}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {application.job.location}
-                    </p>
-                  </div>
-
-                  {/* Fecha y Estado */}
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500">
-                      {formatDate(application.createdAt)}
-                    </span>
-                    {onStatusChange ? (
-                      <select
-                        value={application.status}
-                        onChange={(e) =>
-                          onStatusChange(application.id, e.target.value)
-                        }
-                        className="text-xs font-semibold rounded-full px-2 py-1 border border-gray-300 focus:ring-2 focus:ring-button-orange"
-                      >
-                        <option value="sent_to_company">Nuevo Candidato</option>
-                        <option value="interviewed">Entrevistado</option>
-                        <option value="accepted">Aceptado</option>
-                        <option value="rejected">Rechazado</option>
-                      </select>
-                    ) : (
-                      getStatusBadge(application.status)
-                    )}
-                  </div>
-
-                  {/* Acciones */}
-                  <div className="flex items-center gap-2 justify-end">
-                    {application.cvUrl && (
-                      <a
-                        href={application.cvUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Descargar CV"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
-                    )}
-                    {onView && (
-                      <button
-                        onClick={() => onView(application.id)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Ver detalles"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => toggleExpand(application.id)}
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                      title={
-                        expandedId === application.id
-                          ? 'Ocultar detalles'
-                          : 'Ver perfil completo'
-                      }
-                    >
-                      {expandedId === application.id ? (
-                        <ChevronUp className="w-4 h-4" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
+                      {application.candidatePhone && (
+                        <a
+                          href={`tel:${application.candidatePhone}`}
+                          className="flex items-center gap-1 hover:text-button-orange"
+                        >
+                          <Phone className="w-4 h-4" />
+                          {application.candidatePhone}
+                        </a>
                       )}
-                    </button>
+                    </div>
+
+                    <div className="text-sm text-gray-500">
+                      <span className="font-medium text-gray-700">{application.job.title}</span>
+                      <span className="mx-2">•</span>
+                      <span>{application.job.location}</span>
+                      <span className="mx-2">•</span>
+                      <span>Aplicó el {formatDate(application.createdAt)}</span>
+                    </div>
+
+                    {/* Tags de perfil si existen */}
+                    {application.candidateProfile && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {application.candidateProfile.profile && (
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                            {application.candidateProfile.profile}
+                          </span>
+                        )}
+                        {application.candidateProfile.seniority && (
+                          <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">
+                            {application.candidateProfile.seniority}
+                          </span>
+                        )}
+                        {application.candidateProfile.añosExperiencia > 0 && (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+                            {application.candidateProfile.añosExperiencia} años exp.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Acciones rápidas */}
+                  <div className="flex flex-col items-end gap-2 ml-6">
+                    {/* Estados finales - no hay acciones */}
+                    {(application.status === 'accepted' || application.status === 'rejected') && (
+                      <span className={`px-3 py-1.5 text-sm font-medium rounded-lg ${
+                        application.status === 'accepted'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {application.status === 'accepted' ? 'Candidato aceptado' : 'Candidato descartado'}
+                      </span>
+                    )}
+
+                    {/* Candidatos por revisar (sent_to_company) */}
+                    {onStatusChange && application.status === 'sent_to_company' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onStatusChange(application.id, 'company_interested')}
+                          className="px-3 py-1.5 text-sm bg-pink-100 text-pink-700 hover:bg-pink-200 rounded-lg transition-colors flex items-center gap-1"
+                          title="Marcar como interesante"
+                        >
+                          <Heart className="w-4 h-4" />
+                          Me interesa
+                        </button>
+                        <button
+                          onClick={() => onStatusChange(application.id, 'rejected')}
+                          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1"
+                          title="Descartar candidato"
+                        >
+                          <ThumbsDown className="w-4 h-4" />
+                          Descartar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Candidatos que me interesan (company_interested) */}
+                    {onStatusChange && application.status === 'company_interested' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onStatusChange(application.id, 'interviewed')}
+                          className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Entrevistado
+                        </button>
+                        <button
+                          onClick={() => onStatusChange(application.id, 'accepted')}
+                          className="px-3 py-1.5 text-sm bg-green-100 text-green-700 hover:bg-green-200 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Aceptar
+                        </button>
+                        <button
+                          onClick={() => onStatusChange(application.id, 'rejected')}
+                          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <ThumbsDown className="w-4 h-4" />
+                          Descartar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Candidatos entrevistados (interviewed) */}
+                    {onStatusChange && application.status === 'interviewed' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onStatusChange(application.id, 'accepted')}
+                          className="px-3 py-1.5 text-sm bg-green-100 text-green-700 hover:bg-green-200 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Aceptar
+                        </button>
+                        <button
+                          onClick={() => onStatusChange(application.id, 'rejected')}
+                          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <ThumbsDown className="w-4 h-4" />
+                          Descartar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Iconos secundarios */}
+                    <div className="flex items-center gap-2 mt-2">
+                      {application.cvUrl && (
+                        <a
+                          href={application.cvUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Descargar CV"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      )}
+                      {application.candidateProfile?.linkedinUrl && (
+                        <a
+                          href={application.candidateProfile.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Ver LinkedIn"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => toggleExpand(application.id)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        title={expandedId === application.id ? 'Ocultar detalles' : 'Ver perfil completo'}
+                      >
+                        {expandedId === application.id ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -367,25 +448,6 @@ export default function CompanyApplicationsTable({
                             )}
                           </div>
 
-                          {/* Perfil y Seniority */}
-                          <div className="flex flex-wrap gap-2">
-                            {application.candidateProfile.profile && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                                {application.candidateProfile.profile}
-                              </span>
-                            )}
-                            {application.candidateProfile.seniority && (
-                              <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
-                                {application.candidateProfile.seniority}
-                              </span>
-                            )}
-                            {application.candidateProfile.nivelEstudios && (
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                                {application.candidateProfile.nivelEstudios}
-                              </span>
-                            )}
-                          </div>
-
                           {/* Notas del admin sobre el candidato */}
                           {application.candidateProfile.notas && (
                             <div>
@@ -399,31 +461,21 @@ export default function CompanyApplicationsTable({
                           )}
 
                           {/* Experiencias recientes */}
-                          {application.candidateProfile.experienciasRecientes
-                            ?.length > 0 && (
+                          {application.candidateProfile.experienciasRecientes?.length > 0 && (
                             <div>
                               <p className="text-xs font-medium text-gray-500 mb-2">
                                 Experiencia Reciente:
                               </p>
                               <div className="space-y-2">
-                                {application.candidateProfile.experienciasRecientes.map(
-                                  (exp) => (
-                                    <div
-                                      key={exp.id}
-                                      className="flex items-start gap-2 text-sm"
-                                    >
-                                      <Briefcase className="w-4 h-4 text-gray-400 mt-0.5" />
-                                      <div>
-                                        <p className="font-medium text-gray-900">
-                                          {exp.puesto}
-                                        </p>
-                                        <p className="text-gray-600">
-                                          {exp.empresa}
-                                        </p>
-                                      </div>
+                                {application.candidateProfile.experienciasRecientes.map((exp) => (
+                                  <div key={exp.id} className="flex items-start gap-2 text-sm">
+                                    <Briefcase className="w-4 h-4 text-gray-400 mt-0.5" />
+                                    <div>
+                                      <p className="font-medium text-gray-900">{exp.puesto}</p>
+                                      <p className="text-gray-600">{exp.empresa}</p>
                                     </div>
-                                  )
-                                )}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -467,8 +519,7 @@ export default function CompanyApplicationsTable({
                         </div>
                       ) : (
                         <p className="text-sm text-gray-500 italic">
-                          Este candidato aplicó directamente. No hay perfil
-                          completo en el sistema.
+                          Este candidato aplicó directamente. No hay perfil completo en el sistema.
                         </p>
                       )}
                     </div>

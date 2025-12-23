@@ -45,6 +45,9 @@ model User {
   // Relación con Candidate (para role="candidate")
   candidate               Candidate?
 
+  // Códigos de descuento (para vendors)
+  discountCodes           DiscountCode[] @relation("VendorCodes")
+
   @@index([email])
   @@index([role])
   @@index([isActive])
@@ -120,7 +123,7 @@ model Job {
   workMode        String    @default("presential") // "remote", "hybrid", "presential"
   description     String    @db.Text
   requirements    String?   @db.Text
-  status          String    @default("active") // "active", "closed", "draft"
+  status          String    @default("active") // "active", "paused", "closed", "draft"
   companyRating   Float?    @default(5.0)
   
   // Sistema de Créditos
@@ -177,7 +180,7 @@ model Application {
   coverLetter     String?   @db.Text
 
   // Estado
-  status          String    @default("pending") // "pending", "reviewing", "interviewed", "accepted", "rejected"
+  status          String    @default("pending") // "pending", "reviewing", "sent_to_specialist", "sent_to_company", "company_interested", "interviewed", "rejected", "accepted"
   notes           String?   @db.Text
 
   // Timestamps
@@ -264,7 +267,10 @@ model CreditPurchase {
   // Timestamps
   createdAt       DateTime @default(now())
   paidAt          DateTime?
-  
+
+  // Uso de código de descuento
+  discountCodeUse DiscountCodeUse?
+
   @@index([userId])
   @@index([paymentStatus])
   @@index([createdAt])
@@ -514,4 +520,72 @@ model JobAssignment {
 // Agregar este campo al modelo Job existente:
 //
 // assignment        JobAssignment?
+
+// =============================================
+// CÓDIGOS DE DESCUENTO (Sistema de Vendors)
+// =============================================
+model DiscountCode {
+  id                Int       @id @default(autoincrement())
+  code              String    @unique
+
+  // Vendor que creó el código
+  userId            Int
+  user              User      @relation("VendorCodes", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Porcentajes
+  discountPercent   Float     @default(10)    // Descuento para el comprador
+  commissionPercent Float     @default(10)    // Comisión para el vendor
+
+  // Estado
+  isActive          Boolean   @default(true)
+
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Usos del código
+  uses              DiscountCodeUse[]
+
+  @@index([userId])
+  @@index([code])
+  @@index([isActive])
+}
+
+// =============================================
+// USO DE CÓDIGOS DE DESCUENTO
+// =============================================
+model DiscountCodeUse {
+  id                Int       @id @default(autoincrement())
+
+  // Código usado
+  codeId            Int
+  code              DiscountCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+
+  // Compra asociada
+  purchaseId        Int       @unique
+  purchase          CreditPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  // Empresa que usó el código
+  companyUserId     Int
+
+  // Montos
+  originalPrice     Float     // Precio original
+  discountAmount    Float     // Cantidad descontada
+  finalPrice        Float     // Precio final pagado
+  commissionAmount  Float     // Comisión para el vendor
+
+  // Estado de la comisión
+  commissionStatus  String    @default("pending") // "pending", "paid"
+  commissionPaidAt  DateTime?
+  paymentProofUrl   String?   // Comprobante de pago al vendor
+  paymentDueDate    DateTime? // Fecha límite para pagar
+
+  // Timestamp
+  createdAt         DateTime  @default(now())
+
+  @@index([codeId])
+  @@index([companyUserId])
+  @@index([commissionStatus])
+  @@index([createdAt])
+}
 

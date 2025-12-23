@@ -1,9 +1,10 @@
-// RUTA: src/app/api/jobs/route.ts
+// RUTA: src/app/api/jobs/publish/route.ts
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { calculateJobCreditCost } from '@/lib/pricing';
 
 // GET - Listar todas las vacantes activas
 export async function GET(request: Request) {
@@ -142,18 +143,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calcular el costo en créditos si tiene los campos necesarios
+    // Calcular costo en créditos usando la función centralizada
+    // IMPORTANTE: Esta función es la misma que usa /api/pricing/calculate
     let creditCost = 0;
     if (profile && seniority && workMode) {
-      const pricing = await prisma.pricingMatrix.findFirst({
-        where: {
-          profile,
-          seniority,
-          workMode,
-          isActive: true
-        }
-      });
-      creditCost = pricing?.credits || 5;
+      const pricingResult = await calculateJobCreditCost(profile, seniority, workMode);
+      creditCost = pricingResult.credits;
     }
 
     // Determinar el status inicial

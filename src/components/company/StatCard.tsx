@@ -6,7 +6,7 @@ interface StatCardProps {
   title: string;
   value: number | string;
   icon: LucideIcon;
-  color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'gray';
+  color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'gray' | 'yellow' | 'pink';
   subtitle?: string;
 }
 
@@ -16,7 +16,9 @@ const colorClasses = {
   orange: 'bg-orange-100 text-orange-600',
   purple: 'bg-purple-100 text-purple-600',
   red: 'bg-red-100 text-red-600',
-  gray: 'bg-gray-100 text-gray-600'
+  gray: 'bg-gray-100 text-gray-600',
+  yellow: 'bg-yellow-100 text-yellow-600',
+  pink: 'bg-pink-100 text-pink-600'
 };
 
 export default function StatCard({

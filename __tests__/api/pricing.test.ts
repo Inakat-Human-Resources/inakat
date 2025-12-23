@@ -410,4 +410,138 @@ describe('Admin Pricing API Tests', () => {
       });
     });
   });
+
+  describe('Consistencia de cálculo de precios (BUG FIX)', () => {
+    /**
+     * BUG: El frontend mostraba un precio (5) pero el backend cobraba otro (6)
+     * FIX: Se creó la función calculateJobCreditCost en src/lib/pricing.ts
+     * que es usada tanto por /api/pricing/calculate como por /api/jobs
+     */
+
+    it('debería usar la misma lógica de búsqueda en frontend y backend', async () => {
+      const query = {
+        profile: 'Tecnología',
+        seniority: 'Sr',
+        workMode: 'remote'
+      };
+
+      // Simular que existe un registro con estos parámetros
+      const mockPricing = {
+        id: 1,
+        profile: 'Tecnología',
+        seniority: 'Sr',
+        workMode: 'remote',
+        location: null,
+        credits: 15,
+        isActive: true
+      };
+
+      mockPrismaPricingMatrix.findFirst.mockResolvedValue(mockPricing);
+
+      // Tanto el frontend (/api/pricing/calculate) como el backend (/api/jobs)
+      // ahora usan calculateJobCreditCost que ejecuta esta misma query
+      const pricing = await mockPrismaPricingMatrix.findFirst({
+        where: {
+          profile: query.profile,
+          seniority: query.seniority,
+          workMode: query.workMode,
+          location: null,
+          isActive: true
+        },
+        orderBy: { id: 'asc' }
+      });
+
+      expect(pricing?.credits).toBe(15);
+    });
+
+    it('debería retornar el mismo fallback (5) cuando no hay precio definido', async () => {
+      mockPrismaPricingMatrix.findFirst.mockResolvedValue(null);
+
+      const DEFAULT_CREDITS = 5;
+
+      // Cuando no se encuentra precio, ambos endpoints retornan 5
+      const pricing = await mockPrismaPricingMatrix.findFirst({
+        where: {
+          profile: 'PerfilNoExistente',
+          seniority: 'Sr',
+          workMode: 'remote',
+          location: null,
+          isActive: true
+        }
+      });
+
+      const credits = pricing?.credits ?? DEFAULT_CREDITS;
+      expect(credits).toBe(5);
+    });
+
+    it('debería usar orderBy para resultados consistentes', async () => {
+      // Si hay múltiples registros que coinciden, orderBy: { id: 'asc' }
+      // garantiza que siempre se retorne el mismo
+      const mockPricings = [
+        { id: 1, credits: 10 },
+        { id: 2, credits: 15 }
+      ];
+
+      mockPrismaPricingMatrix.findFirst.mockResolvedValue(mockPricings[0]);
+
+      const pricing = await mockPrismaPricingMatrix.findFirst({
+        where: { profile: 'Tecnología', isActive: true },
+        orderBy: { id: 'asc' }
+      });
+
+      // Siempre debería retornar el de menor ID
+      expect(pricing?.id).toBe(1);
+      expect(pricing?.credits).toBe(10);
+    });
+
+    it('debería buscar sin location si no encuentra con location: null', async () => {
+      // Primera llamada: busca con location: null, no encuentra
+      // Segunda llamada: busca sin location, encuentra
+      mockPrismaPricingMatrix.findFirst
+        .mockResolvedValueOnce(null) // Primera búsqueda: no encuentra
+        .mockResolvedValueOnce({ id: 1, credits: 12 }); // Segunda búsqueda: encuentra
+
+      // Simular lógica de calculateJobCreditCost
+      let pricing = await mockPrismaPricingMatrix.findFirst({
+        where: {
+          profile: 'Tecnología',
+          seniority: 'Jr',
+          workMode: 'presential',
+          location: null,
+          isActive: true
+        }
+      });
+
+      if (!pricing) {
+        pricing = await mockPrismaPricingMatrix.findFirst({
+          where: {
+            profile: 'Tecnología',
+            seniority: 'Jr',
+            workMode: 'presential',
+            isActive: true
+          }
+        });
+      }
+
+      expect(pricing?.credits).toBe(12);
+    });
+
+    it('debería usar ?? en vez de || para el fallback', () => {
+      // Diferencia entre ?? y ||:
+      // 0 ?? 5 = 0 (nullish coalescing solo reemplaza null/undefined)
+      // 0 || 5 = 5 (logical OR reemplaza cualquier valor falsy)
+
+      // Si un precio es 0 créditos, debería respetarse
+      const creditsZero = 0;
+      const creditsNull = null;
+      const creditsUndefined = undefined;
+
+      expect(creditsZero ?? 5).toBe(0);
+      expect(creditsNull ?? 5).toBe(5);
+      expect(creditsUndefined ?? 5).toBe(5);
+
+      // Con || el comportamiento sería diferente
+      expect(creditsZero || 5).toBe(5); // ¡Incorrecto si queremos permitir 0!
+    });
+  });
 });

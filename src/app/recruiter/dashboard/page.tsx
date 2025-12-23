@@ -103,6 +103,7 @@ interface Candidate {
   fechaNacimiento: string | null;
   universidad: string | null;
   carrera: string | null;
+  nivelEstudios: string | null;
   añosExperiencia: number;
   profile: string | null;
   seniority: string | null;
@@ -669,7 +670,7 @@ export default function RecruiterDashboard() {
                         </button>
                       )}
 
-                      {assignment.recruiterStatus === 'reviewing' && (
+                      {(assignment.recruiterStatus === 'reviewing' || assignment.recruiterStatus === 'sent_to_specialist') && (
                         <>
                           <button
                             onClick={() =>
@@ -702,14 +703,13 @@ export default function RecruiterDashboard() {
                             Enviar al Especialista (
                             {selectedCandidates[assignment.id]?.length || 0})
                           </button>
+                          {assignment.recruiterStatus === 'sent_to_specialist' && (
+                            <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg flex items-center gap-2">
+                              <CheckCircle size={16} />
+                              Ya enviaste candidatos
+                            </div>
+                          )}
                         </>
-                      )}
-
-                      {assignment.recruiterStatus === 'sent_to_specialist' && (
-                        <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg flex items-center gap-2">
-                          <CheckCircle size={16} />
-                          Candidatos enviados al especialista
-                        </div>
                       )}
                     </div>
                   </div>

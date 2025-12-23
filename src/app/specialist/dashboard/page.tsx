@@ -72,6 +72,7 @@ interface Candidate {
   fechaNacimiento: string | null;
   universidad: string | null;
   carrera: string | null;
+  nivelEstudios: string | null;
   añosExperiencia: number;
   profile: string | null;
   seniority: string | null;
@@ -751,7 +752,7 @@ export default function SpecialistDashboard() {
                         </button>
                       )}
 
-                      {assignment.specialistStatus === 'evaluating' && (
+                      {(assignment.specialistStatus === 'evaluating' || assignment.specialistStatus === 'sent_to_company') && (
                         <>
                           <button
                             onClick={() =>
@@ -784,14 +785,13 @@ export default function SpecialistDashboard() {
                             Enviar a Empresa (
                             {selectedCandidates[assignment.id]?.length || 0})
                           </button>
+                          {assignment.specialistStatus === 'sent_to_company' && (
+                            <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg flex items-center gap-2">
+                              <CheckCircle size={16} />
+                              Ya enviaste candidatos
+                            </div>
+                          )}
                         </>
-                      )}
-
-                      {assignment.specialistStatus === 'sent_to_company' && (
-                        <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg flex items-center gap-2">
-                          <CheckCircle size={16} />
-                          Candidatos enviados a la empresa
-                        </div>
                       )}
                     </div>
                   </div>

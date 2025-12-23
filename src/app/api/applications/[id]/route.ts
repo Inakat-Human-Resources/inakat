@@ -85,6 +85,7 @@ export async function PATCH(
       'reviewing',
       'sent_to_specialist',
       'sent_to_company',
+      'company_interested',  // Empresa marcó "Me interesa"
       'interviewed',
       'rejected',
       'accepted',

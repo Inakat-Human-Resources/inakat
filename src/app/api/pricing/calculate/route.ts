@@ -2,18 +2,19 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateJobCreditCost } from '@/lib/pricing';
 
 /**
  * POST /api/pricing/calculate
  * Calcula el costo en créditos de una vacante según la matriz de precios
  *
- * Body: { profile, seniority, workMode, location? }
+ * Body: { profile, seniority, workMode }
  * Response: { credits, found, pricing }
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { profile, seniority, workMode, location } = body;
+    const { profile, seniority, workMode } = body;
 
     // Validar campos requeridos
     if (!profile || !seniority || !workMode) {
@@ -26,53 +27,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Buscar en la matriz de precios
-    // Primero intentar con location específica
-    let pricing = await prisma.pricingMatrix.findFirst({
-      where: {
-        profile,
-        seniority,
-        workMode,
-        location: location || null,
-        isActive: true
-      }
-    });
+    // Usar la función helper centralizada para calcular el costo
+    const result = await calculateJobCreditCost(profile, seniority, workMode);
 
-    // Si no encuentra con location, buscar sin location
-    if (!pricing && location) {
-      pricing = await prisma.pricingMatrix.findFirst({
-        where: {
-          profile,
-          seniority,
-          workMode,
-          location: null,
-          isActive: true
-        }
-      });
-    }
-
-    if (!pricing) {
-      // Si no hay precio definido, usar un valor por defecto
+    if (!result.found) {
       return NextResponse.json({
         success: true,
         found: false,
-        credits: 5, // Valor por defecto
+        credits: result.credits,
         message: 'No se encontró precio específico, usando valor por defecto',
-        query: { profile, seniority, workMode, location }
+        query: { profile, seniority, workMode }
       });
     }
 
     return NextResponse.json({
       success: true,
       found: true,
-      credits: pricing.credits,
-      pricing: {
-        id: pricing.id,
-        profile: pricing.profile,
-        seniority: pricing.seniority,
-        workMode: pricing.workMode,
-        location: pricing.location
-      }
+      credits: result.credits,
+      pricingId: result.pricingId
     });
   } catch (error) {
     console.error('Error calculating price:', error);

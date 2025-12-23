@@ -76,18 +76,31 @@ export async function GET(request: Request) {
     });
 
     // 3. Calcular estadísticas de vacantes
+    const now = new Date();
     const totalJobs = jobs.length;
-    const activeJobs = jobs.filter((job) => job.status === 'active').length;
+    const activeJobs = jobs.filter(
+      (job) => job.status === 'active' && (!job.expiresAt || job.expiresAt > now)
+    ).length;
+    const pausedJobs = jobs.filter((job) => job.status === 'paused').length;
+    const expiredJobs = jobs.filter(
+      (job) => job.status === 'active' && job.expiresAt && job.expiresAt <= now
+    ).length;
     const closedJobs = jobs.filter((job) => job.status === 'closed').length;
     const draftJobs = jobs.filter((job) => job.status === 'draft').length;
 
     // 4. Obtener SOLO las aplicaciones visibles para la empresa
     // La empresa SOLO ve candidatos que han sido enviados por el Especialista
-    // Status permitidos: "sent_to_company", "interviewed", "accepted", "rejected"
+    // Status permitidos para empresa:
+    // - sent_to_company: Candidatos nuevos por revisar
+    // - company_interested: Candidatos que la empresa marcó "Me interesa"
+    // - interviewed: Candidatos entrevistados
+    // - accepted: Candidatos aceptados
+    // - rejected: Candidatos descartados
     const jobIds = jobs.map((job) => job.id);
 
     const COMPANY_VISIBLE_STATUSES = [
       'sent_to_company',
+      'company_interested',
       'interviewed',
       'accepted',
       'rejected'
@@ -163,9 +176,13 @@ export async function GET(request: Request) {
 
     // 5. Calcular estadísticas de aplicaciones (solo las visibles para empresa)
     const totalApplications = allApplications.length;
-    // Para empresa: "sent_to_company" = Nuevos candidatos
-    const newCandidates = allApplications.filter(
+    // Para empresa: "sent_to_company" = Nuevos candidatos por revisar
+    const pendingReview = allApplications.filter(
       (app) => app.status === 'sent_to_company'
+    ).length;
+    // Candidatos que la empresa marcó como interesados
+    const interestedCandidates = allApplications.filter(
+      (app) => app.status === 'company_interested'
     ).length;
     const interviewedApplications = allApplications.filter(
       (app) => app.status === 'interviewed'
@@ -173,6 +190,7 @@ export async function GET(request: Request) {
     const acceptedApplications = allApplications.filter(
       (app) => app.status === 'accepted'
     ).length;
+    // Candidatos descartados por la empresa
     const rejectedApplications = allApplications.filter(
       (app) => app.status === 'rejected'
     ).length;
@@ -204,14 +222,20 @@ export async function GET(request: Request) {
         jobId: job.id,
         jobTitle: job.title,
         totalCandidates: jobApplications.length,
-        newCandidates: jobApplications.filter(
+        pendingReview: jobApplications.filter(
           (app) => app.status === 'sent_to_company'
+        ).length,
+        interested: jobApplications.filter(
+          (app) => app.status === 'company_interested'
         ).length,
         interviewedCandidates: jobApplications.filter(
           (app) => app.status === 'interviewed'
         ).length,
         acceptedCandidates: jobApplications.filter(
           (app) => app.status === 'accepted'
+        ).length,
+        rejectedCandidates: jobApplications.filter(
+          (app) => app.status === 'rejected'
         ).length
       };
     });
@@ -231,12 +255,15 @@ export async function GET(request: Request) {
           jobs: {
             total: totalJobs,
             active: activeJobs,
+            paused: pausedJobs,
+            expired: expiredJobs,
             closed: closedJobs,
             draft: draftJobs
           },
           applications: {
             total: totalApplications,
-            newCandidates, // Candidatos enviados por especialista, sin revisar
+            pendingReview, // Candidatos enviados por especialista, sin revisar
+            interested: interestedCandidates, // Candidatos marcados como "Me interesa"
             interviewed: interviewedApplications,
             accepted: acceptedApplications,
             rejected: rejectedApplications

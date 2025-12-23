@@ -10,9 +10,11 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  TrendingUp,
+  Heart,
   AlertCircle,
-  Coins
+  Coins,
+  Pause,
+  AlertTriangle
 } from 'lucide-react';
 import StatCard from '@/components/company/StatCard';
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
@@ -33,6 +35,8 @@ interface Job {
   profile?: string;
   seniority?: string;
   createdAt: string;
+  expiresAt?: string;
+  applicationCount?: number;
   _count?: {
     applications: number;
   };
@@ -56,12 +60,15 @@ interface DashboardData {
     jobs: {
       total: number;
       active: number;
+      paused: number;
+      expired: number;
       closed: number;
       draft: number;
     };
     applications: {
       total: number;
-      newCandidates: number; // Candidatos enviados por especialista (pendientes de revisar)
+      pendingReview: number; // Candidatos por revisar (sent_to_company)
+      interested: number; // Candidatos marcados "Me interesa"
       interviewed: number;
       accepted: number;
       rejected: number;
@@ -122,7 +129,7 @@ export default function CompanyDashboard() {
 
   const handleViewJob = (jobId: number) => {
     if (!data) return;
-    const job = data.allJobs.find(j => j.id === jobId);
+    const job = data.allJobs.find((j) => j.id === jobId);
     if (job) {
       setSelectedJob(job);
       setShowJobModal(true);
@@ -133,23 +140,67 @@ export default function CompanyDashboard() {
     router.push(`/create-job?edit=${jobId}`);
   };
 
-  const handleCloseJob = async (jobId: number) => {
-    if (!confirm('¿Estás seguro de cerrar esta vacante?')) {
+  const handlePauseJob = async (jobId: number) => {
+    if (!confirm('¿Estás seguro de pausar esta vacante? Los candidatos no podrán aplicar mientras esté pausada.')) {
       return;
     }
 
     try {
       const response = await fetch(`/api/jobs/${jobId}`, {
-        method: 'PUT',
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'paused' })
+      });
+
+      if (response.ok) {
+        fetchDashboardData();
+      } else {
+        const result = await response.json();
+        alert(result.error || 'Error al pausar la vacante');
+      }
+    } catch (error) {
+      console.error('Error pausing job:', error);
+      alert('Error al pausar la vacante');
+    }
+  };
+
+  const handleResumeJob = async (jobId: number) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+      });
+
+      if (response.ok) {
+        fetchDashboardData();
+      } else {
+        const result = await response.json();
+        alert(result.error || 'Error al reanudar la vacante');
+      }
+    } catch (error) {
+      console.error('Error resuming job:', error);
+      alert('Error al reanudar la vacante');
+    }
+  };
+
+  const handleCloseJob = async (jobId: number) => {
+    if (!confirm('¿Estás seguro de cerrar esta vacante? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'closed' })
       });
 
       if (response.ok) {
-        alert('Vacante cerrada exitosamente');
-        fetchDashboardData(); // Recargar datos
+        fetchDashboardData();
       } else {
-        alert('Error al cerrar la vacante');
+        const result = await response.json();
+        alert(result.error || 'Error al cerrar la vacante');
       }
     } catch (error) {
       console.error('Error closing job:', error);
@@ -157,38 +208,40 @@ export default function CompanyDashboard() {
     }
   };
 
-  const handleViewApplication = (applicationId: number) => {
-    router.push(`/applications?id=${applicationId}`);
-  };
-
   const handleApplicationStatusChange = async (
     applicationId: number,
     newStatus: string
   ) => {
     try {
-      const response = await fetch(`/api/applications/${applicationId}`, {
-        method: 'PUT',
+      // Usar la API específica de empresa para actualizar status
+      const response = await fetch(`/api/company/applications/${applicationId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
 
+      const result = await response.json();
+
       if (response.ok) {
-        // Actualizar localmente
+        // Actualizar datos localmente para respuesta inmediata
         setData((prevData) => {
           if (!prevData) return prevData;
 
           return {
             ...prevData,
+            allApplications: prevData.allApplications.map((app) =>
+              app.id === applicationId ? { ...app, status: newStatus } : app
+            ),
             recentApplications: prevData.recentApplications.map((app) =>
               app.id === applicationId ? { ...app, status: newStatus } : app
             )
           };
         });
 
-        alert('Estado actualizado correctamente');
-        fetchDashboardData(); // Recargar para actualizar estadísticas
+        // Recargar para actualizar estadísticas completas
+        fetchDashboardData();
       } else {
-        alert('Error al actualizar el estado');
+        alert(result.error || 'Error al actualizar el estado');
       }
     } catch (error) {
       console.error('Error updating application status:', error);
@@ -258,48 +311,72 @@ export default function CompanyDashboard() {
           </div>
         </div>
 
-        {/* Estadísticas Principales */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Estadísticas Principales - Vacantes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <StatCard
             title="Vacantes Activas"
             value={data.stats.jobs.active}
             icon={Briefcase}
             color="green"
-            subtitle={`${data.stats.jobs.total} total`}
           />
           <StatCard
-            title="Aplicaciones Totales"
-            value={data.stats.applications.total}
-            icon={Users}
-            color="blue"
+            title="En Pausa"
+            value={data.stats.jobs.paused}
+            icon={Pause}
+            color="yellow"
           />
           <StatCard
-            title="Nuevos Candidatos"
-            value={data.stats.applications.newCandidates}
-            icon={Clock}
+            title="Expiradas"
+            value={data.stats.jobs.expired}
+            icon={AlertTriangle}
             color="orange"
           />
           <StatCard
-            title="Candidatos Aceptados"
-            value={data.stats.applications.accepted}
-            icon={CheckCircle}
-            color="purple"
+            title="Borradores"
+            value={data.stats.jobs.draft}
+            icon={Clock}
+            color="gray"
+          />
+          <StatCard
+            title="Cerradas"
+            value={data.stats.jobs.closed}
+            icon={XCircle}
+            color="red"
           />
         </div>
 
-        {/* Estadísticas Secundarias */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* Estadísticas de Candidatos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <StatCard
+            title="Por Revisar"
+            value={data.stats.applications.pendingReview}
+            icon={Users}
+            color="blue"
+            subtitle="Nuevos candidatos"
+          />
+          <StatCard
+            title="Me Interesan"
+            value={data.stats.applications.interested}
+            icon={Heart}
+            color="pink"
+          />
           <StatCard
             title="Entrevistados"
             value={data.stats.applications.interviewed}
-            icon={TrendingUp}
+            icon={Users}
             color="purple"
           />
           <StatCard
-            title="Rechazados"
+            title="Aceptados"
+            value={data.stats.applications.accepted}
+            icon={CheckCircle}
+            color="green"
+          />
+          <StatCard
+            title="Descartados"
             value={data.stats.applications.rejected}
             icon={XCircle}
-            color="red"
+            color="gray"
           />
         </div>
 
@@ -310,14 +387,15 @@ export default function CompanyDashboard() {
             onView={handleViewJob}
             onEdit={handleEditJob}
             onClose={handleCloseJob}
+            onPause={handlePauseJob}
+            onResume={handleResumeJob}
           />
         </div>
 
-        {/* Tabla de Todas las Aplicaciones */}
+        {/* Tabla de Candidatos */}
         <div>
           <CompanyApplicationsTable
             applications={data.allApplications}
-            onView={handleViewApplication}
             onStatusChange={handleApplicationStatusChange}
           />
         </div>

@@ -307,6 +307,28 @@ const Navbar = () => {
                       Mi Perfil
                     </Link>
 
+                    {/* Panel Vendedor - Para todos los usuarios autenticados */}
+                    <Link
+                      href="/vendor/dashboard"
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"
+                        />
+                      </svg>
+                      Panel Vendedor
+                    </Link>
+
                     {/* Menú Admin completo */}
                     {user.role === 'admin' && (
                       <>
@@ -550,6 +572,28 @@ const Navbar = () => {
                             />
                           </svg>
                           Aplicaciones
+                        </Link>
+
+                        {/* Vendedores */}
+                        <Link
+                          href="/admin/vendors"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"
+                            />
+                          </svg>
+                          Vendedores
                         </Link>
                       </>
                     )}

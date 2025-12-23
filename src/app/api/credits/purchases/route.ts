@@ -5,6 +5,13 @@ import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
+// Helper para calcular fecha de vencimiento de comisión (4 meses)
+function getCommissionDueDate(): Date {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 4);
+  return date;
+}
+
 // Configurar Mercado Pago
 const client = new MercadoPagoConfig({
   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN!
@@ -32,12 +39,56 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solo empresas' }, { status: 403 });
     }
 
-    const { packageType, paymentData } = await req.json();
+    const { packageType, paymentData, discountCode } = await req.json();
 
     // Validar paquete
     const pkg = PACKAGES[packageType as keyof typeof PACKAGES];
     if (!pkg) {
       return NextResponse.json({ error: 'Paquete inválido' }, { status: 400 });
+    }
+
+    // Validar código de descuento si se proporciona
+    let validDiscountCode: {
+      id: number;
+      code: string;
+      userId: number;
+      discountPercent: number;
+      commissionPercent: number;
+    } | null = null;
+
+    if (discountCode) {
+      const foundCode = await prisma.discountCode.findFirst({
+        where: {
+          code: discountCode.toUpperCase(),
+          isActive: true
+        },
+        select: {
+          id: true,
+          code: true,
+          userId: true,
+          discountPercent: true,
+          commissionPercent: true
+        }
+      });
+
+      if (!foundCode) {
+        return NextResponse.json(
+          { error: 'Código de descuento inválido o inactivo' },
+          { status: 400 }
+        );
+      }
+
+      validDiscountCode = foundCode;
+    }
+
+    // Calcular precios con descuento
+    const originalPrice = pkg.price;
+    let discountAmount = 0;
+    let finalPrice = originalPrice;
+
+    if (validDiscountCode) {
+      discountAmount = Math.round(originalPrice * (validDiscountCode.discountPercent / 100));
+      finalPrice = originalPrice - discountAmount;
     }
 
     // Obtener info del usuario
@@ -53,12 +104,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Crear objeto de pago base
+    // Crear objeto de pago base (usando precio final con descuento)
     const paymentBody: any = {
-      transaction_amount: pkg.price,
+      transaction_amount: finalPrice,
       description: `Paquete de ${pkg.credits} crédito${
         pkg.credits > 1 ? 's' : ''
-      } - INAKAT`,
+      } - INAKAT${validDiscountCode ? ` (${validDiscountCode.discountPercent}% desc.)` : ''}`,
       payment_method_id: paymentData.payment_method_id,
       token: paymentData.token,
       installments: paymentData.installments || 1,
@@ -72,7 +123,10 @@ export async function POST(req: NextRequest) {
       metadata: {
         user_id: payload.userId,
         package_type: packageType,
-        credits: pkg.credits
+        credits: pkg.credits,
+        discount_code: validDiscountCode?.code || null,
+        original_price: originalPrice,
+        discount_amount: discountAmount
       }
     };
 
@@ -95,8 +149,8 @@ export async function POST(req: NextRequest) {
       data: {
         userId: payload.userId,
         amount: pkg.credits,
-        pricePerCredit: pkg.pricePerCredit,
-        totalPrice: pkg.price,
+        pricePerCredit: finalPrice / pkg.credits, // Precio por crédito después de descuento
+        totalPrice: finalPrice,
         packageType,
         paymentStatus: paymentResult.status === 'approved' ? 'paid' : 'pending',
         paymentId: String(paymentResult.id),
@@ -104,6 +158,27 @@ export async function POST(req: NextRequest) {
         paidAt: paymentResult.status === 'approved' ? new Date() : null
       }
     });
+
+    // Si se usó código de descuento, registrar el uso
+    if (validDiscountCode) {
+      const commissionAmount = Math.round(finalPrice * (validDiscountCode.commissionPercent / 100));
+
+      await prisma.discountCodeUse.create({
+        data: {
+          codeId: validDiscountCode.id,
+          purchaseId: purchase.id,
+          companyUserId: payload.userId,
+          originalPrice,
+          discountAmount,
+          finalPrice,
+          commissionAmount,
+          commissionStatus: 'pending',
+          paymentDueDate: getCommissionDueDate()
+        }
+      });
+
+      console.log(`📋 Discount code ${validDiscountCode.code} used: ${discountAmount} discount, ${commissionAmount} commission`);
+    }
 
     // Si el pago fue aprobado inmediatamente, agregar créditos
     if (paymentResult.status === 'approved') {
@@ -141,7 +216,14 @@ export async function POST(req: NextRequest) {
         purchase,
         creditsAdded: pkg.credits,
         newBalance: updatedUser.credits,
-        paymentId: paymentResult.id
+        paymentId: paymentResult.id,
+        discount: validDiscountCode ? {
+          code: validDiscountCode.code,
+          originalPrice,
+          discountAmount,
+          finalPrice,
+          discountPercent: validDiscountCode.discountPercent
+        } : null
       });
     }
 
@@ -156,7 +238,14 @@ export async function POST(req: NextRequest) {
         method: paymentData.payment_method_id,
         ticket_url:
           paymentResult.point_of_interaction?.transaction_data?.ticket_url
-      }
+      },
+      discount: validDiscountCode ? {
+        code: validDiscountCode.code,
+        originalPrice,
+        discountAmount,
+        finalPrice,
+        discountPercent: validDiscountCode.discountPercent
+      } : null
     });
   } catch (error: any) {
     console.error('❌ Error processing purchase:', error);

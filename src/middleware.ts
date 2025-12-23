@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyToken } from './lib/auth';
 
+// RUTA: src/middleware.ts
 /**
  * Middleware de Next.js para proteger rutas
  * Este middleware se ejecuta antes de las API routes y páginas
  */
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  // Excepción: POST a company-requests es público (registro de empresas)
+  if (pathname === '/api/company-requests' && request.method === 'POST') {
+    return NextResponse.next();
+  }
 
   // Obtener token de las cookies
   const token = request.cookies.get('auth-token')?.value;
@@ -202,6 +208,10 @@ export function middleware(request: NextRequest) {
   // Si es ruta de perfil, solo necesita estar autenticado (ya verificado)
   // No hay restricción de rol adicional
 
+  // Rutas de VENDOR - accesibles para cualquier usuario autenticado
+  // Permite que cualquier usuario registrado pueda crear y gestionar su código de descuento
+  // La verificación de autenticación ya se realizó arriba
+
   // Agregar información del usuario a los headers para uso en API routes
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-user-id', payload.userId.toString());
@@ -231,6 +241,7 @@ export const config = {
     '/api/profile',
     '/api/recruiter/:path*',
     '/api/specialist/:path*',
+    '/api/vendor/:path*',
     '/admin/:path*',
     '/applications/:path*',
     '/company/:path*',
@@ -238,6 +249,7 @@ export const config = {
     '/candidate/:path*',
     '/recruiter/:path*',
     '/specialist/:path*',
+    '/vendor/:path*',
     '/profile'
   ],
   runtime: 'nodejs'

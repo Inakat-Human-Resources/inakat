@@ -68,6 +68,18 @@ export async function PATCH(
       );
     }
 
+    // Validar status si se proporciona
+    const validJobStatuses = ['active', 'paused', 'closed', 'draft'];
+    if (body.status && !validJobStatuses.includes(body.status)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Invalid status. Must be one of: ${validJobStatuses.join(', ')}`
+        },
+        { status: 400 }
+      );
+    }
+
     // Actualizar vacante
     const updatedJob = await prisma.job.update({
       where: { id: jobId },

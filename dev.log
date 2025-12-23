@@ -1,0 +1,13 @@
+
+> inakat-landing-page@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use by process 64668, using available port 3001 instead.
+   ▲ Next.js 15.5.7
+   - Local:        http://localhost:3001
+   - Network:      http://10.252.4.157:3001
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 6.5s
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\guill\dev\inakat\inakat\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\guill\dev\inakat\inakat\.next\cache\webpack\client-development\0.pack.gz'

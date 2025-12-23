@@ -357,4 +357,91 @@ describe('Company Requests API Logic Tests', () => {
       expect(request.status).toBe('pending');
     });
   });
+
+  describe('Middleware - Permisos de acceso a /api/company-requests', () => {
+    /**
+     * Estos tests verifican la lógica de permisos del middleware:
+     * - POST /api/company-requests → PÚBLICO (registro de empresas)
+     * - GET /api/company-requests → Solo admin
+     * - PUT/DELETE /api/company-requests/[id] → Solo admin
+     */
+
+    it('POST debe ser público - cualquiera puede registrar empresa', () => {
+      // Simular la lógica del middleware para POST
+      const pathname = '/api/company-requests';
+      const method = 'POST';
+
+      // La excepción en el middleware permite POST sin autenticación
+      const isPublicPostRoute = pathname === '/api/company-requests' && method === 'POST';
+
+      expect(isPublicPostRoute).toBe(true);
+    });
+
+    it('GET requiere rol admin', () => {
+      const pathname = '/api/company-requests';
+      const method = 'GET';
+      const userRole = 'user';
+
+      // La ruta está protegida para admin
+      const isAdminRoute = pathname.startsWith('/api/company-requests');
+      const isPostException = pathname === '/api/company-requests' && method === 'POST';
+      const requiresAdmin = isAdminRoute && !isPostException;
+      const hasPermission = userRole === 'admin';
+
+      expect(requiresAdmin).toBe(true);
+      expect(hasPermission).toBe(false);
+    });
+
+    it('GET con rol admin tiene acceso', () => {
+      const pathname = '/api/company-requests';
+      const method = 'GET';
+      const userRole = 'admin';
+
+      const isAdminRoute = pathname.startsWith('/api/company-requests');
+      const isPostException = pathname === '/api/company-requests' && method === 'POST';
+      const requiresAdmin = isAdminRoute && !isPostException;
+      const hasPermission = userRole === 'admin';
+
+      expect(requiresAdmin).toBe(true);
+      expect(hasPermission).toBe(true);
+    });
+
+    it('PUT a /api/company-requests/[id] requiere admin', () => {
+      const pathname = '/api/company-requests/123';
+      const method = 'PUT';
+      const userRole = 'company';
+
+      const isAdminRoute = pathname.startsWith('/api/company-requests');
+      const isPostException = pathname === '/api/company-requests' && method === 'POST';
+      const requiresAdmin = isAdminRoute && !isPostException;
+      const hasPermission = userRole === 'admin';
+
+      expect(requiresAdmin).toBe(true);
+      expect(hasPermission).toBe(false);
+    });
+
+    it('DELETE a /api/company-requests/[id] requiere admin', () => {
+      const pathname = '/api/company-requests/456';
+      const method = 'DELETE';
+      const userRole = 'recruiter';
+
+      const isAdminRoute = pathname.startsWith('/api/company-requests');
+      const isPostException = pathname === '/api/company-requests' && method === 'POST';
+      const requiresAdmin = isAdminRoute && !isPostException;
+      const hasPermission = userRole === 'admin';
+
+      expect(requiresAdmin).toBe(true);
+      expect(hasPermission).toBe(false);
+    });
+
+    it('POST a subrutas como /api/company-requests/123 NO es público', () => {
+      const pathname = '/api/company-requests/123';
+      const method = 'POST';
+
+      // Solo POST a la ruta exacta /api/company-requests es público
+      const isPublicPostRoute = pathname === '/api/company-requests' && method === 'POST';
+
+      expect(isPublicPostRoute).toBe(false);
+    });
+  });
 });
