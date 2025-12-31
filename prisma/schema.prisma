@@ -132,7 +132,14 @@ model Job {
   // Campos para calcular costo
   profile         String?   // "Tecnología", "Diseño Gráfico", etc.
   seniority       String?   // "Practicante", "Jr", "Middle", "Sr", "Director"
-  
+
+  // Campos extendidos para mejor matching
+  habilidades           String?   @db.Text  // JSON array as string
+  responsabilidades     String?   @db.Text
+  resultadosEsperados   String?   @db.Text
+  valoresActitudes      String?   @db.Text
+  informacionAdicional  String?   @db.Text
+
   // Relación con la empresa que publicó
   userId          Int?
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)

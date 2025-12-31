@@ -1,5 +1,8 @@
+// RUTA: src/app/api/upload/route.ts
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +18,29 @@ const ALLOWED_MIME_TYPES = [
 // Extensiones permitidas como fallback
 const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
 
+// Verificar si el token de Vercel Blob está configurado
+function isBlobConfigured(): boolean {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  return Boolean(token && token.length > 10);
+}
+
+// Fallback: guardar archivo localmente (solo para desarrollo)
+async function saveToLocalStorage(file: File, uniqueFileName: string): Promise<string> {
+  const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+
+  // Crear directorio si no existe
+  await mkdir(uploadDir, { recursive: true });
+
+  const filePath = path.join(uploadDir, uniqueFileName);
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+
+  await writeFile(filePath, buffer);
+
+  // Retornar URL relativa para acceso público
+  return `/uploads/${uniqueFileName}`;
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -27,11 +53,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log para debugging
+    // Log detallado para debugging
+    const blobConfigured = isBlobConfigured();
     console.log('Upload attempt:', {
       name: file.name,
       type: file.type,
-      size: file.size
+      size: file.size,
+      blobConfigured,
+      environment: process.env.NODE_ENV
     });
 
     // Validar tipo de archivo - verificar MIME type O extensión
@@ -80,16 +109,38 @@ export async function POST(request: Request) {
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const uniqueFileName = `${timestamp}-${randomStr}-${sanitizedName}`;
 
-    // Subir a Vercel Blob
-    const blob = await put(uniqueFileName, file, {
-      access: 'public'
-    });
+    let fileUrl: string;
 
-    console.log('Upload successful:', { url: blob.url, filename: uniqueFileName });
+    // Verificar si Vercel Blob está configurado
+    if (!blobConfigured) {
+      console.log('BLOB_READ_WRITE_TOKEN not configured, using local storage fallback');
+
+      // En desarrollo, usar almacenamiento local
+      if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+        fileUrl = await saveToLocalStorage(file, uniqueFileName);
+        console.log('Upload successful (local):', { url: fileUrl, filename: uniqueFileName });
+      } else {
+        // En producción sin token configurado, retornar error claro
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'El servicio de almacenamiento no está configurado. Contacta al administrador para configurar BLOB_READ_WRITE_TOKEN.'
+          },
+          { status: 503 }
+        );
+      }
+    } else {
+      // Subir a Vercel Blob
+      const blob = await put(uniqueFileName, file, {
+        access: 'public'
+      });
+      fileUrl = blob.url;
+      console.log('Upload successful (Vercel Blob):', { url: blob.url, filename: uniqueFileName });
+    }
 
     return NextResponse.json({
       success: true,
-      url: blob.url,
+      url: fileUrl,
       filename: file.name
     });
   } catch (error: unknown) {

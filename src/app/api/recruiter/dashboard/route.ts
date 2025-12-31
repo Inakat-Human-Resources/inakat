@@ -147,9 +147,14 @@ export async function GET(request: Request) {
     );
 
     // Obtener candidatos de la base de datos (para asignar a vacantes)
-    // Incluir candidatos 'available' (default) e 'in_process' (ya en proceso)
+    // Mostrar candidatos que NO están en estados finales
+    // Esto permite ver candidatos pendientes incluso después de enviar algunos
     const candidates = await prisma.candidate.findMany({
-      where: { status: { in: ['available', 'in_process'] } },
+      where: {
+        status: {
+          notIn: ['sent_to_specialist', 'sent_to_company', 'discarded', 'rejected', 'accepted', 'archived']
+        }
+      },
       include: {
         experiences: {
           orderBy: { fechaInicio: 'desc' },

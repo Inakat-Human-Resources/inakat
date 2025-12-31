@@ -7,6 +7,7 @@ interface FormData {
   nombre: string;
   apellidoPaterno: string;
   apellidoMaterno: string;
+  departamento: string;
   identificacion: File | null;
   password: string;
   confirmPassword: string;
@@ -15,7 +16,10 @@ interface FormData {
   sitioWeb: string;
   razonSocial: string;
   rfc: string;
-  direccionEmpresa: string;
+  calle: string;
+  colonia: string;
+  ciudad: string;
+  codigoPostal: string;
   documentosConstitucion: File | null;
 }
 
@@ -28,6 +32,7 @@ const FormRegisterForQuotationSection = () => {
     nombre: '',
     apellidoPaterno: '',
     apellidoMaterno: '',
+    departamento: '',
     identificacion: null,
     password: '',
     confirmPassword: '',
@@ -36,7 +41,10 @@ const FormRegisterForQuotationSection = () => {
     sitioWeb: '',
     razonSocial: '',
     rfc: '',
-    direccionEmpresa: '',
+    calle: '',
+    colonia: '',
+    ciudad: '',
+    codigoPostal: '',
     documentosConstitucion: null
   });
 
@@ -216,6 +224,9 @@ const FormRegisterForQuotationSection = () => {
       }
       const docData = await docUploadRes.json();
 
+      // Concatenar dirección para enviar al backend
+      const direccionCompleta = `${formData.calle}, ${formData.colonia}, ${formData.ciudad}, CP ${formData.codigoPostal}`;
+
       const response = await fetch('/api/company-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,12 +234,13 @@ const FormRegisterForQuotationSection = () => {
           nombre: formData.nombre,
           apellidoPaterno: formData.apellidoPaterno,
           apellidoMaterno: formData.apellidoMaterno,
+          departamento: formData.departamento || null,
           nombreEmpresa: formData.nombreEmpresa,
           correoEmpresa: formData.correoEmpresa,
           sitioWeb: formData.sitioWeb || null,
           razonSocial: formData.razonSocial,
           rfc: formData.rfc.toUpperCase(),
-          direccionEmpresa: formData.direccionEmpresa,
+          direccionEmpresa: direccionCompleta,
           identificacionUrl: idData.url,
           documentosConstitucionUrl: docData.url
         })
@@ -246,6 +258,7 @@ const FormRegisterForQuotationSection = () => {
           nombre: '',
           apellidoPaterno: '',
           apellidoMaterno: '',
+          departamento: '',
           identificacion: null,
           password: '',
           confirmPassword: '',
@@ -254,7 +267,10 @@ const FormRegisterForQuotationSection = () => {
           sitioWeb: '',
           razonSocial: '',
           rfc: '',
-          direccionEmpresa: '',
+          calle: '',
+          colonia: '',
+          ciudad: '',
+          codigoPostal: '',
           documentosConstitucion: null
         });
 
@@ -355,6 +371,17 @@ const FormRegisterForQuotationSection = () => {
                           {errors.apellidoMaterno}
                         </span>
                       )}
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        name="departamento"
+                        value={formData.departamento}
+                        onChange={handleInputChange}
+                        placeholder="Departamento de la empresa (ej: Recursos Humanos)"
+                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      />
                     </div>
 
                     <div>
@@ -505,16 +532,53 @@ const FormRegisterForQuotationSection = () => {
                     )}
                   </div>
 
-                  <div>
-                    <input
-                      type="text"
-                      name="direccionEmpresa"
-                      value={formData.direccionEmpresa}
-                      onChange={handleInputChange}
-                      placeholder="Dirección *"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                      required
-                    />
+                  {/* Dirección desglosada */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <input
+                        type="text"
+                        name="calle"
+                        value={formData.calle}
+                        onChange={handleInputChange}
+                        placeholder="Calle y número *"
+                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        name="colonia"
+                        value={formData.colonia}
+                        onChange={handleInputChange}
+                        placeholder="Colonia *"
+                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        name="ciudad"
+                        value={formData.ciudad}
+                        onChange={handleInputChange}
+                        placeholder="Ciudad *"
+                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        name="codigoPostal"
+                        value={formData.codigoPostal}
+                        onChange={handleInputChange}
+                        placeholder="Código Postal *"
+                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        maxLength={5}
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>

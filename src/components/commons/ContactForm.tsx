@@ -35,7 +35,7 @@ const ContactForm = () => {
       if (response.ok) {
         setSubmitStatus({
           type: "success",
-          message: "¡Mensaje enviado exitosamente! Te contactaremos pronto.",
+          message: "Se ha enviado correctamente el formulario a INAKAT",
         });
         setFormData({
           nombre: "",

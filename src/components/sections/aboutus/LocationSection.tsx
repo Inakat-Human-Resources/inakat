@@ -53,7 +53,20 @@ const LocationSection = () => {
 
           {/* Office Locations */}
           <h3 className="text-xl font-bold mt-6">CONTAMOS CON OFICINAS EN:</h3>
-          <div className="flex flex-wrap gap-2 mt-2">
+
+          {/* Leyenda de colores */}
+          <div className="flex gap-6 mt-4 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 bg-orange-500 rounded-full"></span>
+              <span className="text-sm">Oficinas en</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 bg-lemon-green rounded-full"></span>
+              <span className="text-sm">Presencia en</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
             {offices.map((office, index) => (
               <span
                 key={index}

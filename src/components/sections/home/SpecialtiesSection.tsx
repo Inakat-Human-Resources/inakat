@@ -8,24 +8,15 @@ import semicircleImage from "@/assets/images/1-home/5.png";
 const SpecialtiesSection = () => {
   const router = useRouter();
 
-  // List of specialties
+  // List of specialties - Solo 7 categorías principales
   const specialties = [
-    "psicología",
-    "educación",
-    "ciencias humanas",
-    "tecnologías de la información",
-    "ingeniería y tecnología avanzada",
-    "negocios",
-    "administración",
-    "finanzas",
-    "marketing",
-    "comunicación",
-    "diseño",
-    "talento",
-    "gestión",
-    "operación de oficinas",
-    "salud",
-    "bienestar",
+    "Psicología, Educación y Ciencias Humanas",
+    "Tecnologías de la Información",
+    "Ingeniería y Tecnología Avanzada",
+    "Negocios, Administración y Finanzas",
+    "Marketing, Comunicación y Diseño",
+    "Talento, Gestión y Operación de Oficinas",
+    "Salud y Bienestar",
   ];
 
   return (

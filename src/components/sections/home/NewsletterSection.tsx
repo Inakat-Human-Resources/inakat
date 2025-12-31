@@ -7,11 +7,23 @@ import decorIcon from "@/assets/images/2-about/28.png";
 
 const NewsletterSection = () => {
   const [email, setEmail] = useState("");
+  const [submitStatus, setSubmitStatus] = useState<{
+    type: 'success' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    alert(`Mensaje enviado con: ${email}`);
+    setSubmitStatus({
+      type: 'success',
+      message: 'Se ha enviado correctamente el formulario a INAKAT'
+    });
     setEmail("");
+
+    // Ocultar mensaje después de 5 segundos
+    setTimeout(() => {
+      setSubmitStatus({ type: null, message: '' });
+    }, 5000);
   };
 
   return (
@@ -49,6 +61,16 @@ const NewsletterSection = () => {
               SUSCRIBIRME <span className="ml-1">→</span>
             </button>
           </form>
+
+          {submitStatus.type && (
+            <div className={`mt-4 p-3 rounded-lg text-center ${
+              submitStatus.type === 'success'
+                ? 'bg-white/20 text-white'
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {submitStatus.message}
+            </div>
+          )}
         </div>
 
         {/* Right Column: Decorative Icon */}

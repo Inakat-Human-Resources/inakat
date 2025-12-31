@@ -41,8 +41,26 @@ const CreateJobForm = () => {
     companyRating: '',
     // Campos para pricing
     profile: '',
-    seniority: ''
+    seniority: '',
+    // Campos extendidos
+    habilidades: [] as string[],
+    responsabilidades: '',
+    resultadosEsperados: '',
+    valoresActitudes: '',
+    informacionAdicional: ''
   });
+
+  // Lista de habilidades para checkboxes
+  const HABILIDADES_OPTIONS = [
+    'Comunicación efectiva',
+    'Puntualidad y responsabilidad',
+    'Disponibilidad para trasladarse',
+    'Trabajo en equipo',
+    'Autonomía en la ejecución',
+    'Resolución de problemas',
+    'Apego a procesos o normativas',
+    'Liderazgo o supervisión'
+  ];
 
   const [pricingOptions, setPricingOptions] = useState<PricingOptions>({
     profiles: [],
@@ -117,7 +135,12 @@ const CreateJobForm = () => {
           requirements: job.requirements || '',
           companyRating: job.companyRating ? String(job.companyRating) : '',
           profile: job.profile || '',
-          seniority: job.seniority || ''
+          seniority: job.seniority || '',
+          habilidades: job.habilidades ? JSON.parse(job.habilidades) : [],
+          responsabilidades: job.responsabilidades || '',
+          resultadosEsperados: job.resultadosEsperados || '',
+          valoresActitudes: job.valoresActitudes || '',
+          informacionAdicional: job.informacionAdicional || ''
         });
       } else {
         setLoadError('Error al cargar los datos de la vacante.');
@@ -232,6 +255,7 @@ const CreateJobForm = () => {
           companyRating: formData.companyRating
             ? parseFloat(formData.companyRating)
             : null,
+          habilidades: formData.habilidades.length > 0 ? JSON.stringify(formData.habilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
         })
       });
@@ -315,7 +339,12 @@ const CreateJobForm = () => {
       requirements: '',
       companyRating: '',
       profile: '',
-      seniority: ''
+      seniority: '',
+      habilidades: [],
+      responsabilidades: '',
+      resultadosEsperados: '',
+      valoresActitudes: '',
+      informacionAdicional: ''
     });
     setCalculatedCost(0);
   };
@@ -693,6 +722,82 @@ const CreateJobForm = () => {
             }
             placeholder="Lista los requisitos, habilidades necesarias, experiencia, etc."
             rows={4}
+            className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+          />
+        </div>
+
+        {/* Sección: Habilidades Importantes */}
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <h3 className="font-semibold mb-3">Habilidades y Características Importantes</h3>
+          <p className="text-sm text-gray-600 mb-3">Selecciona las que deben tener mayor peso en evaluación:</p>
+          <div className="grid grid-cols-2 gap-2">
+            {HABILIDADES_OPTIONS.map((hab) => (
+              <label key={hab} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.habilidades.includes(hab)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFormData(prev => ({ ...prev, habilidades: [...prev.habilidades, hab] }));
+                    } else {
+                      setFormData(prev => ({ ...prev, habilidades: prev.habilidades.filter(h => h !== hab) }));
+                    }
+                  }}
+                  className="rounded"
+                />
+                <span className="text-sm">{hab}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Responsabilidades Específicas */}
+        <div>
+          <label className="block text-sm font-semibold mb-1">Responsabilidades Específicas</label>
+          <p className="text-xs text-gray-500 mb-2">Describe qué actividades o funciones realizará el candidato</p>
+          <textarea
+            value={formData.responsabilidades}
+            onChange={(e) => setFormData(prev => ({ ...prev, responsabilidades: e.target.value }))}
+            rows={3}
+            placeholder="Ej: coordinar campañas digitales, revisar facturación mensual, dar seguimiento a clientes..."
+            className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+          />
+        </div>
+
+        {/* Resultados Esperados */}
+        <div>
+          <label className="block text-sm font-semibold mb-1">Resultados Esperados (3-6 meses)</label>
+          <p className="text-xs text-gray-500 mb-2">Indica metas, entregables o indicadores clave de éxito</p>
+          <textarea
+            value={formData.resultadosEsperados}
+            onChange={(e) => setFormData(prev => ({ ...prev, resultadosEsperados: e.target.value }))}
+            rows={3}
+            placeholder="Ej: Reducir errores operativos, aumentar clientes activos, implementar sistema de gestión..."
+            className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+          />
+        </div>
+
+        {/* Valores y Actitudes */}
+        <div>
+          <label className="block text-sm font-semibold mb-1">Valores y Actitudes Esenciales</label>
+          <p className="text-xs text-gray-500 mb-2">Ayúdanos a encontrar a alguien que encaje con tu cultura</p>
+          <textarea
+            value={formData.valoresActitudes}
+            onChange={(e) => setFormData(prev => ({ ...prev, valoresActitudes: e.target.value }))}
+            rows={2}
+            placeholder="Ej: Honestidad, disposición al cambio, orientación a resultados, atención al detalle..."
+            className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+          />
+        </div>
+
+        {/* Información Adicional */}
+        <div>
+          <label className="block text-sm font-semibold mb-1">Información Adicional (Opcional)</label>
+          <textarea
+            value={formData.informacionAdicional}
+            onChange={(e) => setFormData(prev => ({ ...prev, informacionAdicional: e.target.value }))}
+            rows={2}
+            placeholder="Aspectos técnicos, contextuales o estratégicos adicionales..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
           />
         </div>
