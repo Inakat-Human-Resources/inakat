@@ -2,6 +2,18 @@
 'use client';
 
 import React, { useState, useRef, FormEvent, ChangeEvent } from 'react';
+import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
+
+const libraries: ("places")[] = ["places"];
+const mapContainerStyle = {
+  width: '100%',
+  height: '300px',
+  borderRadius: '8px'
+};
+const defaultCenter = {
+  lat: 19.4326, // CDMX por defecto
+  lng: -99.1332
+};
 
 interface FormData {
   nombre: string;
@@ -58,6 +70,16 @@ const FormRegisterForQuotationSection = () => {
   const fileInputIdRef = useRef<HTMLInputElement>(null);
   const fileInputDocRef = useRef<HTMLInputElement>(null);
 
+  // Estados para Google Maps
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  });
+
   // Validaciones mejoradas
   const validateName = (value: string) =>
     /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/.test(value);
@@ -76,6 +98,111 @@ const FormRegisterForQuotationSection = () => {
     if (!rfc) return false;
     const rfcPattern = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
     return rfcPattern.test(rfc.toUpperCase());
+  };
+
+  // Funciones para Google Maps
+  const onAutocompleteLoad = (auto: google.maps.places.Autocomplete) => {
+    setAutocomplete(auto);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+
+        setMapCenter({ lat, lng });
+        setMarkerPosition({ lat, lng });
+
+        // Extraer componentes de la dirección
+        const addressComponents = place.address_components || [];
+
+        let calle = '';
+        let colonia = '';
+        let ciudad = '';
+        let codigoPostal = '';
+
+        addressComponents.forEach((component) => {
+          const types = component.types;
+
+          if (types.includes('street_number')) {
+            calle = component.long_name + ' ' + calle;
+          }
+          if (types.includes('route')) {
+            calle = calle + component.long_name;
+          }
+          if (types.includes('sublocality_level_1') || types.includes('neighborhood')) {
+            colonia = component.long_name;
+          }
+          if (types.includes('locality')) {
+            ciudad = component.long_name;
+          }
+          if (types.includes('postal_code')) {
+            codigoPostal = component.long_name;
+          }
+        });
+
+        // Actualizar el formulario
+        setFormData(prev => ({
+          ...prev,
+          calle: calle.trim() || prev.calle,
+          colonia: colonia || prev.colonia,
+          ciudad: ciudad || prev.ciudad,
+          codigoPostal: codigoPostal || prev.codigoPostal,
+        }));
+      }
+    }
+  };
+
+  const onMapClick = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setMarkerPosition({ lat, lng });
+
+      // Reverse geocoding para obtener la dirección
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results?.[0]) {
+          const addressComponents = results[0].address_components || [];
+
+          let calle = '';
+          let colonia = '';
+          let ciudad = '';
+          let codigoPostal = '';
+
+          addressComponents.forEach((component) => {
+            const types = component.types;
+
+            if (types.includes('street_number')) {
+              calle = component.long_name + ' ' + calle;
+            }
+            if (types.includes('route')) {
+              calle = calle + component.long_name;
+            }
+            if (types.includes('sublocality_level_1') || types.includes('neighborhood')) {
+              colonia = component.long_name;
+            }
+            if (types.includes('locality')) {
+              ciudad = component.long_name;
+            }
+            if (types.includes('postal_code')) {
+              codigoPostal = component.long_name;
+            }
+          });
+
+          setFormData(prev => ({
+            ...prev,
+            calle: calle.trim() || prev.calle,
+            colonia: colonia || prev.colonia,
+            ciudad: ciudad || prev.ciudad,
+            codigoPostal: codigoPostal || prev.codigoPostal,
+          }));
+        }
+      });
+    }
   };
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -579,6 +706,67 @@ const FormRegisterForQuotationSection = () => {
                         required
                       />
                     </div>
+                  </div>
+
+                  {/* Mapa de ubicación */}
+                  <div className="mt-4">
+                    <label className="block mb-2 text-sm font-semibold">
+                      Ubicación en mapa
+                    </label>
+
+                    {loadError && (
+                      <p className="text-red-500 text-sm">Error al cargar el mapa</p>
+                    )}
+
+                    {!isLoaded ? (
+                      <div className="w-full h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
+                        <p className="text-gray-500">Cargando mapa...</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Campo de búsqueda con autocompletado */}
+                        <Autocomplete
+                          onLoad={onAutocompleteLoad}
+                          onPlaceChanged={onPlaceChanged}
+                          options={{
+                            componentRestrictions: { country: 'mx' },
+                            types: ['address']
+                          }}
+                        >
+                          <input
+                            type="text"
+                            placeholder="Busca tu dirección..."
+                            className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 mb-3"
+                          />
+                        </Autocomplete>
+
+                        {/* Mapa */}
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          zoom={15}
+                          center={mapCenter}
+                          onClick={onMapClick}
+                          options={{
+                            streetViewControl: false,
+                            mapTypeControl: false,
+                          }}
+                        >
+                          <Marker
+                            position={markerPosition}
+                            draggable={true}
+                            onDragEnd={(e) => {
+                              if (e.latLng) {
+                                onMapClick(e as google.maps.MapMouseEvent);
+                              }
+                            }}
+                          />
+                        </GoogleMap>
+
+                        <p className="text-xs text-gray-600 mt-2">
+                          Puedes buscar tu dirección o hacer clic en el mapa para ajustar la ubicación
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div>
