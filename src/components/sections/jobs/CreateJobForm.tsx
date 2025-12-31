@@ -62,6 +62,10 @@ const CreateJobForm = () => {
     'Liderazgo o supervisión'
   ];
 
+  // Estado para campo "Otros" en habilidades
+  const [habilidadesOtros, setHabilidadesOtros] = useState('');
+  const [showHabilidadesOtros, setShowHabilidadesOtros] = useState(false);
+
   const [pricingOptions, setPricingOptions] = useState<PricingOptions>({
     profiles: [],
     seniorities: [],
@@ -124,6 +128,18 @@ const CreateJobForm = () => {
 
       if (data.success && data.data) {
         const job = data.data;
+        const parsedHabilidades = job.habilidades ? JSON.parse(job.habilidades) : [];
+
+        // Separar habilidades predefinidas de las custom (Otros)
+        const predefinedHabs = parsedHabilidades.filter((h: string) => HABILIDADES_OPTIONS.includes(h));
+        const customHabs = parsedHabilidades.filter((h: string) => !HABILIDADES_OPTIONS.includes(h));
+
+        // Si hay habilidades custom, activar el campo "Otros"
+        if (customHabs.length > 0) {
+          setShowHabilidadesOtros(true);
+          setHabilidadesOtros(customHabs.join(', '));
+        }
+
         setFormData({
           title: job.title || '',
           company: job.company || '',
@@ -136,7 +152,7 @@ const CreateJobForm = () => {
           companyRating: job.companyRating ? String(job.companyRating) : '',
           profile: job.profile || '',
           seniority: job.seniority || '',
-          habilidades: job.habilidades ? JSON.parse(job.habilidades) : [],
+          habilidades: predefinedHabs,
           responsabilidades: job.responsabilidades || '',
           resultadosEsperados: job.resultadosEsperados || '',
           valoresActitudes: job.valoresActitudes || '',
@@ -247,6 +263,12 @@ const CreateJobForm = () => {
       const url = isEditing ? `/api/jobs/${editJobId}` : '/api/jobs';
       const method = isEditing ? 'PUT' : 'POST';
 
+      // Combinar habilidades predefinidas con las custom (Otros)
+      const allHabilidades = [...formData.habilidades];
+      if (showHabilidadesOtros && habilidadesOtros.trim()) {
+        allHabilidades.push(habilidadesOtros.trim());
+      }
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -255,7 +277,7 @@ const CreateJobForm = () => {
           companyRating: formData.companyRating
             ? parseFloat(formData.companyRating)
             : null,
-          habilidades: formData.habilidades.length > 0 ? JSON.stringify(formData.habilidades) : null,
+          habilidades: allHabilidades.length > 0 ? JSON.stringify(allHabilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
         })
       });
@@ -347,6 +369,8 @@ const CreateJobForm = () => {
       informacionAdicional: ''
     });
     setCalculatedCost(0);
+    setHabilidadesOtros('');
+    setShowHabilidadesOtros(false);
   };
 
   const workModeLabels: Record<string, string> = {
@@ -748,7 +772,34 @@ const CreateJobForm = () => {
                 <span className="text-sm">{hab}</span>
               </label>
             ))}
+            {/* Opción "Otros" */}
+            <label className="flex items-center gap-2 cursor-pointer col-span-2 mt-2">
+              <input
+                type="checkbox"
+                checked={showHabilidadesOtros}
+                onChange={(e) => {
+                  setShowHabilidadesOtros(e.target.checked);
+                  if (!e.target.checked) {
+                    setHabilidadesOtros('');
+                  }
+                }}
+                className="rounded"
+              />
+              <span className="text-sm font-medium">Otros (especifica)</span>
+            </label>
           </div>
+          {/* Campo de texto para "Otros" */}
+          {showHabilidadesOtros && (
+            <div className="mt-3">
+              <input
+                type="text"
+                value={habilidadesOtros}
+                onChange={(e) => setHabilidadesOtros(e.target.value)}
+                placeholder="Especifica otras habilidades importantes..."
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent text-sm"
+              />
+            </div>
+          )}
         </div>
 
         {/* Responsabilidades Específicas */}

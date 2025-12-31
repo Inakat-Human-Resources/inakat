@@ -96,9 +96,9 @@ const CompanyRequestTable = ({
               <td className="p-3 flex justify-center gap-2">
                 <button
                   onClick={() => onEdit(req.id)}
-                  className="bg-gray-300 hover:bg-gray-400 text-black font-semibold px-4 py-1 rounded"
+                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-semibold px-4 py-1 rounded"
                 >
-                  Ver
+                  {req.status === 'pending' ? 'Ver/Editar' : 'Ver'}
                 </button>
                 {req.status === "pending" && (
                   <>

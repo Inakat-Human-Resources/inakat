@@ -119,6 +119,89 @@ export async function PATCH(
   }
 }
 
+// PUT - Update company request data fields (for editing)
+export async function PUT(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const requestId = parseInt(id);
+
+    if (isNaN(requestId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request ID' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      nombreEmpresa,
+      correoEmpresa,
+      sitioWeb,
+      razonSocial,
+      rfc,
+      direccionEmpresa
+    } = body;
+
+    // Check if request exists
+    const existingRequest = await prisma.companyRequest.findUnique({
+      where: { id: requestId }
+    });
+
+    if (!existingRequest) {
+      return NextResponse.json(
+        { success: false, error: 'Request not found' },
+        { status: 404 }
+      );
+    }
+
+    // Only allow editing pending requests
+    if (existingRequest.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: 'Only pending requests can be edited' },
+        { status: 400 }
+      );
+    }
+
+    // Update the request data
+    const updatedRequest = await prisma.companyRequest.update({
+      where: { id: requestId },
+      data: {
+        nombre: nombre || existingRequest.nombre,
+        apellidoPaterno: apellidoPaterno || existingRequest.apellidoPaterno,
+        apellidoMaterno: apellidoMaterno || existingRequest.apellidoMaterno,
+        nombreEmpresa: nombreEmpresa || existingRequest.nombreEmpresa,
+        correoEmpresa: correoEmpresa || existingRequest.correoEmpresa,
+        sitioWeb: sitioWeb !== undefined ? sitioWeb : existingRequest.sitioWeb,
+        razonSocial: razonSocial || existingRequest.razonSocial,
+        rfc: rfc || existingRequest.rfc,
+        direccionEmpresa: direccionEmpresa || existingRequest.direccionEmpresa,
+        updatedAt: new Date()
+      }
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Company request updated successfully',
+        data: updatedRequest
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error updating company request data:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to update request data' },
+      { status: 500 }
+    );
+  }
+}
+
 // GET - Get single company request by ID
 export async function GET(
   request: Request,
