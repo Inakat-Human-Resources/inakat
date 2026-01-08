@@ -4,7 +4,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Coins, Save, Send, Calculator, ArrowLeft, Loader2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Coins,
+  Save,
+  Send,
+  Calculator,
+  ArrowLeft,
+  Loader2
+} from 'lucide-react';
 
 interface PricingOptions {
   profiles: string[];
@@ -114,7 +122,7 @@ const CreateJobForm = () => {
 
   // Limpiar subcategoría cuando cambia el perfil
   useEffect(() => {
-    setFormData(prev => ({ ...prev, subcategory: '' }));
+    setFormData((prev) => ({ ...prev, subcategory: '' }));
   }, [formData.profile]);
 
   // Calcular costo cuando cambian los campos relevantes
@@ -147,11 +155,17 @@ const CreateJobForm = () => {
 
       if (data.success && data.data) {
         const job = data.data;
-        const parsedHabilidades = job.habilidades ? JSON.parse(job.habilidades) : [];
+        const parsedHabilidades = job.habilidades
+          ? JSON.parse(job.habilidades)
+          : [];
 
         // Separar habilidades predefinidas de las custom (Otros)
-        const predefinedHabs = parsedHabilidades.filter((h: string) => HABILIDADES_OPTIONS.includes(h));
-        const customHabs = parsedHabilidades.filter((h: string) => !HABILIDADES_OPTIONS.includes(h));
+        const predefinedHabs = parsedHabilidades.filter((h: string) =>
+          HABILIDADES_OPTIONS.includes(h)
+        );
+        const customHabs = parsedHabilidades.filter(
+          (h: string) => !HABILIDADES_OPTIONS.includes(h)
+        );
 
         // Si hay habilidades custom, activar el campo "Otros"
         if (customHabs.length > 0) {
@@ -170,6 +184,7 @@ const CreateJobForm = () => {
           requirements: job.requirements || '',
           companyRating: job.companyRating ? String(job.companyRating) : '',
           profile: job.profile || '',
+          subcategory: job.subcategory || '',
           seniority: job.seniority || '',
           habilidades: predefinedHabs,
           responsabilidades: job.responsabilidades || '',
@@ -231,7 +246,7 @@ const CreateJobForm = () => {
               userInfoData.companyName = companyData.data.nombreEmpresa;
               // Pre-llenar el campo company solo si está vacío (no en modo edición)
               if (!editJobId) {
-                setFormData(prev => ({
+                setFormData((prev) => ({
                   ...prev,
                   company: companyData.data.nombreEmpresa
                 }));
@@ -308,7 +323,8 @@ const CreateJobForm = () => {
           companyRating: formData.companyRating
             ? parseFloat(formData.companyRating)
             : null,
-          habilidades: allHabilidades.length > 0 ? JSON.stringify(allHabilidades) : null,
+          habilidades:
+            allHabilidades.length > 0 ? JSON.stringify(allHabilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
         })
       });
@@ -367,13 +383,17 @@ const CreateJobForm = () => {
           }, 1500);
         }
       } else {
-        throw new Error(data.error || `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`);
+        throw new Error(
+          data.error || `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
+        );
       }
     } catch (error) {
       setSubmitStatus({
         type: 'error',
         message:
-          error instanceof Error ? error.message : `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
+          error instanceof Error
+            ? error.message
+            : `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
       });
     } finally {
       setIsSubmitting(false);
@@ -433,7 +453,9 @@ const CreateJobForm = () => {
       <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
         <div className="flex flex-col items-center justify-center py-12">
           <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Error al cargar</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Error al cargar
+          </h2>
           <p className="text-gray-600 mb-6">{loadError}</p>
           <button
             onClick={() => router.push('/company/dashboard')}
@@ -467,8 +489,7 @@ const CreateJobForm = () => {
           <p className="text-gray-600 mt-1">
             {isEditing
               ? 'Modifica la información de la vacante'
-              : 'Completa la información de la vacante'
-            }
+              : 'Completa la información de la vacante'}
           </p>
         </div>
 
@@ -661,8 +682,7 @@ const CreateJobForm = () => {
           <p className="text-sm text-gray-600 mb-4">
             {isEditing
               ? 'Perfil y nivel de experiencia del puesto.'
-              : 'El costo de publicación depende del perfil, nivel de experiencia y modalidad.'
-            }
+              : 'El costo de publicación depende del perfil, nivel de experiencia y modalidad.'}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -681,12 +701,15 @@ const CreateJobForm = () => {
                 <option value="">Selecciona una especialidad</option>
                 {specialties.map((specialty) => (
                   <option key={specialty.id} value={specialty.name}>
-                    {specialty.icon ? `${specialty.icon} ` : ''}{specialty.name}
+                    {specialty.icon ? `${specialty.icon} ` : ''}
+                    {specialty.name}
                   </option>
                 ))}
               </select>
               {specialties.length === 0 && (
-                <p className="text-xs text-gray-500 mt-1">Cargando especialidades...</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cargando especialidades...
+                </p>
               )}
             </div>
 
@@ -714,7 +737,9 @@ const CreateJobForm = () => {
 
           {/* Sub-especialidad (si aplica) */}
           {(() => {
-            const selectedSpecialty = specialties.find(s => s.name === formData.profile);
+            const selectedSpecialty = specialties.find(
+              (s) => s.name === formData.profile
+            );
             const subcategories = selectedSpecialty?.subcategories || [];
             if (subcategories.length === 0) return null;
 
@@ -773,15 +798,18 @@ const CreateJobForm = () => {
             </div>
           )}
 
-          {!isEditing && !hasEnoughCredits && calculatedCost > 0 && userInfo && (
-            <div className="mt-3 flex items-center gap-2 text-red-600">
-              <AlertCircle size={16} />
-              <span className="text-sm">
-                Te faltan {calculatedCost - userInfo.credits} créditos para
-                publicar esta vacante
-              </span>
-            </div>
-          )}
+          {!isEditing &&
+            !hasEnoughCredits &&
+            calculatedCost > 0 &&
+            userInfo && (
+              <div className="mt-3 flex items-center gap-2 text-red-600">
+                <AlertCircle size={16} />
+                <span className="text-sm">
+                  Te faltan {calculatedCost - userInfo.credits} créditos para
+                  publicar esta vacante
+                </span>
+              </div>
+            )}
         </div>
 
         {/* Descripción */}
@@ -819,19 +847,32 @@ const CreateJobForm = () => {
 
         {/* Sección: Habilidades Importantes */}
         <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="font-semibold mb-3">Habilidades y Características Importantes</h3>
-          <p className="text-sm text-gray-600 mb-3">Selecciona las que deben tener mayor peso en evaluación:</p>
+          <h3 className="font-semibold mb-3">
+            Habilidades y Características Importantes
+          </h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Selecciona las que deben tener mayor peso en evaluación:
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {HABILIDADES_OPTIONS.map((hab) => (
-              <label key={hab} className="flex items-center gap-2 cursor-pointer">
+              <label
+                key={hab}
+                className="flex items-center gap-2 cursor-pointer"
+              >
                 <input
                   type="checkbox"
                   checked={formData.habilidades.includes(hab)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setFormData(prev => ({ ...prev, habilidades: [...prev.habilidades, hab] }));
+                      setFormData((prev) => ({
+                        ...prev,
+                        habilidades: [...prev.habilidades, hab]
+                      }));
                     } else {
-                      setFormData(prev => ({ ...prev, habilidades: prev.habilidades.filter(h => h !== hab) }));
+                      setFormData((prev) => ({
+                        ...prev,
+                        habilidades: prev.habilidades.filter((h) => h !== hab)
+                      }));
                     }
                   }}
                   className="rounded"
@@ -871,11 +912,20 @@ const CreateJobForm = () => {
 
         {/* Responsabilidades Específicas */}
         <div>
-          <label className="block text-sm font-semibold mb-1">Responsabilidades Específicas</label>
-          <p className="text-xs text-gray-500 mb-2">Describe qué actividades o funciones realizará el candidato</p>
+          <label className="block text-sm font-semibold mb-1">
+            Responsabilidades Específicas
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Describe qué actividades o funciones realizará el candidato
+          </p>
           <textarea
             value={formData.responsabilidades}
-            onChange={(e) => setFormData(prev => ({ ...prev, responsabilidades: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                responsabilidades: e.target.value
+              }))
+            }
             rows={3}
             placeholder="Ej: coordinar campañas digitales, revisar facturación mensual, dar seguimiento a clientes..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
@@ -884,11 +934,20 @@ const CreateJobForm = () => {
 
         {/* Resultados Esperados */}
         <div>
-          <label className="block text-sm font-semibold mb-1">Resultados Esperados (3-6 meses)</label>
-          <p className="text-xs text-gray-500 mb-2">Indica metas, entregables o indicadores clave de éxito</p>
+          <label className="block text-sm font-semibold mb-1">
+            Resultados Esperados (3-6 meses)
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Indica metas, entregables o indicadores clave de éxito
+          </p>
           <textarea
             value={formData.resultadosEsperados}
-            onChange={(e) => setFormData(prev => ({ ...prev, resultadosEsperados: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                resultadosEsperados: e.target.value
+              }))
+            }
             rows={3}
             placeholder="Ej: Reducir errores operativos, aumentar clientes activos, implementar sistema de gestión..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
@@ -897,11 +956,20 @@ const CreateJobForm = () => {
 
         {/* Valores y Actitudes */}
         <div>
-          <label className="block text-sm font-semibold mb-1">Valores y Actitudes Esenciales</label>
-          <p className="text-xs text-gray-500 mb-2">Ayúdanos a encontrar a alguien que encaje con tu cultura</p>
+          <label className="block text-sm font-semibold mb-1">
+            Valores y Actitudes Esenciales
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Ayúdanos a encontrar a alguien que encaje con tu cultura
+          </p>
           <textarea
             value={formData.valoresActitudes}
-            onChange={(e) => setFormData(prev => ({ ...prev, valoresActitudes: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                valoresActitudes: e.target.value
+              }))
+            }
             rows={2}
             placeholder="Ej: Honestidad, disposición al cambio, orientación a resultados, atención al detalle..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
@@ -910,10 +978,17 @@ const CreateJobForm = () => {
 
         {/* Información Adicional */}
         <div>
-          <label className="block text-sm font-semibold mb-1">Información Adicional (Opcional)</label>
+          <label className="block text-sm font-semibold mb-1">
+            Información Adicional (Opcional)
+          </label>
           <textarea
             value={formData.informacionAdicional}
-            onChange={(e) => setFormData(prev => ({ ...prev, informacionAdicional: e.target.value }))}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                informacionAdicional: e.target.value
+              }))
+            }
             rows={2}
             placeholder="Aspectos técnicos, contextuales o estratégicos adicionales..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
