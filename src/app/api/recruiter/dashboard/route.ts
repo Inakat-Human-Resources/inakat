@@ -74,13 +74,11 @@ export async function GET(request: Request) {
               }
             },
             applications: {
-              where: {
-                // Mostrar candidatos que NO han sido enviados al especialista ni descartados
-                // pending = recién aplicó, reviewing = en revisión por reclutador
-                // injected_by_admin = candidato inyectado por admin
-                // Excluir: sent_to_specialist, sent_to_company, discarded, archived
-                status: { in: ['pending', 'reviewing', 'injected_by_admin'] }
-              },
+              // Mostrar TODAS las applications para el filtrado por pestañas en frontend
+              // pending, injected_by_admin = Sin Revisar
+              // reviewing = En Proceso
+              // sent_to_specialist = Enviadas
+              // discarded = Descartados
               orderBy: { createdAt: 'desc' }
             }
           }
@@ -146,45 +144,39 @@ export async function GET(request: Request) {
       })
     );
 
-    // Obtener candidatos de la base de datos (para asignar a vacantes)
-    // Mostrar candidatos que NO están en estados finales
-    // Esto permite ver candidatos pendientes incluso después de enviar algunos
-    const candidates = await prisma.candidate.findMany({
-      where: {
-        status: {
-          notIn: ['sent_to_specialist', 'sent_to_company', 'discarded', 'rejected', 'accepted', 'archived']
-        }
-      },
-      include: {
-        experiences: {
-          orderBy: { fechaInicio: 'desc' },
-          take: 5
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    // Estadísticas basadas en applications (no en recruiterStatus de asignación)
+    // Contar todas las applications de las vacantes asignadas a este reclutador
+    let pendingCount = 0;
+    let reviewingCount = 0;
+    let sentCount = 0;
+    let discardedCount = 0;
 
-    // Estadísticas
-    const allAssignments = await prisma.jobAssignment.findMany({
-      where: { recruiterId: user.id }
-    });
+    for (const assignment of enrichedAssignments) {
+      for (const app of assignment.job.applications) {
+        if (app.status === 'pending' || app.status === 'injected_by_admin') {
+          pendingCount++;
+        } else if (app.status === 'reviewing') {
+          reviewingCount++;
+        } else if (app.status === 'sent_to_specialist') {
+          sentCount++;
+        } else if (app.status === 'discarded') {
+          discardedCount++;
+        }
+      }
+    }
 
     const stats = {
-      total: allAssignments.length,
-      pending: allAssignments.filter((a) => a.recruiterStatus === 'pending')
-        .length,
-      reviewing: allAssignments.filter((a) => a.recruiterStatus === 'reviewing')
-        .length,
-      sentToSpecialist: allAssignments.filter(
-        (a) => a.recruiterStatus === 'sent_to_specialist'
-      ).length
+      total: enrichedAssignments.length,
+      pending: pendingCount,
+      reviewing: reviewingCount,
+      sentToSpecialist: sentCount,
+      discarded: discardedCount
     };
 
     return NextResponse.json({
       success: true,
       data: {
         assignments: enrichedAssignments,
-        candidates,
         stats,
         recruiter: {
           id: user.id,
@@ -218,7 +210,75 @@ export async function PUT(request: Request) {
 
     const { user } = auth;
     const body = await request.json();
-    const { assignmentId, status, notes, candidateIds, discardApplicationId, discardReason } = body;
+    const { assignmentId, status, notes, candidateIds, discardApplicationId, discardReason, updateApplicationId, newApplicationStatus } = body;
+
+    // Acción: Actualizar status de una application individual (flujo de pestañas)
+    if (updateApplicationId && newApplicationStatus) {
+      const application = await prisma.application.findUnique({
+        where: { id: updateApplicationId },
+        include: { job: true }
+      });
+
+      if (!application) {
+        return NextResponse.json(
+          { success: false, error: 'Aplicación no encontrada' },
+          { status: 404 }
+        );
+      }
+
+      // Verificar que el reclutador tiene asignación a este job
+      const hasAssignment = await prisma.jobAssignment.findFirst({
+        where: { jobId: application.jobId, recruiterId: user.id }
+      });
+
+      if (!hasAssignment && user.role !== 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'No tienes permiso para modificar este candidato' },
+          { status: 403 }
+        );
+      }
+
+      // Validar transiciones permitidas
+      const allowedTransitions: Record<string, string[]> = {
+        'pending': ['reviewing', 'discarded'],
+        'injected_by_admin': ['reviewing', 'discarded'],
+        'reviewing': ['sent_to_specialist', 'discarded'],
+        'discarded': ['reviewing'] // Permite reactivar
+      };
+
+      const currentStatus = application.status;
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      if (!allowed.includes(newApplicationStatus)) {
+        return NextResponse.json(
+          { success: false, error: `No se puede mover de "${currentStatus}" a "${newApplicationStatus}"` },
+          { status: 400 }
+        );
+      }
+
+      // Si envía al especialista, verificar que hay especialista asignado
+      if (newApplicationStatus === 'sent_to_specialist' && !hasAssignment?.specialistId) {
+        return NextResponse.json(
+          { success: false, error: 'No hay especialista asignado a esta vacante' },
+          { status: 400 }
+        );
+      }
+
+      // Actualizar Application
+      const updatedApp = await prisma.application.update({
+        where: { id: updateApplicationId },
+        data: {
+          status: newApplicationStatus,
+          updatedAt: new Date()
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Candidato movido a "${newApplicationStatus}"`,
+        data: updatedApp
+      });
+    }
 
     // Acción: Descartar candidato individual
     if (discardApplicationId) {

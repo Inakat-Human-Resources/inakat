@@ -203,6 +203,7 @@ export async function PUT(request: Request) {
         universidad,
         carrera,
         nivelEstudios,
+        añosExperiencia,
         profile,
         seniority,
         linkedinUrl,
@@ -222,6 +223,7 @@ export async function PUT(request: Request) {
       if (universidad !== undefined) updateCandidateData.universidad = universidad;
       if (carrera !== undefined) updateCandidateData.carrera = carrera;
       if (nivelEstudios !== undefined) updateCandidateData.nivelEstudios = nivelEstudios;
+      if (añosExperiencia !== undefined) updateCandidateData.añosExperiencia = añosExperiencia;
       if (profile !== undefined) updateCandidateData.profile = profile;
       if (seniority !== undefined) updateCandidateData.seniority = seniority;
       if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = linkedinUrl;

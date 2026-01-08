@@ -13,6 +13,15 @@ interface PricingOptions {
   locations: string[];
 }
 
+interface Specialty {
+  id: number;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string;
+  subcategories: string[] | null;
+}
+
 interface UserInfo {
   credits: number;
   role: string;
@@ -41,6 +50,7 @@ const CreateJobForm = () => {
     companyRating: '',
     // Campos para pricing
     profile: '',
+    subcategory: '', // Sub-especialidad
     seniority: '',
     // Campos extendidos
     habilidades: [] as string[],
@@ -49,6 +59,9 @@ const CreateJobForm = () => {
     valoresActitudes: '',
     informacionAdicional: ''
   });
+
+  // Especialidades del catálogo
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
 
   // Lista de habilidades para checkboxes
   const HABILIDADES_OPTIONS = [
@@ -92,11 +105,17 @@ const CreateJobForm = () => {
     }
   }, [editJobId]);
 
-  // Cargar opciones de pricing al montar
+  // Cargar opciones de pricing y especialidades al montar
   useEffect(() => {
     fetchPricingOptions();
     fetchUserInfo();
+    fetchSpecialties();
   }, []);
+
+  // Limpiar subcategoría cuando cambia el perfil
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, subcategory: '' }));
+  }, [formData.profile]);
 
   // Calcular costo cuando cambian los campos relevantes
   useEffect(() => {
@@ -178,6 +197,18 @@ const CreateJobForm = () => {
       }
     } catch (error) {
       console.error('Error fetching pricing options:', error);
+    }
+  };
+
+  const fetchSpecialties = async () => {
+    try {
+      const response = await fetch('/api/specialties?subcategories=true');
+      const data = await response.json();
+      if (data.success) {
+        setSpecialties(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching specialties:', error);
     }
   };
 
@@ -361,6 +392,7 @@ const CreateJobForm = () => {
       requirements: '',
       companyRating: '',
       profile: '',
+      subcategory: '',
       seniority: '',
       habilidades: [],
       responsabilidades: '',
@@ -636,7 +668,7 @@ const CreateJobForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold mb-2">
-                Perfil del Puesto *
+                Especialidad del Puesto *
               </label>
               <select
                 value={formData.profile}
@@ -646,13 +678,16 @@ const CreateJobForm = () => {
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green bg-white"
                 required
               >
-                <option value="">Selecciona un perfil</option>
-                {pricingOptions.profiles.map((profile) => (
-                  <option key={profile} value={profile}>
-                    {profile}
+                <option value="">Selecciona una especialidad</option>
+                {specialties.map((specialty) => (
+                  <option key={specialty.id} value={specialty.name}>
+                    {specialty.icon ? `${specialty.icon} ` : ''}{specialty.name}
                   </option>
                 ))}
               </select>
+              {specialties.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">Cargando especialidades...</p>
+              )}
             </div>
 
             <div>
@@ -676,6 +711,38 @@ const CreateJobForm = () => {
               </select>
             </div>
           </div>
+
+          {/* Sub-especialidad (si aplica) */}
+          {(() => {
+            const selectedSpecialty = specialties.find(s => s.name === formData.profile);
+            const subcategories = selectedSpecialty?.subcategories || [];
+            if (subcategories.length === 0) return null;
+
+            return (
+              <div className="mt-4">
+                <label className="block text-sm font-semibold mb-2">
+                  Sub-especialidad (opcional)
+                </label>
+                <select
+                  value={formData.subcategory}
+                  onChange={(e) =>
+                    setFormData({ ...formData, subcategory: e.target.value })
+                  }
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green bg-white"
+                >
+                  <option value="">Selecciona una sub-especialidad</option>
+                  {subcategories.map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Especifica el área dentro de {formData.profile}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Costo calculado - Solo mostrar para creación */}
           {!isEditing && calculatedCost > 0 && (

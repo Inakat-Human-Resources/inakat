@@ -170,8 +170,11 @@ const SearchPositionsSection = () => {
     return null;
   };
 
-  // Verificar si el usuario puede aplicar (solo candidatos/users)
-  const canApply = !user || user.role === 'user';
+  // Verificar si el usuario puede aplicar
+  // Permitimos: no logueados, candidatos, y usuarios generales
+  // Bloqueamos: empresas, admins, reclutadores, especialistas
+  const blockedRoles = ['company', 'admin', 'recruiter', 'specialist'];
+  const canApply = !user || !blockedRoles.includes(user.role);
 
   return (
     <section className="bg-custom-beige text-text-black pt-20">
@@ -271,6 +274,32 @@ const SearchPositionsSection = () => {
               <p className="font-semibold">Vista de administrador</p>
               <p className="text-sm">
                 Estás viendo las vacantes activas en la plataforma.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso para reclutador */}
+        {user && user.role === 'recruiter' && (
+          <div className="mb-6 p-4 bg-green-50 border-2 border-green-300 text-green-800 rounded-lg flex items-center gap-3">
+            <Building2 size={24} />
+            <div>
+              <p className="font-semibold">Vista de reclutador</p>
+              <p className="text-sm">
+                Estás viendo las vacantes activas. Para gestionar candidatos, ve a tu dashboard.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso para especialista */}
+        {user && user.role === 'specialist' && (
+          <div className="mb-6 p-4 bg-indigo-50 border-2 border-indigo-300 text-indigo-800 rounded-lg flex items-center gap-3">
+            <Building2 size={24} />
+            <div>
+              <p className="font-semibold">Vista de especialista</p>
+              <p className="text-sm">
+                Estás viendo las vacantes activas. Para evaluar candidatos, ve a tu dashboard.
               </p>
             </div>
           </div>
@@ -423,9 +452,10 @@ const SearchPositionsSection = () => {
                     </button>
                   ) : (
                     <div className="mt-6 p-4 bg-gray-100 rounded-lg text-center text-gray-600">
-                      {user?.role === 'company'
-                        ? '🏢 Las empresas no pueden aplicar a vacantes'
-                        : '👤 Inicia sesión como candidato para aplicar'}
+                      {user?.role === 'company' && '🏢 Las empresas no pueden aplicar a vacantes'}
+                      {user?.role === 'admin' && '⚙️ Los administradores no pueden aplicar a vacantes'}
+                      {user?.role === 'recruiter' && '📋 Los reclutadores no pueden aplicar a vacantes'}
+                      {user?.role === 'specialist' && '👔 Los especialistas no pueden aplicar a vacantes'}
                     </div>
                   )}
                 </div>

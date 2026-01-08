@@ -167,11 +167,51 @@ export async function POST(request: Request) {
       }
     });
 
+    // Auto-generar 12 combinaciones en PricingMatrix
+    const workModes = ['presential', 'hybrid', 'remote'];
+    const seniorityLevels = ['Director', 'Sr', 'Middle', 'Jr'];
+
+    // Créditos base por seniority
+    const baseCredits: Record<string, number> = {
+      'Director': 10,
+      'Sr': 8,
+      'Middle': 6,
+      'Jr': 4
+    };
+
+    // Ajuste por modalidad
+    const workModeBonus: Record<string, number> = {
+      'presential': 0,
+      'hybrid': 1,
+      'remote': 2
+    };
+
+    const pricingData = [];
+    for (const workMode of workModes) {
+      for (const seniority of seniorityLevels) {
+        const credits = baseCredits[seniority] + workModeBonus[workMode];
+        pricingData.push({
+          profile: specialty.name,
+          seniority,
+          workMode,
+          location: null,
+          credits,
+          isActive: true
+        });
+      }
+    }
+
+    await prisma.pricingMatrix.createMany({
+      data: pricingData,
+      skipDuplicates: true
+    });
+
     return NextResponse.json(
       {
         success: true,
-        message: 'Especialidad creada exitosamente',
-        data: specialty
+        message: `Especialidad creada exitosamente con ${pricingData.length} precios generados`,
+        data: specialty,
+        pricingGenerated: pricingData.length
       },
       { status: 201 }
     );

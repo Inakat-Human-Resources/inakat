@@ -92,6 +92,7 @@ export default function ProfilePage() {
   const [universidad, setUniversidad] = useState('');
   const [carrera, setCarrera] = useState('');
   const [nivelEstudios, setNivelEstudios] = useState('');
+  const [añosExperiencia, setAñosExperiencia] = useState<number | ''>('');
   const [profileField, setProfileField] = useState('');
   const [seniority, setSeniority] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
@@ -150,6 +151,7 @@ export default function ProfilePage() {
           setUniversidad(c.universidad || '');
           setCarrera(c.carrera || '');
           setNivelEstudios(c.nivelEstudios || '');
+          setAñosExperiencia(c.añosExperiencia ?? '');
           setProfileField(c.profile || '');
           setSeniority(c.seniority || '');
           setLinkedinUrl(c.linkedinUrl || '');
@@ -210,6 +212,7 @@ export default function ProfilePage() {
           universidad,
           carrera,
           nivelEstudios,
+          añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,
           profile: profileField,
           seniority,
           linkedinUrl,
@@ -678,6 +681,21 @@ export default function ProfilePage() {
                     <option value="Maestría">Maestría</option>
                     <option value="Doctorado">Doctorado</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Años de Experiencia
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={añosExperiencia}
+                    onChange={(e) => setAñosExperiencia(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Ej: 5"
+                  />
                 </div>
 
                 <div>

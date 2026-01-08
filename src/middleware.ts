@@ -25,6 +25,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Excepción: POST a upload es público (para registro de empresas)
+  if (pathname === '/api/upload' && request.method === 'POST') {
+    return NextResponse.next();
+  }
+
   // Obtener token de las cookies
   const token = request.cookies.get('auth-token')?.value;
 

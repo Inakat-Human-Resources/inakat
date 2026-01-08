@@ -52,6 +52,7 @@ export default function AssignCandidatesPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set());
   const [alreadyAssigned, setAlreadyAssigned] = useState<Set<string>>(new Set());
+  const [candidateAssignments, setCandidateAssignments] = useState<Record<string, number>>({});
 
   // Loading states
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
@@ -124,14 +125,21 @@ export default function AssignCandidatesPage() {
       if (searchTerm) params.append('search', searchTerm);
       if (profileFilter) params.append('profile', profileFilter);
       if (seniorityFilter) params.append('seniority', seniorityFilter);
-      // Solo mostrar candidatos disponibles o en proceso
-      params.append('status', 'available');
+      // NO filtrar por status para permitir asignar candidatos a múltiples vacantes
+      // Los candidatos "available" e "in_process" pueden ser asignados
 
       const response = await fetch(`/api/admin/candidates?${params}`);
       const data = await response.json();
 
       if (data.success) {
-        setCandidates(data.data);
+        // Filtrar solo available e in_process (excluir hired e inactive)
+        const filteredCandidates = data.data.filter(
+          (c: Candidate) => c.status === 'available' || c.status === 'in_process'
+        );
+        setCandidates(filteredCandidates);
+
+        // Obtener conteo de asignaciones por candidato
+        await fetchCandidateAssignments(filteredCandidates);
       } else {
         setError('Error al cargar candidatos');
       }
@@ -139,6 +147,28 @@ export default function AssignCandidatesPage() {
       setError('Error de conexión');
     } finally {
       setIsLoadingCandidates(false);
+    }
+  };
+
+  // Obtener cuántas vacantes tiene asignadas cada candidato
+  const fetchCandidateAssignments = async (candidateList: Candidate[]) => {
+    try {
+      const emails = candidateList.map(c => c.email.toLowerCase());
+      const response = await fetch('/api/applications');
+      const data = await response.json();
+
+      if (data.success) {
+        const counts: Record<string, number> = {};
+        for (const app of data.data) {
+          const email = app.candidateEmail?.toLowerCase();
+          if (email && emails.includes(email)) {
+            counts[email] = (counts[email] || 0) + 1;
+          }
+        }
+        setCandidateAssignments(counts);
+      }
+    } catch (err) {
+      console.error('Error fetching assignments:', err);
     }
   };
 
@@ -447,6 +477,7 @@ export default function AssignCandidatesPage() {
                         {candidates.map(candidate => {
                           const isAlreadyAssigned = alreadyAssigned.has(candidate.email.toLowerCase());
                           const isSelected = selectedCandidates.has(candidate.id);
+                          const assignmentCount = candidateAssignments[candidate.email.toLowerCase()] || 0;
 
                           return (
                             <div
@@ -472,13 +503,20 @@ export default function AssignCandidatesPage() {
                                 </div>
 
                                 <div className="flex-1">
-                                  <div className="flex items-center justify-between">
-                                    <p className="font-semibold text-gray-900">
-                                      {candidate.nombre} {candidate.apellidoPaterno}
-                                    </p>
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-semibold text-gray-900">
+                                        {candidate.nombre} {candidate.apellidoPaterno}
+                                      </p>
+                                      {assignmentCount > 0 && (
+                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                                          {assignmentCount} vacante{assignmentCount > 1 ? 's' : ''}
+                                        </span>
+                                      )}
+                                    </div>
                                     {isAlreadyAssigned && (
                                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                        Ya asignado
+                                        Ya en esta vacante
                                       </span>
                                     )}
                                   </div>

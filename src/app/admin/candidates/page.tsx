@@ -17,9 +17,22 @@ import {
   Briefcase,
   GraduationCap,
   ChevronDown,
-  X
+  X,
+  FileText,
+  Upload,
+  Paperclip,
+  Loader2
 } from 'lucide-react';
 import CandidateForm from '@/components/sections/admin/CandidateForm';
+
+interface CandidateDocument {
+  id: number;
+  candidateId: number;
+  name: string;
+  fileUrl: string;
+  fileType: string | null;
+  createdAt: string;
+}
 
 interface Candidate {
   id: number;
@@ -60,6 +73,13 @@ export default function AdminCandidatesPage() {
   const [candidateToView, setCandidateToView] = useState<Candidate | null>(
     null
   );
+
+  // Estados para documentos
+  const [documents, setDocuments] = useState<CandidateDocument[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [showAddDoc, setShowAddDoc] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   // Filtros
   const [showFilters, setShowFilters] = useState(false);
@@ -185,8 +205,98 @@ export default function AdminCandidatesPage() {
   };
 
   // Ver candidato
-  const handleView = (candidate: Candidate) => {
+  const handleView = async (candidate: Candidate) => {
     setCandidateToView(candidate);
+    // Cargar documentos del candidato
+    await fetchDocuments(candidate.id);
+  };
+
+  // Cargar documentos de un candidato
+  const fetchDocuments = async (candidateId: number) => {
+    try {
+      setIsLoadingDocs(true);
+      const response = await fetch(`/api/admin/candidates/${candidateId}/documents`);
+      const data = await response.json();
+      if (data.success) {
+        setDocuments(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  // Subir archivo y agregar documento
+  const handleAddDocument = async (file: File) => {
+    if (!candidateToView || !newDocName.trim()) return;
+
+    try {
+      setIsUploadingDoc(true);
+
+      // 1. Subir archivo
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+
+      if (!uploadData.success) {
+        alert(uploadData.error || 'Error al subir archivo');
+        return;
+      }
+
+      // 2. Crear documento en BD
+      const docRes = await fetch(`/api/admin/candidates/${candidateToView.id}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newDocName.trim(),
+          fileUrl: uploadData.url,
+          fileType: file.type
+        })
+      });
+      const docData = await docRes.json();
+
+      if (docData.success) {
+        setDocuments([docData.data, ...documents]);
+        setNewDocName('');
+        setShowAddDoc(false);
+      } else {
+        alert(docData.error || 'Error al guardar documento');
+      }
+    } catch (error) {
+      console.error('Error adding document:', error);
+      alert('Error al agregar documento');
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  // Eliminar documento
+  const handleDeleteDocument = async (docId: number) => {
+    if (!candidateToView) return;
+    if (!confirm('¿Eliminar este documento?')) return;
+
+    try {
+      const response = await fetch(
+        `/api/admin/candidates/${candidateToView.id}/documents?documentId=${docId}`,
+        { method: 'DELETE' }
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        setDocuments(documents.filter(d => d.id !== docId));
+      } else {
+        alert(data.error || 'Error al eliminar');
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Error al eliminar documento');
+    }
   };
 
   // Nuevo candidato
@@ -763,7 +873,12 @@ export default function AdminCandidatesPage() {
                 <p className="text-gray-600">{candidateToView.email}</p>
               </div>
               <button
-                onClick={() => setCandidateToView(null)}
+                onClick={() => {
+                  setCandidateToView(null);
+                  setDocuments([]);
+                  setShowAddDoc(false);
+                  setNewDocName('');
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={24} />
@@ -857,7 +972,7 @@ export default function AdminCandidatesPage() {
                 </div>
               )}
 
-              <div className="flex gap-2 pt-4 border-t">
+              <div className="flex flex-wrap gap-2 pt-4 border-t">
                 {candidateToView.cvUrl && (
                   <a
                     href={candidateToView.cvUrl}
@@ -890,6 +1005,139 @@ export default function AdminCandidatesPage() {
                     <ExternalLink size={16} />
                     Portafolio
                   </a>
+                )}
+              </div>
+
+              {/* Sección de Documentos */}
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-sm text-gray-500 font-medium flex items-center gap-2">
+                    <Paperclip size={16} />
+                    Documentos Adicionales
+                  </p>
+                  <button
+                    onClick={() => setShowAddDoc(!showAddDoc)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <Plus size={16} />
+                    Agregar
+                  </button>
+                </div>
+
+                {/* Formulario para agregar documento */}
+                {showAddDoc && (
+                  <div className="bg-gray-50 p-4 rounded-lg mb-3">
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium mb-1">
+                        Nombre del documento
+                      </label>
+                      <input
+                        type="text"
+                        value={newDocName}
+                        onChange={(e) => setNewDocName(e.target.value)}
+                        placeholder="Ej: CV Actualizado, Carta de Recomendación..."
+                        className="w-full p-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                          isUploadingDoc
+                            ? 'bg-gray-100 border-gray-300'
+                            : newDocName.trim()
+                            ? 'border-blue-300 hover:border-blue-500 hover:bg-blue-50'
+                            : 'border-gray-300 bg-gray-100 cursor-not-allowed'
+                        }`}
+                      >
+                        {isUploadingDoc ? (
+                          <>
+                            <Loader2 size={18} className="animate-spin" />
+                            <span className="text-sm">Subiendo...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={18} />
+                            <span className="text-sm">
+                              {newDocName.trim() ? 'Seleccionar archivo' : 'Ingresa nombre primero'}
+                            </span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.webp"
+                          className="hidden"
+                          disabled={!newDocName.trim() || isUploadingDoc}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleAddDocument(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      <button
+                        onClick={() => {
+                          setShowAddDoc(false);
+                          setNewDocName('');
+                        }}
+                        className="px-3 py-2 text-gray-500 hover:text-gray-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Formatos: PDF, JPG, PNG, WEBP. Máximo 5MB.
+                    </p>
+                  </div>
+                )}
+
+                {/* Lista de documentos */}
+                {isLoadingDocs ? (
+                  <div className="flex items-center justify-center py-4 text-gray-400">
+                    <Loader2 size={20} className="animate-spin mr-2" />
+                    Cargando documentos...
+                  </div>
+                ) : documents.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No hay documentos adicionales
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText size={20} className="text-gray-400" />
+                          <div>
+                            <p className="font-medium text-sm">{doc.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(doc.createdAt).toLocaleDateString('es-MX')}
+                              {doc.fileType && ` - ${doc.fileType.split('/')[1]?.toUpperCase()}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={doc.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                            title="Ver/Descargar"
+                          >
+                            <Download size={16} />
+                          </a>
+                          <button
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="p-2 text-red-500 hover:bg-red-100 rounded"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

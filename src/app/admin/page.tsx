@@ -22,7 +22,13 @@ import {
   ArrowUpDown,
   DollarSign,
   Settings,
-  Layers
+  Layers,
+  X,
+  MapPin,
+  Calendar,
+  Banknote,
+  Monitor,
+  GraduationCap
 } from 'lucide-react';
 
 interface Job {
@@ -35,6 +41,18 @@ interface Job {
   seniority: string | null;
   createdAt: string;
   userId: number | null;
+  salary?: string;
+  jobType?: string;
+  workMode?: string;
+  description?: string;
+  requirements?: string | null;
+  habilidades?: string | null;
+  responsabilidades?: string | null;
+  resultadosEsperados?: string | null;
+  valoresActitudes?: string | null;
+  informacionAdicional?: string | null;
+  expiresAt?: string | null;
+  creditCost?: number;
   user?: {
     id: number;
     nombre: string;
@@ -70,9 +88,13 @@ export default function AdminDashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
+  const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Estado para ordenamiento de tabla
   const [sortField, setSortField] = useState<string>('createdAt');
@@ -83,13 +105,16 @@ export default function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Filtrar vacantes cuando cambia la empresa seleccionada
+    // Filtrar vacantes cuando cambia la empresa o especialidad seleccionada
+    let filtered = jobs;
     if (selectedCompany) {
-      setFilteredJobs(jobs.filter(j => j.company === selectedCompany));
-    } else {
-      setFilteredJobs(jobs);
+      filtered = filtered.filter(j => j.company === selectedCompany);
     }
-  }, [selectedCompany, jobs]);
+    if (selectedProfile) {
+      filtered = filtered.filter(j => j.profile === selectedProfile);
+    }
+    setFilteredJobs(filtered);
+  }, [selectedCompany, selectedProfile, jobs]);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -120,6 +145,10 @@ export default function AdminDashboardPage() {
         // Extraer empresas únicas
         const uniqueCompanies = [...new Set(allJobs.map((j: Job) => j.company))].sort() as string[];
         setCompanies(uniqueCompanies);
+
+        // Extraer especialidades únicas (excluyendo null/undefined)
+        const uniqueProfiles = [...new Set(allJobs.map((j: Job) => j.profile).filter(Boolean))].sort() as string[];
+        setProfiles(uniqueProfiles);
 
         // Calcular stats de vacantes
         setStats(prev => ({
@@ -197,6 +226,10 @@ export default function AdminDashboardPage() {
       case 'status':
         aVal = a.status || '';
         bVal = b.status || '';
+        break;
+      case 'profile':
+        aVal = a.profile?.toLowerCase() || '';
+        bVal = b.profile?.toLowerCase() || '';
         break;
       default:
         aVal = '';
@@ -351,8 +384,8 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Accesos rápidos - Grid responsive 2 columnas en móvil, 4 en desktop */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+        {/* Accesos rápidos - Grid de 2 columnas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           <Link
             href="/admin/requests"
             className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
@@ -479,20 +512,38 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-gray-600">Filtrar por empresa:</label>
-                <div className="relative">
-                  <select
-                    value={selectedCompany}
-                    onChange={(e) => setSelectedCompany(e.target.value)}
-                    className="appearance-none px-4 py-2 pr-10 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-                  >
-                    <option value="">Todas las empresas</option>
-                    {companies.map(company => (
-                      <option key={company} value={company}>{company}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Empresa:</label>
+                  <div className="relative">
+                    <select
+                      value={selectedCompany}
+                      onChange={(e) => setSelectedCompany(e.target.value)}
+                      className="appearance-none px-4 py-2 pr-10 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                    >
+                      <option value="">Todas</option>
+                      {companies.map(company => (
+                        <option key={company} value={company}>{company}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Especialidad:</label>
+                  <div className="relative">
+                    <select
+                      value={selectedProfile}
+                      onChange={(e) => setSelectedProfile(e.target.value)}
+                      className="appearance-none px-4 py-2 pr-10 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                    >
+                      <option value="">Todas</option>
+                      {profiles.map(profile => (
+                        <option key={profile} value={profile}>{profile}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -505,6 +556,7 @@ export default function AdminDashboardPage() {
                 <tr>
                   <SortableHeader field="title" className="text-left">Vacante</SortableHeader>
                   <SortableHeader field="company" className="text-left">Empresa</SortableHeader>
+                  <SortableHeader field="profile" className="text-left">Especialidad</SortableHeader>
                   <SortableHeader field="location" className="text-left">Ubicación</SortableHeader>
                   <SortableHeader field="applications">Candidatos</SortableHeader>
                   <SortableHeader field="status">Estado</SortableHeader>
@@ -515,10 +567,10 @@ export default function AdminDashboardPage() {
               <tbody className="divide-y">
                 {sortedJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                       <Briefcase className="mx-auto mb-2 text-gray-400" size={40} />
-                      {selectedCompany
-                        ? `No hay vacantes para ${selectedCompany}`
+                      {selectedCompany || selectedProfile
+                        ? 'No hay vacantes con los filtros seleccionados'
                         : 'No hay vacantes registradas'
                       }
                     </td>
@@ -529,22 +581,24 @@ export default function AdminDashboardPage() {
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-medium text-gray-900">{job.title}</p>
-                          <div className="flex gap-2 mt-1">
-                            {job.profile && (
-                              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                                {job.profile}
-                              </span>
-                            )}
-                            {job.seniority && (
-                              <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                                {job.seniority}
-                              </span>
-                            )}
-                          </div>
+                          {job.seniority && (
+                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                              {job.seniority}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm text-gray-900 font-medium">{job.company}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {job.profile ? (
+                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded font-medium">
+                            {job.profile}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm text-gray-600">{job.location}</p>
@@ -566,13 +620,16 @@ export default function AdminDashboardPage() {
                         </p>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <Link
-                          href={`/admin/assign-candidates?jobId=${job.id}`}
+                        <button
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setIsModalOpen(true);
+                          }}
                           className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm"
                         >
                           <Eye size={14} />
                           Ver
-                        </Link>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -591,6 +648,170 @@ export default function AdminDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Modal de detalles de vacante */}
+      {isModalOpen && selectedJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header del modal */}
+            <div className="flex justify-between items-start p-6 border-b bg-gray-50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedJob.title}</h2>
+                <p className="text-gray-600 flex items-center gap-2 mt-1">
+                  <Building2 size={16} />
+                  {selectedJob.company}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedJob(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Contenido del modal con scroll */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Info básica en grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin size={16} className="text-gray-400" />
+                  <span>{selectedJob.location}</span>
+                </div>
+                {selectedJob.salary && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Banknote size={16} className="text-gray-400" />
+                    <span>{selectedJob.salary}</span>
+                  </div>
+                )}
+                {selectedJob.jobType && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock size={16} className="text-gray-400" />
+                    <span>{selectedJob.jobType}</span>
+                  </div>
+                )}
+                {selectedJob.workMode && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Monitor size={16} className="text-gray-400" />
+                    <span>
+                      {selectedJob.workMode === 'remote' ? 'Remoto' :
+                       selectedJob.workMode === 'hybrid' ? 'Híbrido' : 'Presencial'}
+                    </span>
+                  </div>
+                )}
+                {selectedJob.profile && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Briefcase size={16} className="text-gray-400" />
+                    <span>{selectedJob.profile}</span>
+                  </div>
+                )}
+                {selectedJob.seniority && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <GraduationCap size={16} className="text-gray-400" />
+                    <span>{selectedJob.seniority}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Badges de estado */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {getStatusBadge(selectedJob.status)}
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <Users size={14} />
+                  {selectedJob._count?.applications || 0} candidatos
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                  <Calendar size={14} />
+                  {new Date(selectedJob.createdAt).toLocaleDateString('es-MX', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
+                </span>
+              </div>
+
+              {/* Descripción */}
+              {selectedJob.description && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Descripción</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.description}</p>
+                </div>
+              )}
+
+              {/* Requisitos */}
+              {selectedJob.requirements && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Requisitos</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.requirements}</p>
+                </div>
+              )}
+
+              {/* Responsabilidades */}
+              {selectedJob.responsabilidades && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Responsabilidades</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.responsabilidades}</p>
+                </div>
+              )}
+
+              {/* Habilidades */}
+              {selectedJob.habilidades && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Habilidades</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.habilidades}</p>
+                </div>
+              )}
+
+              {/* Resultados Esperados */}
+              {selectedJob.resultadosEsperados && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Resultados Esperados</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.resultadosEsperados}</p>
+                </div>
+              )}
+
+              {/* Valores y Actitudes */}
+              {selectedJob.valoresActitudes && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Valores y Actitudes</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.valoresActitudes}</p>
+                </div>
+              )}
+
+              {/* Información Adicional */}
+              {selectedJob.informacionAdicional && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">Información Adicional</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm">{selectedJob.informacionAdicional}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer del modal */}
+            <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+              <Link
+                href={`/admin/assign-candidates?jobId=${selectedJob.id}`}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Users size={16} />
+                Ver/Asignar Candidatos
+              </Link>
+              <button
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedJob(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

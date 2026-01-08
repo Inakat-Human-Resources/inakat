@@ -130,7 +130,8 @@ model Job {
   creditCost      Int       @default(0) // Cuántos créditos costó publicar
   
   // Campos para calcular costo
-  profile         String?   // "Tecnología", "Diseño Gráfico", etc.
+  profile         String?   // "Tecnología", "Diseño Gráfico", etc. (del catálogo de especialidades)
+  subcategory     String?   // Sub-especialidad dentro del profile
   seniority       String?   // "Practicante", "Jr", "Middle", "Sr", "Director"
 
   // Campos extendidos para mejor matching
@@ -364,6 +365,7 @@ model Candidate {
 
   // Relaciones
   experiences     Experience[]
+  documents       CandidateDocument[]
 
   // Vincular con cuenta de usuario (opcional, para que candidato pueda loguearse)
   userId          Int?      @unique
@@ -411,6 +413,28 @@ model Experience {
   @@index([candidateId])
   @@index([empresa])
   @@index([fechaInicio])
+}
+
+// =============================================
+// DOCUMENTOS DE CANDIDATOS
+// =============================================
+model CandidateDocument {
+  id            Int       @id @default(autoincrement())
+
+  // Relación con candidato
+  candidateId   Int
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // Datos del documento
+  name          String    // Nombre descriptivo del documento
+  fileUrl       String    // URL del archivo en Vercel Blob
+  fileType      String?   // MIME type (pdf, image/jpeg, etc.)
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([candidateId])
 }
 
 // =============================================

@@ -125,6 +125,7 @@ export async function POST(request: Request) {
       companyRating,
       expiresAt,
       profile,
+      subcategory,
       seniority,
       publishNow
     } = body;
@@ -141,6 +142,34 @@ export async function POST(request: Request) {
         { success: false, error: 'Faltan campos requeridos' },
         { status: 400 }
       );
+    }
+
+    // Validar que la especialidad (profile) existe en el catálogo
+    if (profile) {
+      const specialtyExists = await prisma.specialty.findFirst({
+        where: {
+          name: profile,
+          isActive: true
+        }
+      });
+
+      if (!specialtyExists) {
+        return NextResponse.json(
+          { success: false, error: 'La especialidad seleccionada no es válida o no está activa' },
+          { status: 400 }
+        );
+      }
+
+      // Si hay subcategoría, validar que existe dentro de la especialidad
+      if (subcategory && specialtyExists.subcategories) {
+        const subcategories = specialtyExists.subcategories as string[];
+        if (!subcategories.includes(subcategory)) {
+          return NextResponse.json(
+            { success: false, error: 'La sub-especialidad seleccionada no es válida para esta especialidad' },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Calcular costo en créditos usando la función centralizada
@@ -196,7 +225,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear vacante SIN isRemote
+    // Crear vacante
     const job = await prisma.job.create({
       data: {
         title,
@@ -212,6 +241,7 @@ export async function POST(request: Request) {
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         status: initialStatus,
         profile: profile || null,
+        subcategory: subcategory || null,
         seniority: seniority || null,
         creditCost: initialStatus === 'active' ? creditCost : 0
       }
