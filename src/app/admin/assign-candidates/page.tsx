@@ -53,6 +53,7 @@ export default function AssignCandidatesPage() {
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set());
   const [alreadyAssigned, setAlreadyAssigned] = useState<Set<string>>(new Set());
   const [candidateAssignments, setCandidateAssignments] = useState<Record<string, number>>({});
+  const [specialties, setSpecialties] = useState<{id: number, name: string}[]>([]);
 
   // Loading states
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
@@ -69,21 +70,25 @@ export default function AssignCandidatesPage() {
   const [seniorityFilter, setSeniorityFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  const profiles = [
-    'Tecnología',
-    'Arquitectura',
-    'Diseño Gráfico',
-    'Producción Audiovisual',
-    'Educación',
-    'Administración de Oficina',
-    'Finanzas'
-  ];
-
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
 
-  // Cargar vacantes activas
+  // Cargar especialidades desde el catálogo
+  const fetchSpecialties = async () => {
+    try {
+      const response = await fetch('/api/specialties');
+      const data = await response.json();
+      if (data.success) {
+        setSpecialties(data.data.filter((s: { id: number; name: string; isActive: boolean }) => s.isActive));
+      }
+    } catch (err) {
+      console.error('Error fetching specialties:', err);
+    }
+  };
+
+  // Cargar vacantes activas y especialidades
   useEffect(() => {
     fetchJobs();
+    fetchSpecialties();
   }, []);
 
   // Cargar candidatos cuando cambia la vacante seleccionada
@@ -411,8 +416,8 @@ export default function AssignCandidatesPage() {
                             className="w-full p-2 border rounded-lg"
                           >
                             <option value="">Todos</option>
-                            {profiles.map(p => (
-                              <option key={p} value={p}>{p}</option>
+                            {specialties.map(s => (
+                              <option key={s.id} value={s.name}>{s.name}</option>
                             ))}
                           </select>
                         </div>
