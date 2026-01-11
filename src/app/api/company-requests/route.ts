@@ -112,7 +112,6 @@ export async function POST(request: Request) {
           apellidoMaterno,
           role: "company",
           isActive: true,
-          emailVerified: false,
           companyRequest: {
             connect: { id: companyRequest.id }
           }
