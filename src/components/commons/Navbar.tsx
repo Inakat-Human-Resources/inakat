@@ -231,7 +231,7 @@ const Navbar = () => {
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 border border-gray-200">
+                  <div className="absolute right-0 mt-2 w-[420px] bg-white rounded-lg shadow-lg py-2 border border-gray-200">
                     {/* User Info */}
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-semibold text-gray-900">
@@ -332,6 +332,11 @@ const Navbar = () => {
                     {/* Menú Admin completo */}
                     {user.role === 'admin' && (
                       <>
+                        {/* Separador antes del grid */}
+                        <div className="border-t border-gray-200 my-1"></div>
+
+                        {/* Grid de 2 columnas para opciones admin */}
+                        <div className="grid grid-cols-2 gap-1">
                         {/* Solicitudes de Empresas */}
                         <Link
                           href="/admin/requests"
@@ -595,6 +600,8 @@ const Navbar = () => {
                           </svg>
                           Vendedores
                         </Link>
+                        </div>
+                        {/* Fin del grid de 2 columnas */}
                       </>
                     )}
 
