@@ -53,7 +53,11 @@ export default function AssignCandidatesPage() {
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set());
   const [alreadyAssigned, setAlreadyAssigned] = useState<Set<string>>(new Set());
   const [candidateAssignments, setCandidateAssignments] = useState<Record<string, number>>({});
-  const [specialties, setSpecialties] = useState<{id: number, name: string}[]>([]);
+  const [specialties, setSpecialties] = useState<{
+    id: number;
+    name: string;
+    subcategories: string[];
+  }[]>([]);
 
   // Loading states
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
@@ -68,6 +72,7 @@ export default function AssignCandidatesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
   const [seniorityFilter, setSeniorityFilter] = useState('');
+  const [subcategoryFilter, setSubcategoryFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
@@ -75,14 +80,22 @@ export default function AssignCandidatesPage() {
   // Cargar especialidades desde el catálogo
   const fetchSpecialties = async () => {
     try {
-      const response = await fetch('/api/specialties');
+      const response = await fetch('/api/specialties?subcategories=true');
       const data = await response.json();
       if (data.success) {
-        setSpecialties(data.data.filter((s: { id: number; name: string; isActive: boolean }) => s.isActive));
+        // El API ya filtra por isActive, no necesitamos filtrar de nuevo
+        setSpecialties(data.data);
       }
     } catch (err) {
       console.error('Error fetching specialties:', err);
     }
+  };
+
+  // Obtener subcategorías de la especialidad seleccionada
+  const getSubcategoriesForProfile = () => {
+    if (!profileFilter) return [];
+    const specialty = specialties.find(s => s.name === profileFilter);
+    return specialty?.subcategories || [];
   };
 
   // Cargar vacantes activas y especialidades
@@ -130,6 +143,7 @@ export default function AssignCandidatesPage() {
       if (searchTerm) params.append('search', searchTerm);
       if (profileFilter) params.append('profile', profileFilter);
       if (seniorityFilter) params.append('seniority', seniorityFilter);
+      if (subcategoryFilter) params.append('subcategory', subcategoryFilter);
       // NO filtrar por status para permitir asignar candidatos a múltiples vacantes
       // Los candidatos "available" e "in_process" pueden ser asignados
 
@@ -412,7 +426,10 @@ export default function AssignCandidatesPage() {
                           <label className="block text-sm font-medium mb-1">Perfil</label>
                           <select
                             value={profileFilter}
-                            onChange={(e) => setProfileFilter(e.target.value)}
+                            onChange={(e) => {
+                              setProfileFilter(e.target.value);
+                              setSubcategoryFilter(''); // Limpiar subcategoría al cambiar perfil
+                            }}
                             className="w-full p-2 border rounded-lg"
                           >
                             <option value="">Todos</option>
@@ -434,6 +451,21 @@ export default function AssignCandidatesPage() {
                             ))}
                           </select>
                         </div>
+                        {profileFilter && getSubcategoriesForProfile().length > 0 && (
+                          <div className="col-span-2">
+                            <label className="block text-sm font-medium mb-1">Subcategoría</label>
+                            <select
+                              value={subcategoryFilter}
+                              onChange={(e) => setSubcategoryFilter(e.target.value)}
+                              className="w-full p-2 border rounded-lg"
+                            >
+                              <option value="">Todas</option>
+                              {getSubcategoriesForProfile().map((sub, idx) => (
+                                <option key={idx} value={sub}>{sub}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
