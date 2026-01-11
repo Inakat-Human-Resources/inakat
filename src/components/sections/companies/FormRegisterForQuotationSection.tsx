@@ -369,7 +369,8 @@ const FormRegisterForQuotationSection = () => {
           rfc: formData.rfc.toUpperCase(),
           direccionEmpresa: direccionCompleta,
           identificacionUrl: idData.url,
-          documentosConstitucionUrl: docData.url
+          documentosConstitucionUrl: docData.url,
+          password: formData.password
         })
       });
 

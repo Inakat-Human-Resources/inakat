@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
 
 // GET all company requests (for admin panel)
 export async function GET(request: Request) {
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
       direccionEmpresa,
       identificacionUrl,
       documentosConstitucionUrl,
+      password,
     } = body;
 
     // Validate required fields
@@ -56,7 +58,8 @@ export async function POST(request: Request) {
       !correoEmpresa ||
       !razonSocial ||
       !rfc ||
-      !direccionEmpresa
+      !direccionEmpresa ||
+      !password
     ) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -64,28 +67,68 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create company request in database
-    const companyRequest = await prisma.companyRequest.create({
-      data: {
-        nombre,
-        apellidoPaterno,
-        apellidoMaterno,
-        nombreEmpresa,
-        correoEmpresa,
-        sitioWeb: sitioWeb || null,
-        razonSocial,
-        rfc,
-        direccionEmpresa,
-        identificacionUrl: identificacionUrl || null,
-        documentosConstitucionUrl: documentosConstitucionUrl || null,
-      },
+    // Verificar si ya existe un usuario con ese email
+    const existingUser = await prisma.user.findUnique({
+      where: { email: correoEmpresa.toLowerCase() }
     });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "Ya existe una cuenta con este correo electrónico." },
+        { status: 409 }
+      );
+    }
+
+    // Hashear la contraseña
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Crear User y CompanyRequest en una transacción
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Crear el CompanyRequest primero
+      const companyRequest = await tx.companyRequest.create({
+        data: {
+          nombre,
+          apellidoPaterno,
+          apellidoMaterno,
+          nombreEmpresa,
+          correoEmpresa,
+          sitioWeb: sitioWeb || null,
+          razonSocial,
+          rfc,
+          direccionEmpresa,
+          identificacionUrl: identificacionUrl || null,
+          documentosConstitucionUrl: documentosConstitucionUrl || null,
+          status: "pending",
+        },
+      });
+
+      // 2. Crear el User conectado al CompanyRequest
+      const user = await tx.user.create({
+        data: {
+          email: correoEmpresa.toLowerCase(),
+          password: hashedPassword,
+          nombre: `${nombre} ${apellidoPaterno}`,
+          apellidoPaterno,
+          apellidoMaterno,
+          role: "company",
+          isActive: true,
+          emailVerified: false,
+          companyRequest: {
+            connect: { id: companyRequest.id }
+          }
+        },
+      });
+
+      return { companyRequest, user };
+    });
+
+    console.log(`Usuario de empresa creado: ${result.user.email} (pendiente de aprobación)`);
 
     return NextResponse.json(
       {
         success: true,
-        message: "Company request submitted successfully",
-        data: companyRequest,
+        message: "Solicitud enviada. Ya puedes iniciar sesión, pero algunas funciones estarán limitadas hasta que tu cuenta sea aprobada.",
+        data: result.companyRequest,
       },
       { status: 201 }
     );
@@ -102,13 +145,21 @@ export async function POST(request: Request) {
       error.meta &&
       typeof error.meta === 'object' &&
       'target' in error.meta &&
-      Array.isArray(error.meta.target) &&
-      error.meta.target.includes('rfc')
+      Array.isArray(error.meta.target)
     ) {
-      return NextResponse.json(
-        { error: "Ya existe una solicitud con este RFC. Por favor, verifica tus datos o contacta soporte." },
-        { status: 409 }
-      );
+      const target = error.meta.target as string[];
+      if (target.includes('rfc')) {
+        return NextResponse.json(
+          { error: "Ya existe una solicitud con este RFC. Por favor, verifica tus datos o contacta soporte." },
+          { status: 409 }
+        );
+      }
+      if (target.includes('email')) {
+        return NextResponse.json(
+          { error: "Ya existe una cuenta con este correo electrónico." },
+          { status: 409 }
+        );
+      }
     }
 
     return NextResponse.json(

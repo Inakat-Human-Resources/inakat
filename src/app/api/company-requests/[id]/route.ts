@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcryptjs';
 
 // PATCH - Update company request status
 export async function PATCH(
@@ -19,7 +18,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { status, rejectionReason } = body; // ← AGREGADO rejectionReason
+    const { status, rejectionReason } = body;
 
     // Validate status
     if (!['pending', 'approved', 'rejected'].includes(status)) {
@@ -44,7 +43,7 @@ export async function PATCH(
       );
     }
 
-    // Update the request
+    // Update the request status
     const updatedRequest = await prisma.companyRequest.update({
       where: { id: requestId },
       data: {
@@ -54,59 +53,18 @@ export async function PATCH(
       }
     });
 
-    // Si se aprueba la empresa, crear cuenta de usuario automáticamente
-    let createdUser = null;
-    if (status === 'approved') {
-      // Verificar si ya existe un usuario con ese email
-      const existingUser = await prisma.user.findUnique({
-        where: { email: existingRequest.correoEmpresa.toLowerCase() }
-      });
-
-      if (!existingUser) {
-        // Generar contraseña temporal: primeras 4 letras del nombre + 4 dígitos del RFC + !
-        const nombrePart = existingRequest.nombre
-          .replace(/\s+/g, '')
-          .substring(0, 4)
-          .toLowerCase();
-        const rfcPart = existingRequest.rfc
-          .replace(/[^0-9]/g, '')
-          .substring(0, 4)
-          .padEnd(4, '0');
-        const tempPassword = `${nombrePart}${rfcPart}!`;
-
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-        createdUser = await prisma.user.create({
-          data: {
-            email: existingRequest.correoEmpresa.toLowerCase(),
-            password: hashedPassword,
-            nombre: `${existingRequest.nombre} ${existingRequest.apellidoPaterno}`,
-            apellidoPaterno: existingRequest.apellidoPaterno,
-            apellidoMaterno: existingRequest.apellidoMaterno,
-            role: 'company',
-            companyRequest: {
-              connect: { id: existingRequest.id }
-            }
-          }
-        });
-
-        console.log(
-          `Usuario de empresa creado: ${createdUser.email} (contraseña temporal: ${tempPassword})`
-        );
-      }
-    }
+    // El User ya fue creado al momento del registro, solo actualizamos el status
+    const statusMessages: Record<string, string> = {
+      approved: 'Empresa aprobada exitosamente',
+      rejected: 'Solicitud rechazada',
+      pending: 'Solicitud marcada como pendiente'
+    };
 
     return NextResponse.json(
       {
         success: true,
-        message:
-          status === 'approved' && createdUser
-            ? 'Empresa aprobada y cuenta de usuario creada'
-            : 'Request status updated successfully',
-        data: updatedRequest,
-        userCreated: createdUser
-          ? { email: createdUser.email, id: createdUser.id }
-          : null
+        message: statusMessages[status] || 'Estado actualizado',
+        data: updatedRequest
       },
       { status: 200 }
     );
