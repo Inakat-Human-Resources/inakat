@@ -343,6 +343,7 @@ model Candidate {
   
   // Especialidad/Perfil
   profile         String?   // "Tecnología", "Diseño Gráfico", etc.
+  subcategory     String?   // Sub-especialidad dentro del profile
   seniority       String?   // "Practicante", "Jr", "Middle", "Sr", "Director"
   
   // Documentos y links
