@@ -135,7 +135,8 @@ export default function AssignCandidatesPage() {
   // Handler para seleccionar vacante y actualizar URL
   const handleSelectJob = (job: Job) => {
     setSelectedJob(job);
-    router.push(`/admin/assign-candidates?jobId=${job.id}`, { scroll: false });
+    // Actualizar URL sin recargar página
+    window.history.replaceState(null, '', `/admin/assign-candidates?jobId=${job.id}`);
   };
 
   const fetchJobs = async () => {
