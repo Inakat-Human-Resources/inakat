@@ -53,6 +53,7 @@ export async function GET(request: Request) {
     const universidad = searchParams.get('universidad') || '';
     const profile = searchParams.get('profile') || '';
     const seniority = searchParams.get('seniority') || '';
+    const subcategory = searchParams.get('subcategory') || '';
     const status = searchParams.get('status') || '';
     const source = searchParams.get('source') || '';
     const minExperience = searchParams.get('minExperience') || '';
@@ -89,6 +90,10 @@ export async function GET(request: Request) {
 
     if (seniority) {
       where.seniority = seniority;
+    }
+
+    if (subcategory) {
+      where.subcategory = subcategory;
     }
 
     if (status) {

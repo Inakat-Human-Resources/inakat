@@ -3,6 +3,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Search,
   Filter,
@@ -46,6 +47,11 @@ interface Candidate {
 }
 
 export default function AssignCandidatesPage() {
+  // URL params para persistir vacante seleccionada
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const jobIdFromUrl = searchParams.get('jobId');
+
   // Estado
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -115,6 +121,22 @@ export default function AssignCandidatesPage() {
       setAlreadyAssigned(new Set());
     }
   }, [selectedJob]);
+
+  // Seleccionar vacante desde URL al cargar
+  useEffect(() => {
+    if (jobIdFromUrl && jobs.length > 0 && !selectedJob) {
+      const jobToSelect = jobs.find(j => j.id === parseInt(jobIdFromUrl));
+      if (jobToSelect) {
+        setSelectedJob(jobToSelect);
+      }
+    }
+  }, [jobIdFromUrl, jobs]);
+
+  // Handler para seleccionar vacante y actualizar URL
+  const handleSelectJob = (job: Job) => {
+    setSelectedJob(job);
+    router.push(`/admin/assign-candidates?jobId=${job.id}`, { scroll: false });
+  };
 
   const fetchJobs = async () => {
     try {
@@ -338,7 +360,7 @@ export default function AssignCandidatesPage() {
                   {jobs.map(job => (
                     <button
                       key={job.id}
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => handleSelectJob(job)}
                       className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                         selectedJob?.id === job.id
                           ? 'border-blue-500 bg-blue-50'
