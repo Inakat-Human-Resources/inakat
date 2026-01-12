@@ -2,8 +2,8 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Search,
   Filter,
@@ -46,10 +46,9 @@ interface Candidate {
   source: string;
 }
 
-export default function AssignCandidatesPage() {
+function AssignCandidatesContent() {
   // URL params para persistir vacante seleccionada
   const searchParams = useSearchParams();
-  const router = useRouter();
   const jobIdFromUrl = searchParams.get('jobId');
 
   // Estado
@@ -651,5 +650,18 @@ export default function AssignCandidatesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Wrapper con Suspense para useSearchParams
+export default function AssignCandidatesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <RefreshCw className="animate-spin text-gray-400" size={32} />
+      </div>
+    }>
+      <AssignCandidatesContent />
+    </Suspense>
   );
 }
