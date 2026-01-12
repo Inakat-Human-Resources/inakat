@@ -4,11 +4,8 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Search,
   RefreshCw,
-  Plus,
   Edit,
-  Trash2,
   DollarSign,
   X,
   Check,
@@ -123,13 +120,6 @@ export default function AdminPricingPage() {
     }
   };
 
-  const openNewModal = () => {
-    setEditingEntry(null);
-    setFormData(INITIAL_FORM);
-    setCustomProfile(false);
-    setIsModalOpen(true);
-  };
-
   const openEditModal = (entry: PricingEntry) => {
     setEditingEntry(entry);
     setFormData({
@@ -152,24 +142,20 @@ export default function AdminPricingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingEntry) return; // Solo permitir edición
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const url = '/api/admin/pricing';
-      const method = editingEntry ? 'PUT' : 'POST';
-
-      const payload: any = {
-        ...formData,
+      // Solo enviar id y credits (no se puede modificar profile, seniority, workMode, location)
+      const payload = {
+        id: editingEntry.id,
         credits: Number(formData.credits)
       };
 
-      if (editingEntry) {
-        payload.id = editingEntry.id;
-      }
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch('/api/admin/pricing', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -177,7 +163,7 @@ export default function AdminPricingPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(data.message);
+        setSuccess('Créditos actualizados exitosamente');
         closeModal();
         fetchPricing();
         setTimeout(() => setSuccess(null), 3000);
@@ -188,28 +174,6 @@ export default function AdminPricingPage() {
       setError('Error de conexión');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (entry: PricingEntry) => {
-    if (!confirm(`¿Eliminar precio para ${entry.profile} - ${entry.seniority}?`)) return;
-
-    try {
-      const response = await fetch(`/api/admin/pricing?id=${entry.id}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccess('Precio eliminado');
-        fetchPricing();
-        setTimeout(() => setSuccess(null), 3000);
-      } else {
-        setError(data.error || 'Error al eliminar');
-      }
-    } catch (err) {
-      setError('Error de conexión');
     }
   };
 
@@ -259,16 +223,9 @@ export default function AdminPricingPage() {
               Matriz de Precios
             </h1>
             <p className="text-gray-600">
-              Configura el costo en créditos por perfil, seniority y modalidad
+              Los precios se generan automáticamente al crear especialidades. Solo puedes editar los créditos.
             </p>
           </div>
-          <button
-            onClick={openNewModal}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-semibold"
-          >
-            <Plus size={20} />
-            Nuevo Precio
-          </button>
         </div>
 
         {/* Mensajes */}
@@ -424,20 +381,13 @@ export default function AdminPricingPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
+                        <div className="flex justify-center">
                           <button
                             onClick={() => openEditModal(entry)}
-                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                            title="Editar"
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="Editar créditos"
                           >
                             <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
                           </button>
                         </div>
                       </td>
@@ -457,105 +407,41 @@ export default function AdminPricingPage() {
         )}
       </div>
 
-      {/* Modal de crear/editar */}
-      {isModalOpen && (
+      {/* Modal de editar créditos */}
+      {isModalOpen && editingEntry && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold">
-                {editingEntry ? 'Editar Precio' : 'Nuevo Precio'}
-              </h2>
+              <h2 className="text-2xl font-bold">Editar Créditos</h2>
               <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
                 <X size={24} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Perfil */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-sm font-semibold">Perfil *</label>
-                  <button
-                    type="button"
-                    onClick={() => setCustomProfile(!customProfile)}
-                    className="text-xs text-blue-600 hover:underline"
-                  >
-                    {customProfile ? 'Seleccionar existente' : 'Agregar nuevo'}
-                  </button>
+              {/* Información de solo lectura */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Perfil</label>
+                  <p className="font-semibold text-gray-900">{formData.profile}</p>
                 </div>
-                {customProfile ? (
-                  <input
-                    type="text"
-                    value={formData.profile}
-                    onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
-                    placeholder="Nombre del perfil"
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                ) : (
-                  <select
-                    value={formData.profile}
-                    onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Seleccionar perfil</option>
-                    {profiles.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Seniority</label>
+                    <p className="font-semibold text-gray-900">{formData.seniority}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Modalidad</label>
+                    <p className="font-semibold text-gray-900">{getWorkModeLabel(formData.workMode)}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Ubicación</label>
+                  <p className="font-semibold text-gray-900">{formData.location || 'Cualquier ubicación'}</p>
+                </div>
               </div>
 
-              {/* Seniority */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Seniority *</label>
-                <select
-                  value={formData.seniority}
-                  onChange={(e) => setFormData({ ...formData, seniority: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  {SENIORITIES.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* WorkMode */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Modalidad de Trabajo *</label>
-                <select
-                  value={formData.workMode}
-                  onChange={(e) => setFormData({ ...formData, workMode: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  {WORK_MODES.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Location */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Ubicación (opcional)</label>
-                <select
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Cualquier ubicación</option>
-                  {LOCATIONS.filter(l => l).map(l => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Dejar vacío para aplicar a cualquier ubicación
-                </p>
-              </div>
-
-              {/* Credits */}
+              {/* Credits - único campo editable */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Créditos *</label>
                 <input
@@ -563,8 +449,9 @@ export default function AdminPricingPage() {
                   value={formData.credits}
                   onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })}
                   min="0"
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-lg font-bold"
                   required
+                  autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Costo en créditos para publicar vacantes con esta configuración
@@ -593,7 +480,7 @@ export default function AdminPricingPage() {
                   ) : (
                     <>
                       <Check size={20} />
-                      {editingEntry ? 'Guardar Cambios' : 'Crear Precio'}
+                      Guardar Créditos
                     </>
                   )}
                 </button>

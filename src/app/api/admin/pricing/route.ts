@@ -104,100 +104,21 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/admin/pricing
- * Crear nueva entrada en PricingMatrix
+ * DESHABILITADO - Los precios se generan automáticamente al crear especialidades
  */
-export async function POST(request: Request) {
-  try {
-    const auth = await verifyAdmin();
-    if ('error' in auth) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status }
-      );
-    }
-
-    const body = await request.json();
-    const { profile, seniority, workMode, location, credits } = body;
-
-    // Validaciones
-    if (!profile || !seniority || !workMode || credits === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Campos requeridos: profile, seniority, workMode, credits' },
-        { status: 400 }
-      );
-    }
-
-    if (!VALID_SENIORITIES.includes(seniority)) {
-      return NextResponse.json(
-        { success: false, error: `Seniority inválido. Valores válidos: ${VALID_SENIORITIES.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    if (!VALID_WORK_MODES.includes(workMode)) {
-      return NextResponse.json(
-        { success: false, error: `WorkMode inválido. Valores válidos: ${VALID_WORK_MODES.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    if (typeof credits !== 'number' || credits < 0) {
-      return NextResponse.json(
-        { success: false, error: 'Credits debe ser un número positivo' },
-        { status: 400 }
-      );
-    }
-
-    // Verificar duplicado
-    const existing = await prisma.pricingMatrix.findFirst({
-      where: {
-        profile,
-        seniority,
-        workMode,
-        location: location || null
-      }
-    });
-
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Ya existe una entrada con esta combinación de perfil, seniority, modalidad y ubicación'
-        },
-        { status: 409 }
-      );
-    }
-
-    // Crear entrada
-    const pricingEntry = await prisma.pricingMatrix.create({
-      data: {
-        profile,
-        seniority,
-        workMode,
-        location: location || null,
-        credits,
-        isActive: true
-      }
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'Precio creado exitosamente',
-      data: pricingEntry
-    }, { status: 201 });
-
-  } catch (error) {
-    console.error('Error creating pricing:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear precio' },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'La creación manual de precios está deshabilitada. Los precios se generan automáticamente al crear especialidades.'
+    },
+    { status: 403 }
+  );
 }
 
 /**
  * PUT /api/admin/pricing
- * Actualizar entrada existente
+ * Actualizar solo créditos e isActive (no se pueden modificar profile, seniority, workMode, location)
  */
 export async function PUT(request: Request) {
   try {
@@ -210,7 +131,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, profile, seniority, workMode, location, credits, isActive } = body;
+    const { id, credits, isActive } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -231,21 +152,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Validaciones de campos opcionales
-    if (seniority && !VALID_SENIORITIES.includes(seniority)) {
-      return NextResponse.json(
-        { success: false, error: `Seniority inválido` },
-        { status: 400 }
-      );
-    }
-
-    if (workMode && !VALID_WORK_MODES.includes(workMode)) {
-      return NextResponse.json(
-        { success: false, error: `WorkMode inválido` },
-        { status: 400 }
-      );
-    }
-
+    // Validar créditos
     if (credits !== undefined && (typeof credits !== 'number' || credits < 0)) {
       return NextResponse.json(
         { success: false, error: 'Credits debe ser un número positivo' },
@@ -253,34 +160,17 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Verificar duplicado si se cambian campos clave
-    if (profile || seniority || workMode || location !== undefined) {
-      const duplicate = await prisma.pricingMatrix.findFirst({
-        where: {
-          profile: profile || existing.profile,
-          seniority: seniority || existing.seniority,
-          workMode: workMode || existing.workMode,
-          location: location !== undefined ? (location || null) : existing.location,
-          NOT: { id: parseInt(id) }
-        }
-      });
-
-      if (duplicate) {
-        return NextResponse.json(
-          { success: false, error: 'Ya existe otra entrada con esta combinación' },
-          { status: 409 }
-        );
-      }
-    }
-
-    // Preparar datos a actualizar
-    const updateData: any = {};
-    if (profile) updateData.profile = profile;
-    if (seniority) updateData.seniority = seniority;
-    if (workMode) updateData.workMode = workMode;
-    if (location !== undefined) updateData.location = location || null;
+    // Solo permitir actualizar credits e isActive
+    const updateData: { credits?: number; isActive?: boolean } = {};
     if (credits !== undefined) updateData.credits = credits;
     if (isActive !== undefined) updateData.isActive = isActive;
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No hay campos válidos para actualizar. Solo se puede modificar credits e isActive.' },
+        { status: 400 }
+      );
+    }
 
     const updated = await prisma.pricingMatrix.update({
       where: { id: parseInt(id) },
@@ -289,7 +179,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Precio actualizado exitosamente',
+      message: 'Créditos actualizados exitosamente',
       data: updated
     });
 
@@ -304,54 +194,14 @@ export async function PUT(request: Request) {
 
 /**
  * DELETE /api/admin/pricing
- * Eliminar entrada
+ * DESHABILITADO - Los precios no se pueden eliminar, solo desactivar con isActive=false
  */
-export async function DELETE(request: Request) {
-  try {
-    const auth = await verifyAdmin();
-    if ('error' in auth) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'ID requerido' },
-        { status: 400 }
-      );
-    }
-
-    // Verificar que existe
-    const existing = await prisma.pricingMatrix.findUnique({
-      where: { id: parseInt(id) }
-    });
-
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, error: 'Entrada no encontrada' },
-        { status: 404 }
-      );
-    }
-
-    await prisma.pricingMatrix.delete({
-      where: { id: parseInt(id) }
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'Precio eliminado exitosamente'
-    });
-
-  } catch (error) {
-    console.error('Error deleting pricing:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al eliminar precio' },
-      { status: 500 }
-    );
-  }
+export async function DELETE() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'La eliminación de precios está deshabilitada. Puedes desactivar un precio cambiando su estado a "Inactivo".'
+    },
+    { status: 403 }
+  );
 }

@@ -167,16 +167,17 @@ export async function POST(request: Request) {
       }
     });
 
-    // Auto-generar 12 combinaciones en PricingMatrix
+    // Auto-generar 15 combinaciones en PricingMatrix (5 seniorities × 3 workModes)
     const workModes = ['presential', 'hybrid', 'remote'];
-    const seniorityLevels = ['Director', 'Sr', 'Middle', 'Jr'];
+    const seniorityLevels = ['Director', 'Sr', 'Middle', 'Jr', 'Practicante'];
 
     // Créditos base por seniority
     const baseCredits: Record<string, number> = {
       'Director': 10,
       'Sr': 8,
       'Middle': 6,
-      'Jr': 4
+      'Jr': 4,
+      'Practicante': 2
     };
 
     // Ajuste por modalidad
