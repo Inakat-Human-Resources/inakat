@@ -7,21 +7,93 @@ import { z } from 'zod';
 
 /**
  * POST /api/auth/register
- * Registra un nuevo usuario candidato
+ * Registra un nuevo candidato con perfil profesional completo
+ * Crea User + Candidate en una transacción
  */
 
-// Schema de validación
+// Schema de validación expandido
 const registerSchema = z.object({
+  // Auth
   email: z.string().email('Email inválido'),
   password: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
     .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
     .regex(/[0-9]/, 'Debe contener al menos un número'),
+
+  // Datos personales
   nombre: z.string().min(2, 'El nombre es requerido'),
   apellidoPaterno: z.string().min(2, 'El apellido paterno es requerido'),
-  apellidoMaterno: z.string().optional()
+  apellidoMaterno: z.string().optional(),
+  telefono: z.string().optional(),
+  sexo: z.enum(['M', 'F', 'Otro']).optional(),
+  fechaNacimiento: z.string().optional(),
+
+  // Educación
+  universidad: z.string().optional(),
+  carrera: z.string().optional(),
+  nivelEstudios: z.string().optional(),
+
+  // Profesional
+  profile: z.string().optional(),
+  subcategory: z.string().optional(),
+  seniority: z.string().optional(),
+
+  // Links
+  cvUrl: z.string().optional(),
+  linkedinUrl: z.string().optional(),
+  portafolioUrl: z.string().optional(),
+
+  // Experiencias (array)
+  experiences: z
+    .array(
+      z.object({
+        empresa: z.string(),
+        puesto: z.string(),
+        ubicacion: z.string().optional(),
+        fechaInicio: z.string(),
+        fechaFin: z.string().optional(),
+        esActual: z.boolean(),
+        descripcion: z.string().optional()
+      })
+    )
+    .optional(),
+
+  // Documentos (array)
+  documents: z
+    .array(
+      z.object({
+        name: z.string(),
+        fileUrl: z.string()
+      })
+    )
+    .optional()
 });
+
+// Función para calcular años de experiencia
+function calcularAñosExperiencia(
+  experiences?: {
+    fechaInicio: string;
+    fechaFin?: string;
+    esActual: boolean;
+  }[]
+): number {
+  if (!experiences || experiences.length === 0) return 0;
+
+  const today = new Date();
+  let totalMonths = 0;
+
+  for (const exp of experiences) {
+    const start = new Date(exp.fechaInicio);
+    const end = exp.fechaFin ? new Date(exp.fechaFin) : today;
+    const months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
+    totalMonths += Math.max(0, months);
+  }
+
+  return Math.round(totalMonths / 12);
+}
 
 export async function POST(request: Request) {
   try {
@@ -40,10 +112,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password, nombre, apellidoPaterno, apellidoMaterno } =
-      validation.data;
+    const {
+      email,
+      password,
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      telefono,
+      sexo,
+      fechaNacimiento,
+      universidad,
+      carrera,
+      nivelEstudios,
+      profile,
+      subcategory,
+      seniority,
+      cvUrl,
+      linkedinUrl,
+      portafolioUrl,
+      experiences,
+      documents
+    } = validation.data;
 
-    // Verificar si el email ya existe
+    // Verificar si el email ya existe en User
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() }
     });
@@ -58,28 +149,107 @@ export async function POST(request: Request) {
       );
     }
 
+    // Verificar si el email ya existe en Candidate
+    const existingCandidate = await prisma.candidate.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
+    if (existingCandidate) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Ya existe un candidato con ese email'
+        },
+        { status: 409 }
+      );
+    }
+
     // Hashear contraseña
     const hashedPassword = await hashPassword(password);
 
-    // Crear usuario
-    const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        nombre,
-        apellidoPaterno,
-        apellidoMaterno: apellidoMaterno || null,
-        role: 'user', // Usuario regular (candidato)
-        isActive: true,
-        emailVerified: new Date() // Por ahora verificamos automáticamente
-      }
+    // Calcular años de experiencia
+    const añosExperiencia = calcularAñosExperiencia(experiences);
+
+    // Crear User + Candidate en transacción
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Crear User
+      const user = await tx.user.create({
+        data: {
+          email: email.toLowerCase(),
+          password: hashedPassword,
+          nombre,
+          apellidoPaterno,
+          apellidoMaterno: apellidoMaterno || null,
+          role: 'candidate',
+          isActive: true,
+          emailVerified: new Date()
+        }
+      });
+
+      // 2. Crear Candidate vinculado al User
+      const candidate = await tx.candidate.create({
+        data: {
+          userId: user.id,
+          nombre,
+          apellidoPaterno,
+          apellidoMaterno: apellidoMaterno || null,
+          email: email.toLowerCase(),
+          telefono: telefono || null,
+          sexo: sexo || null,
+          fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
+          universidad: universidad || null,
+          carrera: carrera || null,
+          nivelEstudios: nivelEstudios || null,
+          profile: profile || null,
+          subcategory: subcategory || null,
+          seniority: seniority || null,
+          cvUrl: cvUrl || null,
+          linkedinUrl: linkedinUrl || null,
+          portafolioUrl: portafolioUrl || null,
+          source: 'registro',
+          añosExperiencia,
+          status: 'available',
+          // Crear experiencias anidadas
+          experiences:
+            experiences && experiences.length > 0
+              ? {
+                  create: experiences.map((exp) => ({
+                    empresa: exp.empresa,
+                    puesto: exp.puesto,
+                    ubicacion: exp.ubicacion || null,
+                    fechaInicio: new Date(exp.fechaInicio),
+                    fechaFin: exp.fechaFin ? new Date(exp.fechaFin) : null,
+                    esActual: exp.esActual,
+                    descripcion: exp.descripcion || null
+                  }))
+                }
+              : undefined,
+          // Crear documentos anidados
+          documents:
+            documents && documents.length > 0
+              ? {
+                  create: documents.map((doc) => ({
+                    name: doc.name,
+                    fileUrl: doc.fileUrl,
+                    fileType: doc.fileUrl.split('.').pop() || null
+                  }))
+                }
+              : undefined
+        },
+        include: {
+          experiences: true,
+          documents: true
+        }
+      });
+
+      return { user, candidate };
     });
 
     // Generar token JWT
     const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role
+      userId: result.user.id,
+      email: result.user.email,
+      role: result.user.role
     });
 
     // Crear respuesta
@@ -88,12 +258,17 @@ export async function POST(request: Request) {
         success: true,
         message: 'Registro exitoso',
         user: {
-          id: user.id,
-          email: user.email,
-          nombre: user.nombre,
-          apellidoPaterno: user.apellidoPaterno,
-          apellidoMaterno: user.apellidoMaterno,
-          role: user.role
+          id: result.user.id,
+          email: result.user.email,
+          nombre: result.user.nombre,
+          apellidoPaterno: result.user.apellidoPaterno,
+          apellidoMaterno: result.user.apellidoMaterno,
+          role: result.user.role
+        },
+        candidate: {
+          id: result.candidate.id,
+          experiencesCount: result.candidate.experiences.length,
+          documentsCount: result.candidate.documents.length
         }
       },
       { status: 201 }

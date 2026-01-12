@@ -2,101 +2,262 @@
 
 'use client';
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Facebook, Linkedin, Eye, EyeOff } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  User,
+  GraduationCap,
+  Briefcase,
+  Link as LinkIcon,
+  FileText,
+  Plus,
+  Trash2,
+  Upload,
+  Loader2,
+  ChevronRight,
+  ChevronLeft,
+  Check
+} from 'lucide-react';
 import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
 
-interface RegisterFormData {
-  email: string;
-  password: string;
-  confirmPassword: string;
-  nombre: string;
-  apellidoPaterno: string;
-  apellidoMaterno: string;
+// Interfaces
+interface Experience {
+  empresa: string;
+  puesto: string;
+  ubicacion: string;
+  fechaInicio: string;
+  fechaFin: string;
+  esActual: boolean;
+  descripcion: string;
+}
+
+interface Document {
+  name: string;
+  file: File | null;
+  fileUrl: string;
+  uploading: boolean;
+}
+
+interface Specialty {
+  id: number;
+  name: string;
+  subcategories: string[];
 }
 
 interface FormErrors {
   [key: string]: string;
 }
 
-export default function RegisterPage() {
-  const [formData, setFormData] = useState<RegisterFormData>({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    nombre: '',
-    apellidoPaterno: '',
-    apellidoMaterno: ''
-  });
+// Constantes
+const STEPS = [
+  { id: 1, name: 'Personal', icon: User },
+  { id: 2, name: 'Educación', icon: GraduationCap },
+  { id: 3, name: 'Profesional', icon: Briefcase },
+  { id: 4, name: 'Experiencia', icon: Briefcase },
+  { id: 5, name: 'Links', icon: LinkIcon },
+  { id: 6, name: 'Documentos', icon: FileText }
+];
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+const SENIORITIES = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
+const NIVELES_ESTUDIO = ['Preparatoria', 'Técnico', 'Licenciatura', 'Maestría', 'Doctorado'];
+
+export default function RegisterPage() {
+  // Estado de navegación
+  const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  // Paso 1: Datos personales
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [apellidoPaterno, setApellidoPaterno] = useState('');
+  const [apellidoMaterno, setApellidoMaterno] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [sexo, setSexo] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
 
-    // Limpiar error del campo
-    if (errors[name]) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-    setGeneralError(null);
+  // Paso 2: Educación
+  const [universidad, setUniversidad] = useState('');
+  const [carrera, setCarrera] = useState('');
+  const [nivelEstudios, setNivelEstudios] = useState('');
+
+  // Paso 3: Profesional
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [profile, setProfile] = useState('');
+  const [subcategory, setSubcategory] = useState('');
+  const [seniority, setSeniority] = useState('');
+
+  // Paso 4: Experiencias
+  const [experiences, setExperiences] = useState<Experience[]>([]);
+
+  // Paso 5: Links
+  const [cvUrl, setCvUrl] = useState('');
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [portafolioUrl, setPortafolioUrl] = useState('');
+
+  // Paso 6: Documentos
+  const [documents, setDocuments] = useState<Document[]>([]);
+
+  // Cargar especialidades
+  useEffect(() => {
+    fetch('/api/specialties?subcategories=true')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setSpecialties(data.data);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  // Obtener subcategorías del perfil seleccionado
+  const currentSubcategories = specialties.find(s => s.name === profile)?.subcategories || [];
+
+  // Función de upload
+  const uploadFile = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.url;
   };
 
-  const validateForm = (): boolean => {
+  // Manejar upload de CV
+  const handleCvUpload = async (file: File) => {
+    setCvUploading(true);
+    try {
+      const url = await uploadFile(file);
+      setCvUrl(url);
+      setCvFile(file);
+    } catch (error) {
+      console.error('Error uploading CV:', error);
+      setErrors(prev => ({ ...prev, cvUrl: 'Error al subir el archivo' }));
+    } finally {
+      setCvUploading(false);
+    }
+  };
+
+  // Manejar experiencias
+  const addExperience = () => {
+    setExperiences([
+      ...experiences,
+      {
+        empresa: '',
+        puesto: '',
+        ubicacion: '',
+        fechaInicio: '',
+        fechaFin: '',
+        esActual: false,
+        descripcion: ''
+      }
+    ]);
+  };
+
+  const updateExperience = (index: number, field: keyof Experience, value: any) => {
+    const updated = [...experiences];
+    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'esActual' && value) {
+      updated[index].fechaFin = '';
+    }
+    setExperiences(updated);
+  };
+
+  const removeExperience = (index: number) => {
+    setExperiences(experiences.filter((_, i) => i !== index));
+  };
+
+  // Manejar documentos
+  const addDocument = () => {
+    setDocuments([...documents, { name: '', file: null, fileUrl: '', uploading: false }]);
+  };
+
+  const updateDocument = async (index: number, field: keyof Document, value: any) => {
+    const updated = [...documents];
+
+    if (field === 'file' && value instanceof File) {
+      updated[index].uploading = true;
+      setDocuments(updated);
+
+      try {
+        const url = await uploadFile(value);
+        updated[index].file = value;
+        updated[index].fileUrl = url;
+        updated[index].uploading = false;
+      } catch (error) {
+        console.error('Error uploading document:', error);
+        updated[index].uploading = false;
+      }
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+
+    setDocuments(updated);
+  };
+
+  const removeDocument = (index: number) => {
+    setDocuments(documents.filter((_, i) => i !== index));
+  };
+
+  // Validaciones por paso
+  const validateStep = (step: number): boolean => {
     const newErrors: FormErrors = {};
 
-    // Validar nombre
-    if (!formData.nombre || formData.nombre.trim().length < 2) {
-      newErrors.nombre = 'El nombre es requerido (mínimo 2 caracteres)';
-    }
-
-    // Validar apellido paterno
-    if (
-      !formData.apellidoPaterno ||
-      formData.apellidoPaterno.trim().length < 2
-    ) {
-      newErrors.apellidoPaterno = 'El apellido paterno es requerido';
-    }
-
-    // Validar email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email || !emailRegex.test(formData.email)) {
-      newErrors.email = 'Email inválido';
-    }
-
-    // Validar contraseña
-    if (!formData.password || formData.password.length < 8) {
-      newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
-    } else if (!/[A-Z]/.test(formData.password)) {
-      newErrors.password = 'Debe contener al menos una mayúscula';
-    } else if (!/[0-9]/.test(formData.password)) {
-      newErrors.password = 'Debe contener al menos un número';
-    }
-
-    // Validar confirmación de contraseña
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    if (step === 1) {
+      if (!nombre || nombre.trim().length < 2) {
+        newErrors.nombre = 'El nombre es requerido (mínimo 2 caracteres)';
+      }
+      if (!apellidoPaterno || apellidoPaterno.trim().length < 2) {
+        newErrors.apellidoPaterno = 'El apellido paterno es requerido';
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email)) {
+        newErrors.email = 'Email inválido';
+      }
+      if (!password || password.length < 8) {
+        newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
+      } else if (!/[A-Z]/.test(password)) {
+        newErrors.password = 'Debe contener al menos una mayúscula';
+      } else if (!/[0-9]/.test(password)) {
+        newErrors.password = 'Debe contener al menos un número';
+      }
+      if (password !== confirmPassword) {
+        newErrors.confirmPassword = 'Las contraseñas no coinciden';
+      }
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  // Navegación
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep(prev => Math.min(prev + 1, 6));
+    }
+  };
+
+  const handlePrev = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1));
+  };
+
+  // Enviar formulario
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (!validateStep(1)) {
+      setCurrentStep(1);
       return;
     }
 
@@ -106,27 +267,50 @@ export default function RegisterPage() {
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-          nombre: formData.nombre,
-          apellidoPaterno: formData.apellidoPaterno,
-          apellidoMaterno: formData.apellidoMaterno || undefined
+          // Auth
+          email,
+          password,
+          // Datos personales
+          nombre,
+          apellidoPaterno,
+          apellidoMaterno: apellidoMaterno || undefined,
+          telefono: telefono || undefined,
+          sexo: sexo || undefined,
+          fechaNacimiento: fechaNacimiento || undefined,
+          // Educación
+          universidad: universidad || undefined,
+          carrera: carrera || undefined,
+          nivelEstudios: nivelEstudios || undefined,
+          // Profesional
+          profile: profile || undefined,
+          subcategory: subcategory || undefined,
+          seniority: seniority || undefined,
+          // Links
+          cvUrl: cvUrl || undefined,
+          linkedinUrl: linkedinUrl || undefined,
+          portafolioUrl: portafolioUrl || undefined,
+          // Experiencias (filtrar vacías)
+          experiences: experiences.filter(
+            exp => exp.empresa && exp.puesto && exp.fechaInicio
+          ),
+          // Documentos (filtrar sin URL)
+          documents: documents
+            .filter(doc => doc.name && doc.fileUrl)
+            .map(doc => ({ name: doc.name, fileUrl: doc.fileUrl }))
         })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Registro exitoso, redirigir
         alert('¡Registro exitoso! Bienvenido a INAKAT');
         window.location.href = '/talents';
       } else {
         if (data.errors) {
           setErrors(data.errors);
+          setCurrentStep(1);
         } else {
           setGeneralError(data.error || 'Error al registrarse');
         }
@@ -139,273 +323,734 @@ export default function RegisterPage() {
     }
   };
 
+  // Input class helper
+  const inputClass = (fieldName: string) =>
+    `w-full px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 ${
+      errors[fieldName]
+        ? 'border-red-500 focus:ring-red-500'
+        : 'border-gray-300 focus:ring-button-green'
+    }`;
+
+  const selectClass = (fieldName: string) =>
+    `w-full px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 bg-white ${
+      errors[fieldName]
+        ? 'border-red-500 focus:ring-red-500'
+        : 'border-gray-300 focus:ring-button-green'
+    }`;
+
   return (
-    <section className="bg-custom-beige min-h-screen flex items-center justify-center py-8">
-      <div className="w-full max-w-5xl flex bg-white rounded-lg shadow-lg overflow-hidden">
+    <section className="bg-custom-beige min-h-screen flex items-center justify-center py-8 px-4">
+      <div className="w-full max-w-6xl flex bg-white rounded-lg shadow-lg overflow-hidden min-h-[700px]">
         {/* Columna Izquierda: Imagen y Texto */}
-        <div className="relative w-1/2 hidden md:flex flex-col justify-center items-center p-8 bg-cover bg-center">
+        <div className="relative w-1/3 hidden lg:flex flex-col justify-center items-center p-8 bg-cover bg-center">
           <Image
             src={loginImage}
             alt="Register background"
             fill
             className="object-cover"
           />
-
-          {/* Capa de Oscurecimiento */}
           <div className="absolute inset-0 bg-black opacity-60"></div>
-
           <h2 className="relative text-white text-2xl font-bold text-center z-10">
             ÚNETE A INAKAT
             <br />
             <span className="text-lg font-normal mt-2 block">
-              Encuentra tu próxima oportunidad laboral
+              Completa tu perfil profesional
             </span>
           </h2>
+
+          {/* Progress indicator */}
+          <div className="relative z-10 mt-8 w-full max-w-[200px]">
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const isCompleted = currentStep > step.id;
+              const isCurrent = currentStep === step.id;
+
+              return (
+                <div key={step.id} className="flex items-center mb-3">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      isCompleted
+                        ? 'bg-green-500'
+                        : isCurrent
+                        ? 'bg-button-green'
+                        : 'bg-gray-500'
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <Check size={16} className="text-white" />
+                    ) : (
+                      <Icon size={16} className="text-white" />
+                    )}
+                  </div>
+                  <span
+                    className={`ml-3 text-sm ${
+                      isCurrent ? 'text-white font-semibold' : 'text-gray-300'
+                    }`}
+                  >
+                    {step.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Columna Derecha: Formulario */}
-        <div className="w-full md:w-1/2 bg-soft-green p-8 flex flex-col justify-center items-center overflow-y-auto max-h-screen">
-          <div className="w-24 h-24 mb-4">
-            <Image
-              src={logoIcon}
-              alt="INAKAT Logo"
-              width={96}
-              height={96}
-              className="object-contain"
-            />
+        <div className="w-full lg:w-2/3 bg-soft-green p-6 md:p-8 flex flex-col">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-3">
+              <Image
+                src={logoIcon}
+                alt="INAKAT Logo"
+                width={64}
+                height={64}
+                className="object-contain"
+              />
+            </div>
+            <h1 className="text-xl font-bold text-white">Crear Cuenta</h1>
+            <p className="text-white text-sm opacity-90">
+              Paso {currentStep} de 6: {STEPS[currentStep - 1].name}
+            </p>
           </div>
 
-          <h1 className="text-2xl font-bold text-white mb-2">Crear Cuenta</h1>
-          <p className="text-white text-sm mb-6 text-center">
-            Completa el formulario para registrarte
-          </p>
-
-          <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-            {/* Mensaje de error general */}
-            {generalError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                {generalError}
-              </div>
-            )}
-
-            {/* Nombre */}
-            <div>
-              <label htmlFor="nombre" className="block text-white text-sm mb-1">
-                Nombre *
-              </label>
-              <input
-                type="text"
-                id="nombre"
-                name="nombre"
-                value={formData.nombre}
-                onChange={handleChange}
-                className={`w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 ${
-                  errors.nombre
-                    ? 'border-2 border-red-500 focus:ring-red-500'
-                    : 'focus:ring-button-green'
-                }`}
-                placeholder="Tu nombre"
-              />
-              {errors.nombre && (
-                <p className="text-red-300 text-xs mt-1">{errors.nombre}</p>
-              )}
+          {/* Mobile progress bar */}
+          <div className="lg:hidden mb-6">
+            <div className="flex justify-between text-xs text-white mb-2">
+              <span>Progreso</span>
+              <span>{Math.round((currentStep / 6) * 100)}%</span>
             </div>
-
-            {/* Apellido Paterno */}
-            <div>
-              <label
-                htmlFor="apellidoPaterno"
-                className="block text-white text-sm mb-1"
-              >
-                Apellido Paterno *
-              </label>
-              <input
-                type="text"
-                id="apellidoPaterno"
-                name="apellidoPaterno"
-                value={formData.apellidoPaterno}
-                onChange={handleChange}
-                className={`w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 ${
-                  errors.apellidoPaterno
-                    ? 'border-2 border-red-500 focus:ring-red-500'
-                    : 'focus:ring-button-green'
-                }`}
-                placeholder="Tu apellido paterno"
-              />
-              {errors.apellidoPaterno && (
-                <p className="text-red-300 text-xs mt-1">
-                  {errors.apellidoPaterno}
-                </p>
-              )}
-            </div>
-
-            {/* Apellido Materno */}
-            <div>
-              <label
-                htmlFor="apellidoMaterno"
-                className="block text-white text-sm mb-1"
-              >
-                Apellido Materno (opcional)
-              </label>
-              <input
-                type="text"
-                id="apellidoMaterno"
-                name="apellidoMaterno"
-                value={formData.apellidoMaterno}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-button-green"
-                placeholder="Tu apellido materno"
+            <div className="h-2 bg-white/30 rounded-full">
+              <div
+                className="h-full bg-button-green rounded-full transition-all"
+                style={{ width: `${(currentStep / 6) * 100}%` }}
               />
             </div>
+          </div>
 
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-white text-sm mb-1">
-                Email *
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className={`w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 ${
-                  errors.email
-                    ? 'border-2 border-red-500 focus:ring-red-500'
-                    : 'focus:ring-button-green'
-                }`}
-                placeholder="tu@email.com"
-              />
-              {errors.email && (
-                <p className="text-red-300 text-xs mt-1">{errors.email}</p>
-              )}
+          {/* Error general */}
+          {generalError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
+              {generalError}
             </div>
+          )}
 
-            {/* Contraseña */}
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-white text-sm mb-1"
-              >
-                Contraseña *
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 pr-10 ${
-                    errors.password
-                      ? 'border-2 border-red-500 focus:ring-red-500'
-                      : 'focus:ring-button-green'
-                  }`}
-                  placeholder="Mínimo 8 caracteres"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-red-300 text-xs mt-1">{errors.password}</p>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              {/* Paso 1: Datos Personales */}
+              {currentStep === 1 && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-white text-sm mb-1">Nombre *</label>
+                      <input
+                        type="text"
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                        className={inputClass('nombre')}
+                        placeholder="Tu nombre"
+                      />
+                      {errors.nombre && (
+                        <p className="text-red-300 text-xs mt-1">{errors.nombre}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Apellido Paterno *</label>
+                      <input
+                        type="text"
+                        value={apellidoPaterno}
+                        onChange={(e) => setApellidoPaterno(e.target.value)}
+                        className={inputClass('apellidoPaterno')}
+                        placeholder="Tu apellido paterno"
+                      />
+                      {errors.apellidoPaterno && (
+                        <p className="text-red-300 text-xs mt-1">{errors.apellidoPaterno}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Apellido Materno</label>
+                      <input
+                        type="text"
+                        value={apellidoMaterno}
+                        onChange={(e) => setApellidoMaterno(e.target.value)}
+                        className={inputClass('apellidoMaterno')}
+                        placeholder="Tu apellido materno"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white text-sm mb-1">Email *</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={inputClass('email')}
+                        placeholder="tu@email.com"
+                      />
+                      {errors.email && (
+                        <p className="text-red-300 text-xs mt-1">{errors.email}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Teléfono</label>
+                      <input
+                        type="tel"
+                        value={telefono}
+                        onChange={(e) => setTelefono(e.target.value)}
+                        className={inputClass('telefono')}
+                        placeholder="81 1234 5678"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white text-sm mb-1">Sexo</label>
+                      <select
+                        value={sexo}
+                        onChange={(e) => setSexo(e.target.value)}
+                        className={selectClass('sexo')}
+                      >
+                        <option value="">Seleccionar</option>
+                        <option value="M">Masculino</option>
+                        <option value="F">Femenino</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Fecha de Nacimiento</label>
+                      <input
+                        type="date"
+                        value={fechaNacimiento}
+                        onChange={(e) => setFechaNacimiento(e.target.value)}
+                        className={inputClass('fechaNacimiento')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white text-sm mb-1">Contraseña *</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className={`${inputClass('password')} pr-10`}
+                          placeholder="Mínimo 8 caracteres"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                        >
+                          {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="text-red-300 text-xs mt-1">{errors.password}</p>
+                      )}
+                      <p className="text-white/70 text-xs mt-1">
+                        8+ caracteres, 1 mayúscula, 1 número
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Confirmar Contraseña *</label>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className={`${inputClass('confirmPassword')} pr-10`}
+                          placeholder="Repite tu contraseña"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                        >
+                          {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                      {errors.confirmPassword && (
+                        <p className="text-red-300 text-xs mt-1">{errors.confirmPassword}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
-              <p className="text-white text-xs mt-1">
-                Debe contener: 8+ caracteres, 1 mayúscula, 1 número
-              </p>
-            </div>
 
-            {/* Confirmar Contraseña */}
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="block text-white text-sm mb-1"
-              >
-                Confirmar Contraseña *
-              </label>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 rounded-full focus:outline-none focus:ring-2 pr-10 ${
-                    errors.confirmPassword
-                      ? 'border-2 border-red-500 focus:ring-red-500'
-                      : 'focus:ring-button-green'
-                  }`}
-                  placeholder="Repite tu contraseña"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff size={20} />
-                  ) : (
-                    <Eye size={20} />
+              {/* Paso 2: Educación */}
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <p className="text-white/80 text-sm mb-4">
+                    Cuéntanos sobre tu formación académica (opcional)
+                  </p>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Universidad / Institución</label>
+                    <input
+                      type="text"
+                      value={universidad}
+                      onChange={(e) => setUniversidad(e.target.value)}
+                      className={inputClass('universidad')}
+                      placeholder="Ej: UANL, Tec de Monterrey, UNAM..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Carrera</label>
+                    <input
+                      type="text"
+                      value={carrera}
+                      onChange={(e) => setCarrera(e.target.value)}
+                      className={inputClass('carrera')}
+                      placeholder="Ej: Ingeniería en Sistemas, Diseño Gráfico..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Nivel de Estudios</label>
+                    <select
+                      value={nivelEstudios}
+                      onChange={(e) => setNivelEstudios(e.target.value)}
+                      className={selectClass('nivelEstudios')}
+                    >
+                      <option value="">Seleccionar</option>
+                      {NIVELES_ESTUDIO.map((nivel) => (
+                        <option key={nivel} value={nivel}>
+                          {nivel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 3: Profesional */}
+              {currentStep === 3 && (
+                <div className="space-y-4">
+                  <p className="text-white/80 text-sm mb-4">
+                    Define tu perfil profesional para encontrar las mejores oportunidades (opcional)
+                  </p>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Área / Especialidad</label>
+                    <select
+                      value={profile}
+                      onChange={(e) => {
+                        setProfile(e.target.value);
+                        setSubcategory('');
+                      }}
+                      className={selectClass('profile')}
+                    >
+                      <option value="">Seleccionar área</option>
+                      {specialties.map((spec) => (
+                        <option key={spec.id} value={spec.name}>
+                          {spec.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {currentSubcategories.length > 0 && (
+                    <div>
+                      <label className="block text-white text-sm mb-1">Sub-especialidad</label>
+                      <select
+                        value={subcategory}
+                        onChange={(e) => setSubcategory(e.target.value)}
+                        className={selectClass('subcategory')}
+                      >
+                        <option value="">Seleccionar sub-especialidad</option>
+                        {currentSubcategories.map((sub) => (
+                          <option key={sub} value={sub}>
+                            {sub}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <p className="text-red-300 text-xs mt-1">
-                  {errors.confirmPassword}
-                </p>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Nivel de Experiencia</label>
+                    <select
+                      value={seniority}
+                      onChange={(e) => setSeniority(e.target.value)}
+                      className={selectClass('seniority')}
+                    >
+                      <option value="">Seleccionar nivel</option>
+                      {SENIORITIES.map((sen) => (
+                        <option key={sen} value={sen}>
+                          {sen}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 4: Experiencia */}
+              {currentStep === 4 && (
+                <div className="space-y-4">
+                  <p className="text-white/80 text-sm mb-4">
+                    Agrega tu experiencia laboral (opcional)
+                  </p>
+
+                  {experiences.length === 0 ? (
+                    <div className="text-center py-8 bg-white/10 rounded-lg">
+                      <Briefcase className="mx-auto text-white/50 mb-2" size={40} />
+                      <p className="text-white/70 mb-4">No hay experiencias agregadas</p>
+                      <button
+                        type="button"
+                        onClick={addExperience}
+                        className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 flex items-center gap-2 mx-auto"
+                      >
+                        <Plus size={18} />
+                        Agregar Experiencia
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {experiences.map((exp, index) => (
+                        <div key={index} className="bg-white/10 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <h4 className="font-semibold text-white">Experiencia {index + 1}</h4>
+                            <button
+                              type="button"
+                              onClick={() => removeExperience(index)}
+                              className="text-red-300 hover:text-red-400 p-1"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-white text-xs mb-1">Empresa *</label>
+                              <input
+                                type="text"
+                                value={exp.empresa}
+                                onChange={(e) => updateExperience(index, 'empresa', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="Nombre de la empresa"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-xs mb-1">Puesto *</label>
+                              <input
+                                type="text"
+                                value={exp.puesto}
+                                onChange={(e) => updateExperience(index, 'puesto', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="Tu puesto"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                            <div>
+                              <label className="block text-white text-xs mb-1">Ubicación</label>
+                              <input
+                                type="text"
+                                value={exp.ubicacion}
+                                onChange={(e) => updateExperience(index, 'ubicacion', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="Ciudad, País"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-xs mb-1">Fecha Inicio *</label>
+                              <input
+                                type="date"
+                                value={exp.fechaInicio}
+                                onChange={(e) => updateExperience(index, 'fechaInicio', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-xs mb-1">Fecha Fin</label>
+                              <input
+                                type="date"
+                                value={exp.fechaFin}
+                                onChange={(e) => updateExperience(index, 'fechaFin', e.target.value)}
+                                disabled={exp.esActual}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 disabled:bg-gray-200"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-3">
+                            <label className="flex items-center gap-2 text-white text-sm">
+                              <input
+                                type="checkbox"
+                                checked={exp.esActual}
+                                onChange={(e) => updateExperience(index, 'esActual', e.target.checked)}
+                                className="w-4 h-4"
+                              />
+                              Trabajo actual
+                            </label>
+                          </div>
+
+                          <div className="mt-3">
+                            <label className="block text-white text-xs mb-1">Descripción</label>
+                            <textarea
+                              value={exp.descripcion}
+                              onChange={(e) => updateExperience(index, 'descripcion', e.target.value)}
+                              rows={2}
+                              placeholder="Describe tus responsabilidades y logros..."
+                              className="w-full px-3 py-2 rounded-lg border border-gray-300 resize-none"
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={addExperience}
+                        className="w-full py-3 border-2 border-dashed border-white/30 text-white/70 rounded-lg hover:border-white/50 hover:text-white flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} />
+                        Agregar Otra Experiencia
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Paso 5: Links */}
+              {currentStep === 5 && (
+                <div className="space-y-4">
+                  <p className="text-white/80 text-sm mb-4">
+                    Comparte tus links profesionales (opcional)
+                  </p>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">CV (Currículum)</label>
+                    <div className="space-y-2">
+                      <input
+                        type="url"
+                        value={cvUrl}
+                        onChange={(e) => setCvUrl(e.target.value)}
+                        className={inputClass('cvUrl')}
+                        placeholder="https://drive.google.com/... o sube un archivo"
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg cursor-pointer hover:bg-white/30">
+                          <Upload size={18} />
+                          {cvUploading ? 'Subiendo...' : cvFile ? cvFile.name : 'Subir archivo'}
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleCvUpload(file);
+                            }}
+                            disabled={cvUploading}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <p className="text-white/60 text-xs mt-1">
+                      Puedes ingresar una URL o subir un archivo (PDF, JPG, PNG - máx 5MB)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">LinkedIn</label>
+                    <input
+                      type="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      className={inputClass('linkedinUrl')}
+                      placeholder="https://linkedin.com/in/tu-perfil"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-white text-sm mb-1">Portafolio</label>
+                    <input
+                      type="url"
+                      value={portafolioUrl}
+                      onChange={(e) => setPortafolioUrl(e.target.value)}
+                      className={inputClass('portafolioUrl')}
+                      placeholder="https://behance.net/... o tu sitio web"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 6: Documentos */}
+              {currentStep === 6 && (
+                <div className="space-y-4">
+                  <p className="text-white/80 text-sm mb-4">
+                    Agrega documentos adicionales como certificaciones, títulos, etc. (opcional)
+                  </p>
+
+                  {documents.length === 0 ? (
+                    <div className="text-center py-8 bg-white/10 rounded-lg">
+                      <FileText className="mx-auto text-white/50 mb-2" size={40} />
+                      <p className="text-white/70 mb-4">No hay documentos agregados</p>
+                      <button
+                        type="button"
+                        onClick={addDocument}
+                        className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 flex items-center gap-2 mx-auto"
+                      >
+                        <Plus size={18} />
+                        Agregar Documento
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {documents.map((doc, index) => (
+                        <div key={index} className="bg-white/10 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <h4 className="font-semibold text-white">Documento {index + 1}</h4>
+                            <button
+                              type="button"
+                              onClick={() => removeDocument(index)}
+                              className="text-red-300 hover:text-red-400 p-1"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-white text-xs mb-1">
+                                Nombre del documento *
+                              </label>
+                              <input
+                                type="text"
+                                value={doc.name}
+                                onChange={(e) => updateDocument(index, 'name', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="Ej: Título universitario, Certificación AWS..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-white text-xs mb-1">Archivo *</label>
+                              <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/20 text-white rounded-lg cursor-pointer hover:bg-white/30">
+                                {doc.uploading ? (
+                                  <>
+                                    <Loader2 className="animate-spin" size={18} />
+                                    Subiendo...
+                                  </>
+                                ) : doc.fileUrl ? (
+                                  <>
+                                    <Check size={18} className="text-green-400" />
+                                    {doc.file?.name || 'Archivo subido'}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload size={18} />
+                                    Seleccionar archivo
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) updateDocument(index, 'file', file);
+                                  }}
+                                  disabled={doc.uploading}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={addDocument}
+                        className="w-full py-3 border-2 border-dashed border-white/30 text-white/70 rounded-lg hover:border-white/50 hover:text-white flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} />
+                        Agregar Otro Documento
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
 
-            {/* Botón Registrarse */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-button-green text-white font-bold py-3 rounded-full hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {isSubmitting ? 'REGISTRANDO...' : 'CREAR CUENTA →'}
-            </button>
+            {/* Navigation Buttons */}
+            <div className="mt-6 pt-4 border-t border-white/20">
+              <div className="flex justify-between gap-4">
+                {currentStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    className="flex-1 py-3 border-2 border-white text-white font-semibold rounded-lg hover:bg-white/10 flex items-center justify-center gap-2"
+                  >
+                    <ChevronLeft size={20} />
+                    Anterior
+                  </button>
+                ) : (
+                  <div className="flex-1" />
+                )}
+
+                {currentStep < 6 ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="flex-1 py-3 bg-button-green text-white font-semibold rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    Siguiente
+                    <ChevronRight size={20} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 bg-button-orange text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={20} />
+                        CREANDO...
+                      </>
+                    ) : (
+                      <>
+                        CREAR CUENTA
+                        <ChevronRight size={20} />
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Skip to end */}
+              {currentStep < 6 && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(6)}
+                  className="w-full mt-3 text-white/70 text-sm hover:text-white"
+                >
+                  Omitir y crear cuenta con datos básicos
+                </button>
+              )}
+            </div>
           </form>
 
-          <div className="w-full max-w-sm space-y-4 mt-6">
-            {/* Divider */}
-            <div className="flex items-center justify-center">
-              <hr className="w-1/4 border-white" />
-              <span className="text-white px-2 text-sm">O regístrate con</span>
-              <hr className="w-1/4 border-white" />
-            </div>
-
-            {/* Redes Sociales */}
-            <div className="flex justify-center gap-4">
+          {/* Footer */}
+          <div className="text-center mt-4 pt-4 border-t border-white/20">
+            <p className="text-white text-sm">¿Ya tienes una cuenta?</p>
+            <Link href="/login">
               <button
                 type="button"
-                className="w-12 h-12 bg-custom-beige rounded-full flex items-center justify-center hover:bg-gray-200 transition"
+                className="w-full max-w-xs bg-button-orange text-white font-bold py-2 rounded-full mt-2 hover:bg-orange-700 transition"
               >
-                <Facebook className="text-button-green text-2xl" />
+                INICIAR SESIÓN
               </button>
-              <button
-                type="button"
-                className="w-12 h-12 bg-custom-beige rounded-full flex items-center justify-center hover:bg-gray-200 transition"
-              >
-                <Linkedin className="text-button-green text-2xl" />
-              </button>
-            </div>
-
-            {/* Ya tienes cuenta */}
-            <div className="text-center w-full">
-              <p className="text-white text-sm">¿Ya tienes una cuenta?</p>
-              <Link href="/login" className="w-full flex justify-center">
-                <button
-                  type="button"
-                  className="w-full bg-button-orange text-white font-bold py-3 rounded-full mt-2 hover:bg-orange-700 transition"
-                >
-                  INICIAR SESIÓN →
-                </button>
-              </Link>
-            </div>
+            </Link>
           </div>
         </div>
       </div>
