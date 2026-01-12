@@ -645,6 +645,8 @@ export default function RecruiterDashboard() {
         onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
         currentIndex={currentCandidateIndex}
         totalCount={currentCandidatesList.length}
+        canAddDocuments={true}
+        onDocumentsUpdated={fetchDashboard}
       />
     </div>
   );

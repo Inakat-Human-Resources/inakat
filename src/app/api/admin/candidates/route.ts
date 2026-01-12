@@ -140,6 +140,9 @@ export async function GET(request: Request) {
       include: {
         experiences: {
           orderBy: { fechaInicio: 'desc' }
+        },
+        documents: {
+          orderBy: { createdAt: 'desc' }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -211,6 +214,7 @@ export async function POST(request: Request) {
       source,
       notas,
       experiences, // Array de experiencias
+      documents, // Array de documentos
       password // Opcional: para crear cuenta de candidato
     } = body;
 
@@ -338,10 +342,21 @@ export async function POST(request: Request) {
                   descripcion: exp.descripcion || null
                 }))
               }
+            : undefined,
+        documents:
+          documents && documents.length > 0
+            ? {
+                create: documents.map((doc: any) => ({
+                  name: doc.name,
+                  fileUrl: doc.fileUrl,
+                  fileType: doc.fileType || null
+                }))
+              }
             : undefined
       },
       include: {
         experiences: true,
+        documents: true,
         user: {
           select: {
             id: true,

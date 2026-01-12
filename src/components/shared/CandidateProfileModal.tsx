@@ -2,6 +2,7 @@
 
 'use client';
 
+import { useState, useRef } from 'react';
 import {
   X,
   Mail,
@@ -20,7 +21,11 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  File
+  File,
+  Plus,
+  Upload,
+  Loader2,
+  Save
 } from 'lucide-react';
 
 // Tipos para el candidato (compatible con Application y Candidate)
@@ -116,6 +121,9 @@ interface CandidateProfileModalProps {
   onPrev?: () => void;
   currentIndex?: number;
   totalCount?: number;
+  // Agregar documentos (para reclutador/admin)
+  canAddDocuments?: boolean;
+  onDocumentsUpdated?: () => void;
 }
 
 export default function CandidateProfileModal({
@@ -128,9 +136,22 @@ export default function CandidateProfileModal({
   onNext,
   onPrev,
   currentIndex,
-  totalCount
+  totalCount,
+  canAddDocuments = false,
+  onDocumentsUpdated
 }: CandidateProfileModalProps) {
+  // Estados para agregar documento
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [savingDoc, setSavingDoc] = useState(false);
+  const [docError, setDocError] = useState('');
+  const docInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen || (!application && !candidate)) return null;
+
+  // Obtener candidateId
+  const candidateId = application?.candidateProfile?.id || candidate?.id;
 
   // Normalizar datos según la fuente
   const data = application
@@ -254,6 +275,70 @@ export default function CandidateProfileModal({
       Director: 'Director'
     };
     return labels[seniority || ''] || seniority || '';
+  };
+
+  // Agregar documento
+  const handleAddDocument = async () => {
+    if (!candidateId) {
+      setDocError('No se encontró el ID del candidato');
+      return;
+    }
+    if (!newDocName.trim()) {
+      setDocError('El nombre del documento es requerido');
+      return;
+    }
+    if (!newDocFile) {
+      setDocError('Selecciona un archivo');
+      return;
+    }
+
+    try {
+      setSavingDoc(true);
+      setDocError('');
+
+      // 1. Subir archivo
+      const formData = new FormData();
+      formData.append('file', newDocFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadData.success) {
+        setDocError(uploadData.error || 'Error al subir archivo');
+        return;
+      }
+
+      // 2. Crear documento en el candidato
+      const docResponse = await fetch(`/api/admin/candidates/${candidateId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newDocName.trim(),
+          fileUrl: uploadData.url,
+          fileType: newDocFile.type.split('/')[1] || 'file'
+        })
+      });
+
+      const docData = await docResponse.json();
+
+      if (docData.success) {
+        setShowAddDocModal(false);
+        setNewDocName('');
+        setNewDocFile(null);
+        if (docInputRef.current) docInputRef.current.value = '';
+        onDocumentsUpdated?.();
+      } else {
+        setDocError(docData.error || 'Error al guardar documento');
+      }
+    } catch (err) {
+      setDocError('Error de conexión');
+    } finally {
+      setSavingDoc(false);
+    }
   };
 
   return (
@@ -476,36 +561,54 @@ export default function CandidateProfileModal({
           )}
 
           {/* Documents */}
-          {data.documents && data.documents.length > 0 && (
+          {(data.documents && data.documents.length > 0) || canAddDocuments ? (
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <File className="w-5 h-5 text-[#2b5d62]" />
-                Documentos ({data.documents.length})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {data.documents.map((doc, index) => (
-                  <a
-                    key={doc.id || index}
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-[#2b5d62] transition-colors group"
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <File className="w-5 h-5 text-[#2b5d62]" />
+                  Documentos {data.documents && data.documents.length > 0 && `(${data.documents.length})`}
+                </h3>
+                {canAddDocuments && candidateId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDocModal(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] transition-colors"
                   >
-                    <div className="w-10 h-10 bg-[#e8f4f4] rounded-lg flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-5 h-5 text-[#2b5d62]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
-                      {doc.fileType && (
-                        <p className="text-xs text-gray-500 uppercase">{doc.fileType}</p>
-                      )}
-                    </div>
-                    <Download className="w-4 h-4 text-gray-400 group-hover:text-[#2b5d62] flex-shrink-0" />
-                  </a>
-                ))}
+                    <Plus size={16} />
+                    Agregar
+                  </button>
+                )}
               </div>
+              {data.documents && data.documents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {data.documents.map((doc, index) => (
+                    <a
+                      key={doc.id || index}
+                      href={doc.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-[#2b5d62] transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-[#e8f4f4] rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-[#2b5d62]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                        {doc.fileType && (
+                          <p className="text-xs text-gray-500 uppercase">{doc.fileType}</p>
+                        )}
+                      </div>
+                      <Download className="w-4 h-4 text-gray-400 group-hover:text-[#2b5d62] flex-shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">
+                  No hay documentos. {canAddDocuments && 'Haz clic en "Agregar" para subir uno.'}
+                </p>
+              )}
             </div>
-          )}
+          ) : null}
 
           {/* Recruiter Notes (only for specialist) */}
           {showRecruiterNotes && recruiterNotes && (
@@ -585,6 +688,104 @@ export default function CandidateProfileModal({
           </button>
         </div>
       </div>
+
+      {/* Modal de Agregar Documento */}
+      {showAddDocModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg w-full max-w-md">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-bold">Agregar Documento</h3>
+              <button
+                onClick={() => {
+                  setShowAddDocModal(false);
+                  setNewDocName('');
+                  setNewDocFile(null);
+                  setDocError('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {docError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {docError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre del documento *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Título universitario, Certificación AWS"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2b5d62] focus:border-[#2b5d62]"
+                  value={newDocName}
+                  onChange={(e) => setNewDocName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Archivo *
+                </label>
+                <input
+                  type="file"
+                  ref={docInputRef}
+                  onChange={(e) => setNewDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#2b5d62] file:text-white hover:file:bg-[#1e4347]"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                />
+                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. 5MB)</p>
+              </div>
+
+              {newDocFile && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    Archivo seleccionado: <span className="font-medium">{newDocFile.name}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddDocModal(false);
+                  setNewDocName('');
+                  setNewDocFile(null);
+                  setDocError('');
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleAddDocument}
+                disabled={savingDoc || !newDocName.trim() || !newDocFile}
+                className="flex items-center gap-2 px-4 py-2 bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingDoc ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    Guardar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

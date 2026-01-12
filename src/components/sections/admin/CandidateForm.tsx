@@ -14,7 +14,9 @@ import {
   Link as LinkIcon,
   Save,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  FileText,
+  Upload
 } from 'lucide-react';
 
 interface Experience {
@@ -26,6 +28,14 @@ interface Experience {
   fechaFin: string;
   esActual: boolean;
   descripcion: string;
+}
+
+interface Document {
+  id?: number;
+  name: string;
+  fileUrl: string;
+  fileType?: string;
+  file?: File;
 }
 
 interface CandidateFormProps {
@@ -75,6 +85,10 @@ const CandidateForm = ({
 
   // Experiencias
   const [experiences, setExperiences] = useState<Experience[]>([]);
+
+  // Documentos
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploadingDoc, setUploadingDoc] = useState<number | null>(null);
 
   // Opciones
   const profiles = [
@@ -143,6 +157,17 @@ const CandidateForm = ({
           }))
         );
       }
+
+      if (candidateToEdit.documents) {
+        setDocuments(
+          candidateToEdit.documents.map((doc: any) => ({
+            id: doc.id,
+            name: doc.name,
+            fileUrl: doc.fileUrl,
+            fileType: doc.fileType
+          }))
+        );
+      }
     }
   }, [candidateToEdit]);
 
@@ -166,6 +191,7 @@ const CandidateForm = ({
     setSource('manual');
     setNotas('');
     setExperiences([]);
+    setDocuments([]);
     setActiveTab('personal');
     setError('');
   };
@@ -208,6 +234,56 @@ const CandidateForm = ({
     setExperiences(experiences.filter((_, i) => i !== index));
   };
 
+  // Agregar documento
+  const addDocument = () => {
+    setDocuments([
+      ...documents,
+      { name: '', fileUrl: '' }
+    ]);
+  };
+
+  // Actualizar documento
+  const updateDocument = (index: number, field: keyof Document, value: any) => {
+    const updated = [...documents];
+    updated[index] = { ...updated[index], [field]: value };
+    setDocuments(updated);
+  };
+
+  // Eliminar documento
+  const removeDocument = (index: number) => {
+    setDocuments(documents.filter((_, i) => i !== index));
+  };
+
+  // Subir archivo de documento
+  const handleDocumentUpload = async (index: number, file: File | undefined) => {
+    if (!file) return;
+
+    try {
+      setUploadingDoc(index);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        updateDocument(index, 'fileUrl', data.url);
+        updateDocument(index, 'fileType', file.type.split('/')[1] || 'file');
+      } else {
+        setError(data.error || 'Error al subir archivo');
+      }
+    } catch (err) {
+      setError('Error al subir archivo');
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
   // Enviar formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,7 +311,15 @@ const CandidateForm = ({
         notas: notas || null,
         experiences: experiences.filter(
           (exp) => exp.empresa && exp.puesto && exp.fechaInicio
-        )
+        ),
+        documents: documents.filter(
+          (doc) => doc.name && doc.fileUrl
+        ).map(doc => ({
+          id: doc.id,
+          name: doc.name,
+          fileUrl: doc.fileUrl,
+          fileType: doc.fileType
+        }))
       };
 
       const url = candidateToEdit
@@ -354,6 +438,22 @@ const CandidateForm = ({
           >
             <LinkIcon size={18} />
             Links
+          </button>
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`flex items-center gap-2 px-6 py-3 font-medium ${
+              activeTab === 'documents'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <FileText size={18} />
+            Documentos
+            {documents.length > 0 && (
+              <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full">
+                {documents.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -817,6 +917,116 @@ const CandidateForm = ({
                   className="w-full p-3 border rounded-lg"
                 />
               </div>
+            </div>
+          )}
+
+          {/* Tab: Documentos */}
+          {activeTab === 'documents' && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Agrega documentos adicionales del candidato (títulos, certificaciones, etc.)
+              </p>
+
+              {documents.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <FileText className="mx-auto text-gray-400 mb-2" size={40} />
+                  <p className="text-gray-500">No hay documentos agregados</p>
+                  <button
+                    type="button"
+                    onClick={addDocument}
+                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 mx-auto"
+                  >
+                    <Plus size={18} />
+                    Agregar Documento
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {documents.map((doc, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 p-4 border rounded-lg bg-gray-50"
+                    >
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={doc.name}
+                          onChange={(e) => updateDocument(index, 'name', e.target.value)}
+                          placeholder="Nombre del documento (ej: Título universitario)"
+                          className="w-full p-2 border rounded-lg mb-2"
+                        />
+                        {doc.fileUrl ? (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 text-sm hover:underline flex items-center gap-1"
+                            >
+                              <FileText size={14} />
+                              Ver archivo
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => updateDocument(index, 'fileUrl', '')}
+                              className="text-xs text-gray-500 hover:text-red-600"
+                            >
+                              Cambiar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <label className="cursor-pointer px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 flex items-center gap-1">
+                              {uploadingDoc === index ? (
+                                <>
+                                  <Loader2 size={14} className="animate-spin" />
+                                  Subiendo...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload size={14} />
+                                  Subir archivo
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                onChange={(e) => handleDocumentUpload(index, e.target.files?.[0])}
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                disabled={uploadingDoc === index}
+                              />
+                            </label>
+                            <span className="text-xs text-gray-500">o</span>
+                            <input
+                              type="url"
+                              value={doc.fileUrl}
+                              onChange={(e) => updateDocument(index, 'fileUrl', e.target.value)}
+                              placeholder="URL del documento"
+                              className="flex-1 p-2 border rounded-lg text-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(index)}
+                        className="text-red-500 hover:text-red-700 p-2"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addDocument}
+                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-blue-400 hover:text-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Agregar Otro Documento
+                  </button>
+                </>
+              )}
             </div>
           )}
         </form>

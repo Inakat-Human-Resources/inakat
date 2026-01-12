@@ -36,6 +36,13 @@ interface Experience {
   descripcion?: string;
 }
 
+interface CandidateDocument {
+  id: number;
+  name: string;
+  fileUrl: string;
+  fileType?: string;
+}
+
 interface ProfileData {
   id: number;
   email: string;
@@ -118,9 +125,30 @@ export default function ProfilePage() {
   const [uploadingCv, setUploadingCv] = useState(false);
   const cvInputRef = useRef<HTMLInputElement>(null);
 
+  // Documentos adicionales
+  const [documents, setDocuments] = useState<CandidateDocument[]>([]);
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [savingDoc, setSavingDoc] = useState(false);
+  const docInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchProfile();
+    fetchDocuments();
   }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch('/api/profile/documents', { credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setDocuments(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -390,6 +418,91 @@ export default function ProfilePage() {
         setSuccess('CV eliminado');
       } else {
         setError(data.error || 'Error al eliminar CV');
+      }
+    } catch (err) {
+      setError('Error de conexión');
+    }
+  };
+
+  // Documentos adicionales - CRUD
+  const handleAddDocument = async () => {
+    if (!newDocName.trim()) {
+      setError('El nombre del documento es requerido');
+      return;
+    }
+    if (!newDocFile) {
+      setError('Selecciona un archivo');
+      return;
+    }
+
+    try {
+      setSavingDoc(true);
+      setError('');
+
+      // 1. Subir archivo
+      const formData = new FormData();
+      formData.append('file', newDocFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadData.success) {
+        setError(uploadData.error || 'Error al subir archivo');
+        return;
+      }
+
+      // 2. Crear documento
+      const docResponse = await fetch('/api/profile/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: newDocName.trim(),
+          fileUrl: uploadData.url,
+          fileType: newDocFile.type.split('/')[1] || 'file'
+        })
+      });
+
+      const docData = await docResponse.json();
+
+      if (docData.success) {
+        setShowAddDocModal(false);
+        setNewDocName('');
+        setNewDocFile(null);
+        if (docInputRef.current) docInputRef.current.value = '';
+        setSuccess('Documento agregado exitosamente');
+        fetchDocuments();
+      } else {
+        setError(docData.error || 'Error al guardar documento');
+      }
+    } catch (err) {
+      setError('Error de conexión');
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const deleteDocument = async (docId: number) => {
+    if (!confirm('¿Estás seguro de eliminar este documento?')) return;
+
+    try {
+      const response = await fetch(`/api/profile/documents?id=${docId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Documento eliminado');
+        fetchDocuments();
+      } else {
+        setError(data.error || 'Error al eliminar documento');
       }
     } catch (err) {
       setError('Error de conexión');
@@ -833,6 +946,60 @@ export default function ProfilePage() {
             </div>
           )}
 
+          {/* Mis Documentos */}
+          {profile.candidate && (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Mis Documentos
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDocModal(true)}
+                  className="flex items-center gap-1 px-3 py-2 bg-button-orange text-white text-sm rounded-lg hover:bg-opacity-90"
+                >
+                  <Plus size={16} />
+                  Agregar
+                </button>
+              </div>
+
+              {documents.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">
+                  No tienes documentos adicionales. Agrega títulos, certificaciones, etc.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-6 h-6 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-gray-900">{doc.name}</p>
+                          <a
+                            href={doc.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Ver documento
+                          </a>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => deleteDocument(doc.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Experiencia Laboral */}
           {profile.candidate && (
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -1125,6 +1292,96 @@ export default function ProfilePage() {
                 className="flex items-center gap-2 px-4 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90 disabled:opacity-50"
               >
                 {savingExp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    Guardar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Agregar Documento */}
+      {showAddDocModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-bold">Agregar Documento</h3>
+              <button
+                onClick={() => {
+                  setShowAddDocModal(false);
+                  setNewDocName('');
+                  setNewDocFile(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre del documento *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Título universitario, Certificación AWS"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                  value={newDocName}
+                  onChange={(e) => setNewDocName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Archivo *
+                </label>
+                <input
+                  type="file"
+                  ref={docInputRef}
+                  onChange={(e) => setNewDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-button-orange file:text-white hover:file:bg-opacity-90"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                />
+                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. 5MB)</p>
+              </div>
+
+              {newDocFile && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    Archivo seleccionado: <span className="font-medium">{newDocFile.name}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddDocModal(false);
+                  setNewDocName('');
+                  setNewDocFile(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleAddDocument}
+                disabled={savingDoc || !newDocName.trim() || !newDocFile}
+                className="flex items-center gap-2 px-4 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingDoc ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Guardando...
