@@ -128,6 +128,10 @@ export default function SpecialistDashboard() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [currentRecruiterNotes, setCurrentRecruiterNotes] = useState<string>('');
 
+  // Navegación entre candidatos
+  const [currentCandidatesList, setCurrentCandidatesList] = useState<Application[]>([]);
+  const [currentCandidateIndex, setCurrentCandidateIndex] = useState<number>(0);
+
   // Pestañas configuración
   const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
     { id: 'pending', label: 'Sin Revisar', icon: <Inbox size={18} />, color: 'yellow' },
@@ -236,9 +240,12 @@ export default function SpecialistDashboard() {
     }
   };
 
-  const openApplicationProfile = (application: Application, recruiterNotes?: string) => {
+  const openApplicationProfile = (application: Application, recruiterNotes: string, list: Application[]) => {
+    const index = list.findIndex(app => app.id === application.id);
     setSelectedApplication(application);
-    setCurrentRecruiterNotes(recruiterNotes || '');
+    setCurrentRecruiterNotes(recruiterNotes);
+    setCurrentCandidatesList(list);
+    setCurrentCandidateIndex(index >= 0 ? index : 0);
     setProfileModalOpen(true);
   };
 
@@ -246,6 +253,24 @@ export default function SpecialistDashboard() {
     setProfileModalOpen(false);
     setSelectedApplication(null);
     setCurrentRecruiterNotes('');
+    setCurrentCandidatesList([]);
+    setCurrentCandidateIndex(0);
+  };
+
+  const goToNextCandidate = () => {
+    if (currentCandidateIndex < currentCandidatesList.length - 1) {
+      const nextIndex = currentCandidateIndex + 1;
+      setCurrentCandidateIndex(nextIndex);
+      setSelectedApplication(currentCandidatesList[nextIndex]);
+    }
+  };
+
+  const goToPrevCandidate = () => {
+    if (currentCandidateIndex > 0) {
+      const prevIndex = currentCandidateIndex - 1;
+      setCurrentCandidateIndex(prevIndex);
+      setSelectedApplication(currentCandidatesList[prevIndex]);
+    }
   };
 
   const getStatusLabel = (status: string) => {
@@ -548,7 +573,7 @@ export default function SpecialistDashboard() {
                                 <div className="flex items-center gap-2">
                                   {/* Ver perfil */}
                                   <button
-                                    onClick={() => openApplicationProfile(app, assignment.recruiterNotes || '')}
+                                    onClick={() => openApplicationProfile(app, assignment.recruiterNotes || '', filteredApps)}
                                     className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                                     title="Ver perfil completo"
                                   >
@@ -664,6 +689,10 @@ export default function SpecialistDashboard() {
         onClose={closeProfileModal}
         recruiterNotes={currentRecruiterNotes}
         showRecruiterNotes={true}
+        onNext={currentCandidatesList.length > 1 ? goToNextCandidate : undefined}
+        onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
+        currentIndex={currentCandidateIndex}
+        totalCount={currentCandidatesList.length}
       />
     </div>
   );

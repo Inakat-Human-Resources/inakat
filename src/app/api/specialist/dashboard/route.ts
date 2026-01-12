@@ -128,8 +128,10 @@ export async function GET(request: Request) {
               where: { id: { in: candidateIds } },
               include: {
                 experiences: {
-                  orderBy: { fechaInicio: 'desc' },
-                  take: 5
+                  orderBy: { fechaInicio: 'desc' }
+                },
+                documents: {
+                  orderBy: { createdAt: 'desc' }
                 }
               }
             });
@@ -159,8 +161,10 @@ export async function GET(request: Request) {
                 source: true,
                 notas: true,
                 experiences: {
-                  orderBy: { fechaInicio: 'desc' },
-                  take: 5
+                  orderBy: { fechaInicio: 'desc' }
+                },
+                documents: {
+                  orderBy: { createdAt: 'desc' }
                 }
               }
             });
