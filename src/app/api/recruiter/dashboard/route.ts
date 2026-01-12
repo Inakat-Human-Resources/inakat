@@ -121,8 +121,10 @@ export async function GET(request: Request) {
                 source: true,
                 notas: true,
                 experiences: {
-                  orderBy: { fechaInicio: 'desc' },
-                  take: 5
+                  orderBy: { fechaInicio: 'desc' }
+                },
+                documents: {
+                  orderBy: { createdAt: 'desc' }
                 }
               }
             });

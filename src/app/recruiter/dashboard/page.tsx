@@ -124,6 +124,10 @@ export default function RecruiterDashboard() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
+  // Navegación entre candidatos
+  const [currentCandidatesList, setCurrentCandidatesList] = useState<Application[]>([]);
+  const [currentCandidateIndex, setCurrentCandidateIndex] = useState<number>(0);
+
   // Pestañas configuración
   const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
     { id: 'pending', label: 'Sin Revisar', icon: <Inbox size={18} />, color: 'yellow' },
@@ -235,14 +239,35 @@ export default function RecruiterDashboard() {
     }
   };
 
-  const openApplicationProfile = (application: Application) => {
+  const openApplicationProfile = (application: Application, candidatesList: Application[] = []) => {
+    const index = candidatesList.findIndex(app => app.id === application.id);
     setSelectedApplication(application);
+    setCurrentCandidatesList(candidatesList);
+    setCurrentCandidateIndex(index >= 0 ? index : 0);
     setProfileModalOpen(true);
   };
 
   const closeProfileModal = () => {
     setProfileModalOpen(false);
     setSelectedApplication(null);
+    setCurrentCandidatesList([]);
+    setCurrentCandidateIndex(0);
+  };
+
+  const goToNextCandidate = () => {
+    if (currentCandidateIndex < currentCandidatesList.length - 1) {
+      const nextIndex = currentCandidateIndex + 1;
+      setCurrentCandidateIndex(nextIndex);
+      setSelectedApplication(currentCandidatesList[nextIndex]);
+    }
+  };
+
+  const goToPrevCandidate = () => {
+    if (currentCandidateIndex > 0) {
+      const prevIndex = currentCandidateIndex - 1;
+      setCurrentCandidateIndex(prevIndex);
+      setSelectedApplication(currentCandidatesList[prevIndex]);
+    }
   };
 
   const getStatusLabel = (status: string) => {
@@ -501,7 +526,7 @@ export default function RecruiterDashboard() {
                                 <div className="flex items-center gap-2">
                                   {/* Ver perfil */}
                                   <button
-                                    onClick={() => openApplicationProfile(app)}
+                                    onClick={() => openApplicationProfile(app, filteredApps)}
                                     className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors"
                                     title="Ver perfil"
                                   >
@@ -616,6 +641,10 @@ export default function RecruiterDashboard() {
         isOpen={profileModalOpen}
         onClose={closeProfileModal}
         showRecruiterNotes={false}
+        onNext={currentCandidatesList.length > 1 ? goToNextCandidate : undefined}
+        onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
+        currentIndex={currentCandidateIndex}
+        totalCount={currentCandidatesList.length}
       />
     </div>
   );

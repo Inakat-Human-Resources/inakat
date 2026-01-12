@@ -16,7 +16,11 @@ import {
   User,
   Clock,
   MessageSquare,
-  Building
+  Building,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  File
 } from 'lucide-react';
 
 // Tipos para el candidato (compatible con Application y Candidate)
@@ -29,6 +33,14 @@ interface Experience {
   fechaFin?: string;
   esActual: boolean;
   descripcion?: string;
+}
+
+interface CandidateDocument {
+  id: number;
+  name: string;
+  fileUrl: string;
+  fileType?: string;
+  createdAt?: string;
 }
 
 interface CandidateProfile {
@@ -48,6 +60,7 @@ interface CandidateProfile {
   source?: string;
   notas?: string;
   experiences?: Experience[];
+  documents?: CandidateDocument[];
 }
 
 interface ApplicationData {
@@ -86,6 +99,7 @@ interface BankCandidate {
   notas?: string | null;
   status: string;
   experiences?: Experience[];
+  documents?: CandidateDocument[];
 }
 
 interface CandidateProfileModalProps {
@@ -97,6 +111,11 @@ interface CandidateProfileModalProps {
   // Notas del reclutador (solo visible para especialista)
   recruiterNotes?: string;
   showRecruiterNotes?: boolean;
+  // Navegación entre candidatos
+  onNext?: () => void;
+  onPrev?: () => void;
+  currentIndex?: number;
+  totalCount?: number;
 }
 
 export default function CandidateProfileModal({
@@ -105,7 +124,11 @@ export default function CandidateProfileModal({
   isOpen,
   onClose,
   recruiterNotes,
-  showRecruiterNotes = false
+  showRecruiterNotes = false,
+  onNext,
+  onPrev,
+  currentIndex,
+  totalCount
 }: CandidateProfileModalProps) {
   if (!isOpen || (!application && !candidate)) return null;
 
@@ -133,7 +156,8 @@ export default function CandidateProfileModal({
         fechaNacimiento: application.candidateProfile?.fechaNacimiento,
         source: application.candidateProfile?.source,
         adminNotas: application.candidateProfile?.notas,
-        experiences: application.candidateProfile?.experiences || []
+        experiences: application.candidateProfile?.experiences || [],
+        documents: application.candidateProfile?.documents || []
       }
     : {
         name: `${candidate!.nombre} ${candidate!.apellidoPaterno} ${candidate!.apellidoMaterno || ''}`.trim(),
@@ -157,7 +181,8 @@ export default function CandidateProfileModal({
         fechaNacimiento: candidate!.fechaNacimiento,
         source: candidate!.source,
         adminNotas: candidate!.notas,
-        experiences: candidate!.experiences || []
+        experiences: candidate!.experiences || [],
+        documents: candidate!.documents || []
       };
 
   const formatDate = (dateString: string) => {
@@ -450,6 +475,38 @@ export default function CandidateProfileModal({
             </div>
           )}
 
+          {/* Documents */}
+          {data.documents && data.documents.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <File className="w-5 h-5 text-[#2b5d62]" />
+                Documentos ({data.documents.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {data.documents.map((doc, index) => (
+                  <a
+                    key={doc.id || index}
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-[#2b5d62] transition-colors group"
+                  >
+                    <div className="w-10 h-10 bg-[#e8f4f4] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-5 h-5 text-[#2b5d62]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                      {doc.fileType && (
+                        <p className="text-xs text-gray-500 uppercase">{doc.fileType}</p>
+                      )}
+                    </div>
+                    <Download className="w-4 h-4 text-gray-400 group-hover:text-[#2b5d62] flex-shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recruiter Notes (only for specialist) */}
           {showRecruiterNotes && recruiterNotes && (
             <div className="mb-6">
@@ -491,7 +548,35 @@ export default function CandidateProfileModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-4 flex justify-end">
+        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-4 flex justify-between items-center">
+          {/* Navigation */}
+          {(onPrev || onNext) && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onPrev}
+                disabled={!onPrev || currentIndex === 0}
+                className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </button>
+              {currentIndex !== undefined && totalCount !== undefined && (
+                <span className="text-sm text-gray-500 px-2">
+                  {currentIndex + 1} de {totalCount}
+                </span>
+              )}
+              <button
+                onClick={onNext}
+                disabled={!onNext || (currentIndex !== undefined && totalCount !== undefined && currentIndex >= totalCount - 1)}
+                className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {!(onPrev || onNext) && <div />}
+
           <button
             onClick={onClose}
             className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
