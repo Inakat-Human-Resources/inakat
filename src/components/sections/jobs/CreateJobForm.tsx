@@ -12,7 +12,9 @@ import {
   Calculator,
   ArrowLeft,
   Loader2,
-  MapPin
+  MapPin,
+  X,
+  Plus
 } from 'lucide-react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 
@@ -70,11 +72,11 @@ const CreateJobForm = () => {
     workMode: 'presential',
     description: '',
     requirements: '',
-    companyRating: '',
     // Campos para pricing
     profile: '',
     subcategory: '', // Sub-especialidad
     seniority: '',
+    educationLevel: '', // Nivel de estudios requerido
     // Campos extendidos
     habilidades: [] as string[],
     responsabilidades: '',
@@ -83,27 +85,25 @@ const CreateJobForm = () => {
     informacionAdicional: ''
   });
 
+  // Opciones de nivel de estudios
+  const EDUCATION_LEVELS = [
+    'Sin requisito',
+    'Primaria',
+    'Secundaria',
+    'Preparatoria/Bachillerato',
+    'Licenciatura',
+    'Maestría',
+    'Doctorado'
+  ];
+
   // Estado para error de salario
   const [salaryError, setSalaryError] = useState<string | null>(null);
 
   // Especialidades del catálogo
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
 
-  // Lista de habilidades para checkboxes
-  const HABILIDADES_OPTIONS = [
-    'Comunicación efectiva',
-    'Puntualidad y responsabilidad',
-    'Disponibilidad para trasladarse',
-    'Trabajo en equipo',
-    'Autonomía en la ejecución',
-    'Resolución de problemas',
-    'Apego a procesos o normativas',
-    'Liderazgo o supervisión'
-  ];
-
-  // Estado para campo "Otros" en habilidades
-  const [habilidadesOtros, setHabilidadesOtros] = useState('');
-  const [showHabilidadesOtros, setShowHabilidadesOtros] = useState(false);
+  // Estado para input de habilidades (chips)
+  const [habilidadInput, setHabilidadInput] = useState('');
 
   const [pricingOptions, setPricingOptions] = useState<PricingOptions>({
     profiles: [],
@@ -271,20 +271,6 @@ const CreateJobForm = () => {
           ? JSON.parse(job.habilidades)
           : [];
 
-        // Separar habilidades predefinidas de las custom (Otros)
-        const predefinedHabs = parsedHabilidades.filter((h: string) =>
-          HABILIDADES_OPTIONS.includes(h)
-        );
-        const customHabs = parsedHabilidades.filter(
-          (h: string) => !HABILIDADES_OPTIONS.includes(h)
-        );
-
-        // Si hay habilidades custom, activar el campo "Otros"
-        if (customHabs.length > 0) {
-          setShowHabilidadesOtros(true);
-          setHabilidadesOtros(customHabs.join(', '));
-        }
-
         // Extraer salaryMin y salaryMax (pueden venir del job o parsear el salary string)
         let salaryMinVal = job.salaryMin ? String(job.salaryMin) : '';
         let salaryMaxVal = job.salaryMax ? String(job.salaryMax) : '';
@@ -308,11 +294,11 @@ const CreateJobForm = () => {
           workMode: job.workMode || 'presential',
           description: job.description || '',
           requirements: job.requirements || '',
-          companyRating: job.companyRating ? String(job.companyRating) : '',
           profile: job.profile || '',
           subcategory: job.subcategory || '',
           seniority: job.seniority || '',
-          habilidades: predefinedHabs,
+          educationLevel: job.educationLevel || '',
+          habilidades: parsedHabilidades,
           responsabilidades: job.responsabilidades || '',
           resultadosEsperados: job.resultadosEsperados || '',
           valoresActitudes: job.valoresActitudes || '',
@@ -463,12 +449,6 @@ const CreateJobForm = () => {
       const url = isEditing ? `/api/jobs/${editJobId}` : '/api/jobs';
       const method = isEditing ? 'PUT' : 'POST';
 
-      // Combinar habilidades predefinidas con las custom (Otros)
-      const allHabilidades = [...formData.habilidades];
-      if (showHabilidadesOtros && habilidadesOtros.trim()) {
-        allHabilidades.push(habilidadesOtros.trim());
-      }
-
       // Construir el salary string desde min/max
       const salaryStr = `$${salaryMinNum.toLocaleString('es-MX')} - $${salaryMaxNum.toLocaleString('es-MX')} / mes`;
 
@@ -480,11 +460,8 @@ const CreateJobForm = () => {
           salary: salaryStr,
           salaryMin: salaryMinNum,
           salaryMax: salaryMaxNum,
-          companyRating: formData.companyRating
-            ? parseFloat(formData.companyRating)
-            : null,
           habilidades:
-            allHabilidades.length > 0 ? JSON.stringify(allHabilidades) : null,
+            formData.habilidades.length > 0 ? JSON.stringify(formData.habilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
         })
       });
@@ -571,10 +548,10 @@ const CreateJobForm = () => {
       workMode: 'presential',
       description: '',
       requirements: '',
-      companyRating: '',
       profile: '',
       subcategory: '',
       seniority: '',
+      educationLevel: '',
       habilidades: [],
       responsabilidades: '',
       resultadosEsperados: '',
@@ -583,8 +560,7 @@ const CreateJobForm = () => {
     });
     setCalculatedCost(0);
     setMinSalaryRequired(null);
-    setHabilidadesOtros('');
-    setShowHabilidadesOtros(false);
+    setHabilidadInput('');
     setSalaryError(null);
   };
 
@@ -882,25 +858,6 @@ const CreateJobForm = () => {
           )}
         </div>
 
-        {/* Rating */}
-        <div>
-          <label className="block text-sm font-semibold mb-2">
-            Rating de la Empresa (opcional)
-          </label>
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            max="5"
-            value={formData.companyRating}
-            onChange={(e) =>
-              setFormData({ ...formData, companyRating: e.target.value })
-            }
-            placeholder="ej. 4.5"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green max-w-xs"
-          />
-        </div>
-
         {/* Tipo de trabajo y Modalidad */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -1041,6 +998,30 @@ const CreateJobForm = () => {
             );
           })()}
 
+          {/* Nivel de estudios requerido */}
+          <div className="mt-4">
+            <label className="block text-sm font-semibold mb-2">
+              Nivel de Estudios Requerido
+            </label>
+            <select
+              value={formData.educationLevel}
+              onChange={(e) =>
+                setFormData({ ...formData, educationLevel: e.target.value })
+              }
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green bg-white"
+            >
+              <option value="">Selecciona el nivel de estudios</option>
+              {EDUCATION_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Indica el nivel mínimo de estudios requerido para el puesto
+            </p>
+          </div>
+
           {/* Costo calculado - Solo mostrar para creación */}
           {!isEditing && calculatedCost > 0 && (
             <div
@@ -1117,69 +1098,85 @@ const CreateJobForm = () => {
           />
         </div>
 
-        {/* Sección: Habilidades Importantes */}
+        {/* Sección: Habilidades Importantes (Chips libres) */}
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="font-semibold mb-3">
             Habilidades y Características Importantes
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Selecciona las que deben tener mayor peso en evaluación:
+            Agrega las habilidades que deben tener mayor peso en la evaluación
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            {HABILIDADES_OPTIONS.map((hab) => (
-              <label
-                key={hab}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={formData.habilidades.includes(hab)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        habilidades: [...prev.habilidades, hab]
-                      }));
-                    } else {
-                      setFormData((prev) => ({
-                        ...prev,
-                        habilidades: prev.habilidades.filter((h) => h !== hab)
-                      }));
-                    }
-                  }}
-                  className="rounded"
-                />
-                <span className="text-sm">{hab}</span>
-              </label>
-            ))}
-            {/* Opción "Otros" */}
-            <label className="flex items-center gap-2 cursor-pointer col-span-2 mt-2">
-              <input
-                type="checkbox"
-                checked={showHabilidadesOtros}
-                onChange={(e) => {
-                  setShowHabilidadesOtros(e.target.checked);
-                  if (!e.target.checked) {
-                    setHabilidadesOtros('');
+
+          {/* Input para agregar habilidad */}
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={habilidadInput}
+              onChange={(e) => setHabilidadInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const trimmed = habilidadInput.trim();
+                  if (trimmed && !formData.habilidades.includes(trimmed)) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      habilidades: [...prev.habilidades, trimmed]
+                    }));
+                    setHabilidadInput('');
                   }
-                }}
-                className="rounded"
-              />
-              <span className="text-sm font-medium">Otros (especifica)</span>
-            </label>
+                }
+              }}
+              placeholder="Escribe una habilidad..."
+              className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const trimmed = habilidadInput.trim();
+                if (trimmed && !formData.habilidades.includes(trimmed)) {
+                  setFormData((prev) => ({
+                    ...prev,
+                    habilidades: [...prev.habilidades, trimmed]
+                  }));
+                  setHabilidadInput('');
+                }
+              }}
+              className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 flex items-center gap-1 text-sm font-medium"
+            >
+              <Plus size={16} />
+              Agregar
+            </button>
           </div>
-          {/* Campo de texto para "Otros" */}
-          {showHabilidadesOtros && (
-            <div className="mt-3">
-              <input
-                type="text"
-                value={habilidadesOtros}
-                onChange={(e) => setHabilidadesOtros(e.target.value)}
-                placeholder="Especifica otras habilidades importantes..."
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent text-sm"
-              />
+
+          {/* Lista de chips */}
+          {formData.habilidades.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {formData.habilidades.map((hab, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-button-green text-white rounded-full text-sm"
+                >
+                  {hab}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        habilidades: prev.habilidades.filter((_, i) => i !== index)
+                      }));
+                    }}
+                    className="hover:bg-green-800 rounded-full p-0.5"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
             </div>
           )}
+
+          <p className="text-xs text-gray-500 mt-3">
+            Escribe una habilidad y presiona Enter o click en Agregar
+          </p>
         </div>
 
         {/* Responsabilidades Específicas */}

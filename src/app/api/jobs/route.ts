@@ -129,6 +129,7 @@ export async function POST(request: Request) {
       profile,
       subcategory,
       seniority,
+      educationLevel,
       publishNow,
       // Campos extendidos
       habilidades,
@@ -302,6 +303,7 @@ export async function POST(request: Request) {
         profile: profile || null,
         subcategory: subcategory || null,
         seniority: seniority || null,
+        educationLevel: educationLevel || null,
         creditCost: initialStatus === 'active' ? creditCost : 0,
         editableUntil, // 4 horas para editar
         // Campos extendidos

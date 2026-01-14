@@ -67,6 +67,7 @@ interface Job {
 interface DashboardStats {
   totalJobs: number;
   activeJobs: number;
+  pausedJobs: number;
   draftJobs: number;
   closedJobs: number;
   totalApplications: number;
@@ -79,6 +80,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalJobs: 0,
     activeJobs: 0,
+    pausedJobs: 0,
     draftJobs: 0,
     closedJobs: 0,
     totalApplications: 0,
@@ -92,6 +94,7 @@ export default function AdminDashboardPage() {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -106,7 +109,7 @@ export default function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Filtrar vacantes cuando cambia la empresa o especialidad seleccionada
+    // Filtrar vacantes cuando cambia la empresa, especialidad o status seleccionado
     let filtered = jobs;
     if (selectedCompany) {
       filtered = filtered.filter(j => j.company === selectedCompany);
@@ -114,8 +117,11 @@ export default function AdminDashboardPage() {
     if (selectedProfile) {
       filtered = filtered.filter(j => j.profile === selectedProfile);
     }
+    if (selectedStatus) {
+      filtered = filtered.filter(j => j.status === selectedStatus);
+    }
     setFilteredJobs(filtered);
-  }, [selectedCompany, selectedProfile, jobs]);
+  }, [selectedCompany, selectedProfile, selectedStatus, jobs]);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -156,6 +162,7 @@ export default function AdminDashboardPage() {
           ...prev,
           totalJobs: allJobs.length,
           activeJobs: allJobs.filter((j: Job) => j.status === 'active').length,
+          pausedJobs: allJobs.filter((j: Job) => j.status === 'paused').length,
           draftJobs: allJobs.filter((j: Job) => j.status === 'draft').length,
           closedJobs: allJobs.filter((j: Job) => j.status === 'closed').length,
           totalCompanies: uniqueCompanies.length
@@ -279,6 +286,7 @@ export default function AdminDashboardPage() {
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { bg: string; text: string; icon: React.ReactNode; label: string }> = {
       active: { bg: 'bg-green-100', text: 'text-green-800', icon: <CheckCircle size={14} />, label: 'Activa' },
+      paused: { bg: 'bg-orange-100', text: 'text-orange-800', icon: <AlertCircle size={14} />, label: 'Pausada' },
       draft: { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: <Clock size={14} />, label: 'Borrador' },
       closed: { bg: 'bg-gray-100', text: 'text-gray-800', icon: <XCircle size={14} />, label: 'Cerrada' }
     };
@@ -342,6 +350,12 @@ export default function AdminDashboardPage() {
                 <p className="text-xs text-gray-500 mt-1">
                   {stats.activeJobs} activas, {stats.draftJobs} borradores
                 </p>
+                {stats.pausedJobs > 0 && (
+                  <p className="text-xs text-orange-600 font-medium mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} />
+                    {stats.pausedJobs} pausada{stats.pausedJobs !== 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
               <Briefcase className="text-blue-500" size={40} />
             </div>
@@ -514,6 +528,25 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Estado:</label>
+                  <div className="relative">
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className={`appearance-none px-4 py-2 pr-10 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 min-w-[140px] ${
+                        selectedStatus === 'paused' ? 'border-orange-400 bg-orange-50' : ''
+                      }`}
+                    >
+                      <option value="">Todos</option>
+                      <option value="active">Activas</option>
+                      <option value="paused">Pausadas</option>
+                      <option value="draft">Borradores</option>
+                      <option value="closed">Cerradas</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <label className="text-sm text-gray-600">Empresa:</label>
                   <div className="relative">

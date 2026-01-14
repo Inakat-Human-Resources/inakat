@@ -521,7 +521,7 @@ export default function PurchaseCreditsPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-button-orange font-bold">✓</span>
                     <span>
-                      Cada crédito te permite publicar 1 vacante activa
+                      Los créditos se usan para publicar vacantes. El costo varía según el perfil y seniority.
                     </span>
                   </li>
                   <li className="flex items-start gap-2">

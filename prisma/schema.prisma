@@ -136,6 +136,7 @@ model Job {
   profile         String?   // "Tecnología", "Diseño Gráfico", etc. (del catálogo de especialidades)
   subcategory     String?   // Sub-especialidad dentro del profile
   seniority       String?   // "Practicante", "Jr", "Middle", "Sr", "Director"
+  educationLevel  String?   // "Sin requisito", "Primaria", "Secundaria", "Preparatoria/Bachillerato", "Licenciatura", "Maestría", "Doctorado"
 
   // Campos extendidos para mejor matching
   habilidades           String?   @db.Text  // JSON array as string
