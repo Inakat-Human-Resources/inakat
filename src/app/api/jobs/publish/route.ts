@@ -205,6 +205,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // Calcular tiempo límite para editar (4 horas desde ahora)
+    const editableUntil = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
     // Crear vacante
     const job = await prisma.job.create({
       data: {
@@ -223,7 +226,8 @@ export async function POST(request: Request) {
         // Campos de pricing
         profile: profile || null,
         seniority: seniority || null,
-        creditCost: initialStatus === 'active' ? creditCost : 0
+        creditCost: initialStatus === 'active' ? creditCost : 0,
+        editableUntil // 4 horas para editar
       }
     });
 
@@ -256,6 +260,143 @@ export async function POST(request: Request) {
     console.error('Error creating job:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create job' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT - Publicar un borrador existente
+export async function PUT(request: Request) {
+  try {
+    // Verificar autenticación
+    const cookieStore = await cookies();
+    const token = cookieStore.get('auth-token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
+    const payload = verifyToken(token);
+    if (!payload?.userId) {
+      return NextResponse.json(
+        { success: false, error: 'Token inválido' },
+        { status: 401 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId }
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Usuario no encontrado' },
+        { status: 404 }
+      );
+    }
+
+    const body = await request.json();
+    const { jobId } = body;
+
+    if (!jobId) {
+      return NextResponse.json(
+        { success: false, error: 'Se requiere jobId' },
+        { status: 400 }
+      );
+    }
+
+    // Buscar la vacante
+    const job = await prisma.job.findUnique({
+      where: { id: jobId }
+    });
+
+    if (!job) {
+      return NextResponse.json(
+        { success: false, error: 'Vacante no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    // Verificar que el usuario es dueño de la vacante
+    if (job.userId !== user.id && user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para publicar esta vacante' },
+        { status: 403 }
+      );
+    }
+
+    // Verificar que está en status draft
+    if (job.status !== 'draft') {
+      return NextResponse.json(
+        { success: false, error: 'Solo se pueden publicar vacantes en borrador' },
+        { status: 400 }
+      );
+    }
+
+    // Calcular costo en créditos
+    let creditCost = 0;
+    if (job.profile && job.seniority && job.workMode) {
+      const pricingResult = await calculateJobCreditCost(job.profile, job.seniority, job.workMode);
+      creditCost = pricingResult.credits;
+    }
+
+    // Verificar créditos (excepto admin)
+    if (user.role !== 'admin') {
+      if (user.credits < creditCost) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Créditos insuficientes para publicar',
+            required: creditCost,
+            available: user.credits
+          },
+          { status: 402 }
+        );
+      }
+
+      // Descontar créditos
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { credits: { decrement: creditCost } }
+      });
+
+      // Registrar transacción
+      await prisma.creditTransaction.create({
+        data: {
+          userId: user.id,
+          type: 'spend',
+          amount: -creditCost,
+          balanceBefore: user.credits,
+          balanceAfter: user.credits - creditCost,
+          description: `Publicación de vacante: ${job.title}`,
+          jobId: job.id
+        }
+      });
+    }
+
+    // Actualizar vacante a activa
+    const updatedJob = await prisma.job.update({
+      where: { id: jobId },
+      data: {
+        status: 'active',
+        creditCost: creditCost
+      }
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: '¡Vacante publicada exitosamente!',
+      data: updatedJob,
+      creditCost: creditCost,
+      newBalance: user.role === 'admin' ? user.credits : user.credits - creditCost
+    });
+  } catch (error) {
+    console.error('Error publishing job:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error al publicar vacante' },
       { status: 500 }
     );
   }

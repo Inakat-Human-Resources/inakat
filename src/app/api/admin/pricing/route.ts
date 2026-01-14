@@ -118,7 +118,7 @@ export async function POST() {
 
 /**
  * PUT /api/admin/pricing
- * Actualizar solo créditos e isActive (no se pueden modificar profile, seniority, workMode, location)
+ * Actualizar créditos, isActive y minSalary (no se pueden modificar profile, seniority, workMode, location)
  */
 export async function PUT(request: Request) {
   try {
@@ -131,7 +131,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, credits, isActive } = body;
+    const { id, credits, isActive, minSalary } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -160,14 +160,23 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Solo permitir actualizar credits e isActive
-    const updateData: { credits?: number; isActive?: boolean } = {};
+    // Validar minSalary
+    if (minSalary !== undefined && minSalary !== null && (typeof minSalary !== 'number' || minSalary < 0)) {
+      return NextResponse.json(
+        { success: false, error: 'minSalary debe ser un número positivo o null' },
+        { status: 400 }
+      );
+    }
+
+    // Solo permitir actualizar credits, isActive y minSalary
+    const updateData: { credits?: number; isActive?: boolean; minSalary?: number | null } = {};
     if (credits !== undefined) updateData.credits = credits;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (minSalary !== undefined) updateData.minSalary = minSalary;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { success: false, error: 'No hay campos válidos para actualizar. Solo se puede modificar credits e isActive.' },
+        { success: false, error: 'No hay campos válidos para actualizar. Solo se puede modificar credits, isActive y minSalary.' },
         { status: 400 }
       );
     }
@@ -179,7 +188,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Créditos actualizados exitosamente',
+      message: 'Entrada actualizada exitosamente',
       data: updated
     });
 

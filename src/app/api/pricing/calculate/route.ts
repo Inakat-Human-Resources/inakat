@@ -44,7 +44,8 @@ export async function POST(request: Request) {
       success: true,
       found: true,
       credits: result.credits,
-      pricingId: result.pricingId
+      pricingId: result.pricingId,
+      minSalary: result.minSalary
     });
   } catch (error) {
     console.error('Error calculating price:', error);

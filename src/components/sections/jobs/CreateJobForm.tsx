@@ -11,8 +11,22 @@ import {
   Send,
   Calculator,
   ArrowLeft,
-  Loader2
+  Loader2,
+  MapPin
 } from 'lucide-react';
+import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
+
+// Configuración de Google Maps
+const libraries: ("places")[] = ["places"];
+const mapContainerStyle = {
+  width: '100%',
+  height: '200px',
+  borderRadius: '8px'
+};
+const defaultCenter = {
+  lat: 19.4326, // CDMX por defecto
+  lng: -99.1332
+};
 
 interface PricingOptions {
   profiles: string[];
@@ -50,7 +64,8 @@ const CreateJobForm = () => {
     title: '',
     company: '',
     location: '',
-    salary: '',
+    salaryMin: '',
+    salaryMax: '',
     jobType: 'Tiempo Completo',
     workMode: 'presential',
     description: '',
@@ -67,6 +82,9 @@ const CreateJobForm = () => {
     valoresActitudes: '',
     informacionAdicional: ''
   });
+
+  // Estado para error de salario
+  const [salaryError, setSalaryError] = useState<string | null>(null);
 
   // Especialidades del catálogo
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -95,6 +113,7 @@ const CreateJobForm = () => {
   });
 
   const [calculatedCost, setCalculatedCost] = useState<number>(0);
+  const [minSalaryRequired, setMinSalaryRequired] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,6 +123,98 @@ const CreateJobForm = () => {
     type: 'success' | 'error' | 'draft' | null;
     message: string;
   }>({ type: null, message: '' });
+
+  // Estados para Google Maps
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+
+  // Cargar Google Maps
+  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  });
+
+  // Funciones para Google Maps
+  const onAutocompleteLoad = (auto: google.maps.places.Autocomplete) => {
+    setAutocomplete(auto);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+
+        setMapCenter({ lat, lng });
+        setMarkerPosition({ lat, lng });
+
+        // Extraer la ubicación formateada
+        const addressComponents = place.address_components || [];
+        let ciudad = '';
+        let estado = '';
+
+        addressComponents.forEach((component) => {
+          const types = component.types;
+          if (types.includes('locality')) {
+            ciudad = component.long_name;
+          }
+          if (types.includes('administrative_area_level_1')) {
+            estado = component.short_name;
+          }
+        });
+
+        // Formatear ubicación como "Ciudad, Estado"
+        const locationStr = ciudad && estado
+          ? `${ciudad}, ${estado}`
+          : place.formatted_address || '';
+
+        setFormData(prev => ({
+          ...prev,
+          location: locationStr
+        }));
+      }
+    }
+  };
+
+  const onMapClick = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setMarkerPosition({ lat, lng });
+
+      // Reverse geocoding para obtener la dirección
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results?.[0]) {
+          const addressComponents = results[0].address_components || [];
+          let ciudad = '';
+          let estado = '';
+
+          addressComponents.forEach((component) => {
+            const types = component.types;
+            if (types.includes('locality')) {
+              ciudad = component.long_name;
+            }
+            if (types.includes('administrative_area_level_1')) {
+              estado = component.short_name;
+            }
+          });
+
+          const locationStr = ciudad && estado
+            ? `${ciudad}, ${estado}`
+            : results[0].formatted_address || '';
+
+          setFormData(prev => ({
+            ...prev,
+            location: locationStr
+          }));
+        }
+      });
+    }
+  };
 
   // Cargar datos de la vacante si estamos en modo edición
   useEffect(() => {
@@ -131,6 +242,7 @@ const CreateJobForm = () => {
       calculateCost();
     } else {
       setCalculatedCost(0);
+      setMinSalaryRequired(null);
     }
   }, [formData.profile, formData.seniority, formData.workMode]);
 
@@ -173,11 +285,25 @@ const CreateJobForm = () => {
           setHabilidadesOtros(customHabs.join(', '));
         }
 
+        // Extraer salaryMin y salaryMax (pueden venir del job o parsear el salary string)
+        let salaryMinVal = job.salaryMin ? String(job.salaryMin) : '';
+        let salaryMaxVal = job.salaryMax ? String(job.salaryMax) : '';
+
+        // Si no hay valores numéricos pero hay salary string, intentar parsear
+        if (!salaryMinVal && !salaryMaxVal && job.salary) {
+          const salaryMatch = job.salary.match(/\$?([\d,]+)\s*-\s*\$?([\d,]+)/);
+          if (salaryMatch) {
+            salaryMinVal = salaryMatch[1].replace(/,/g, '');
+            salaryMaxVal = salaryMatch[2].replace(/,/g, '');
+          }
+        }
+
         setFormData({
           title: job.title || '',
           company: job.company || '',
           location: job.location || '',
-          salary: job.salary || '',
+          salaryMin: salaryMinVal,
+          salaryMax: salaryMaxVal,
           jobType: job.jobType || 'Tiempo Completo',
           workMode: job.workMode || 'presential',
           description: job.description || '',
@@ -279,6 +405,7 @@ const CreateJobForm = () => {
       const data = await response.json();
       if (data.success) {
         setCalculatedCost(data.credits);
+        setMinSalaryRequired(data.minSalary || null);
       }
     } catch (error) {
       console.error('Error calculating cost:', error);
@@ -292,6 +419,33 @@ const CreateJobForm = () => {
     publishNow: boolean = false
   ) => {
     e.preventDefault();
+
+    // Validar salarios
+    const salaryMinNum = parseInt(formData.salaryMin) || 0;
+    const salaryMaxNum = parseInt(formData.salaryMax) || 0;
+
+    if (!salaryMinNum || !salaryMaxNum) {
+      setSalaryError('Debes ingresar el salario mínimo y máximo');
+      return;
+    }
+
+    if (salaryMinNum > salaryMaxNum) {
+      setSalaryError('El salario mínimo no puede ser mayor al máximo');
+      return;
+    }
+
+    if (salaryMaxNum - salaryMinNum > 10000) {
+      setSalaryError('La diferencia máxima permitida es $10,000 MXN');
+      return;
+    }
+
+    // Validar salario mínimo requerido para la especialidad
+    if (minSalaryRequired && salaryMinNum < minSalaryRequired) {
+      setSalaryError(`El salario mínimo debe ser al menos $${minSalaryRequired.toLocaleString('es-MX')} MXN para esta especialidad`);
+      return;
+    }
+
+    setSalaryError(null);
 
     // Verificar créditos antes de publicar (solo para nuevas vacantes)
     if (!isEditing && publishNow && userInfo && userInfo.role !== 'admin') {
@@ -315,11 +469,17 @@ const CreateJobForm = () => {
         allHabilidades.push(habilidadesOtros.trim());
       }
 
+      // Construir el salary string desde min/max
+      const salaryStr = `$${salaryMinNum.toLocaleString('es-MX')} - $${salaryMaxNum.toLocaleString('es-MX')} / mes`;
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          salary: salaryStr,
+          salaryMin: salaryMinNum,
+          salaryMax: salaryMaxNum,
           companyRating: formData.companyRating
             ? parseFloat(formData.companyRating)
             : null,
@@ -405,7 +565,8 @@ const CreateJobForm = () => {
       title: '',
       company: '',
       location: '',
-      salary: '',
+      salaryMin: '',
+      salaryMax: '',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
       description: '',
@@ -421,8 +582,10 @@ const CreateJobForm = () => {
       informacionAdicional: ''
     });
     setCalculatedCost(0);
+    setMinSalaryRequired(null);
     setHabilidadesOtros('');
     setShowHabilidadesOtros(false);
+    setSalaryError(null);
   };
 
   const workModeLabels: Record<string, string> = {
@@ -579,54 +742,163 @@ const CreateJobForm = () => {
             <label className="block text-sm font-semibold mb-2">
               Ubicación *
             </label>
-            <input
-              type="text"
-              value={formData.location}
-              onChange={(e) =>
-                setFormData({ ...formData, location: e.target.value })
-              }
-              placeholder="ej. Monterrey, Nuevo León"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
-              required
-            />
+
+            {/* Campo de ubicación con mapa */}
+            {mapLoadError && (
+              <p className="text-red-500 text-sm mb-2">Error al cargar el mapa</p>
+            )}
+
+            {!isMapLoaded ? (
+              // Loading state o input simple mientras carga
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) =>
+                  setFormData({ ...formData, location: e.target.value })
+                }
+                placeholder="Cargando mapa... ej. Monterrey, Nuevo León"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                required
+              />
+            ) : (
+              <div className="space-y-3">
+                {/* Autocomplete de Google Places */}
+                <Autocomplete
+                  onLoad={onAutocompleteLoad}
+                  onPlaceChanged={onPlaceChanged}
+                  options={{
+                    componentRestrictions: { country: 'mx' },
+                    types: ['(cities)']
+                  }}
+                >
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                      type="text"
+                      value={formData.location}
+                      onChange={(e) =>
+                        setFormData({ ...formData, location: e.target.value })
+                      }
+                      placeholder="Busca una ciudad..."
+                      className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                      required
+                    />
+                  </div>
+                </Autocomplete>
+
+                {/* Mapa interactivo */}
+                <GoogleMap
+                  mapContainerStyle={mapContainerStyle}
+                  zoom={12}
+                  center={mapCenter}
+                  onClick={onMapClick}
+                  options={{
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    fullscreenControl: false,
+                  }}
+                >
+                  <Marker
+                    position={markerPosition}
+                    draggable={true}
+                    onDragEnd={(e) => {
+                      if (e.latLng) {
+                        onMapClick(e as google.maps.MapMouseEvent);
+                      }
+                    }}
+                  />
+                </GoogleMap>
+
+                <p className="text-xs text-gray-500">
+                  Busca la ciudad o haz clic en el mapa para seleccionar la ubicación
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Salario y Rating */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Salario *
-            </label>
-            <input
-              type="text"
-              value={formData.salary}
-              onChange={(e) =>
-                setFormData({ ...formData, salary: e.target.value })
-              }
-              placeholder="ej. $25,000 - $35,000 / mes"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
-              required
-            />
+        {/* Salario (Rango) */}
+        <div>
+          <label className="block text-sm font-semibold mb-2">
+            Salario mensual (MXN) *
+          </label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={formData.salaryMin}
+                  onChange={(e) => {
+                    setFormData({ ...formData, salaryMin: e.target.value });
+                    setSalaryError(null);
+                  }}
+                  placeholder="15,000"
+                  className={`w-full p-3 pl-8 border rounded-lg focus:ring-2 focus:ring-button-green ${
+                    salaryError ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  min="0"
+                  required
+                />
+              </div>
+              <span className="text-xs text-gray-500 mt-1 block">Mínimo</span>
+            </div>
+            <div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={formData.salaryMax}
+                  onChange={(e) => {
+                    setFormData({ ...formData, salaryMax: e.target.value });
+                    setSalaryError(null);
+                  }}
+                  placeholder="22,000"
+                  className={`w-full p-3 pl-8 border rounded-lg focus:ring-2 focus:ring-button-green ${
+                    salaryError ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  min="0"
+                  required
+                />
+              </div>
+              <span className="text-xs text-gray-500 mt-1 block">Máximo</span>
+            </div>
           </div>
+          {salaryError && (
+            <div className="flex items-center gap-2 mt-2 text-red-600 text-sm">
+              <AlertCircle size={16} />
+              {salaryError}
+            </div>
+          )}
+          <p className="text-xs text-gray-500 mt-2">
+            La diferencia máxima permitida entre mínimo y máximo es $10,000 MXN
+          </p>
+          {minSalaryRequired && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Salario mínimo requerido:</strong> ${minSalaryRequired.toLocaleString('es-MX')} MXN/mes para esta especialidad
+              </p>
+            </div>
+          )}
+        </div>
 
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Rating de la Empresa (opcional)
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="5"
-              value={formData.companyRating}
-              onChange={(e) =>
-                setFormData({ ...formData, companyRating: e.target.value })
-              }
-              placeholder="ej. 4.5"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
-            />
-          </div>
+        {/* Rating */}
+        <div>
+          <label className="block text-sm font-semibold mb-2">
+            Rating de la Empresa (opcional)
+          </label>
+          <input
+            type="number"
+            step="0.1"
+            min="0"
+            max="5"
+            value={formData.companyRating}
+            onChange={(e) =>
+              setFormData({ ...formData, companyRating: e.target.value })
+            }
+            placeholder="ej. 4.5"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green max-w-xs"
+          />
         </div>
 
         {/* Tipo de trabajo y Modalidad */}

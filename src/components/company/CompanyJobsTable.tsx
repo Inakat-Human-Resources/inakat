@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Edit2, Eye, XCircle, Pause, Play, Users, Clock, AlertTriangle } from 'lucide-react';
+import { Edit2, Eye, XCircle, Pause, Play, Users, Clock, AlertTriangle, Send, CheckCircle, Ban } from 'lucide-react';
 
 interface Job {
   id: number;
@@ -9,10 +9,12 @@ interface Job {
   location: string;
   salary: string;
   status: string;
+  closedReason?: string; // 'success' | 'cancelled'
   jobType: string;
   workMode: string;
   createdAt: string;
   expiresAt?: string;
+  editableUntil?: string; // Límite de 4 horas para editar
   applicationCount?: number;
   _count?: {
     applications: number;
@@ -23,9 +25,11 @@ interface CompanyJobsTableProps {
   jobs: Job[];
   onEdit?: (jobId: number) => void;
   onView?: (jobId: number) => void;
-  onClose?: (jobId: number) => void;
+  onClose?: (jobId: number, reason: 'success' | 'cancelled') => void;
   onPause?: (jobId: number) => void;
   onResume?: (jobId: number) => void;
+  onViewCandidates?: (jobId: number, jobTitle: string) => void;
+  onPublish?: (jobId: number) => void;
 }
 
 type JobTab = 'active' | 'paused' | 'expired' | 'draft' | 'closed';
@@ -36,7 +40,9 @@ export default function CompanyJobsTable({
   onView,
   onClose,
   onPause,
-  onResume
+  onResume,
+  onViewCandidates,
+  onPublish
 }: CompanyJobsTableProps) {
   const [activeTab, setActiveTab] = useState<JobTab>('active');
 
@@ -44,6 +50,25 @@ export default function CompanyJobsTable({
   const isExpired = (job: Job) => {
     if (!job.expiresAt) return false;
     return new Date(job.expiresAt) <= new Date() && job.status === 'active';
+  };
+
+  // Determinar si aún se puede editar (dentro de 4 horas)
+  const canEdit = (job: Job) => {
+    if (!job.editableUntil) return true; // Si no tiene límite, siempre se puede editar
+    return new Date(job.editableUntil) > new Date();
+  };
+
+  // Obtener tiempo restante para editar
+  const getEditTimeRemaining = (job: Job) => {
+    if (!job.editableUntil) return null;
+    const now = new Date();
+    const editableUntil = new Date(job.editableUntil);
+    const diff = editableUntil.getTime() - now.getTime();
+    if (diff <= 0) return null;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}h ${minutes}m para editar`;
+    return `${minutes}m para editar`;
   };
 
   // Categorizar jobs
@@ -75,10 +100,28 @@ export default function CompanyJobsTable({
       );
     }
 
+    // Si está cerrada, mostrar el motivo
+    if (job.status === 'closed') {
+      if (job.closedReason === 'success') {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            Contratación exitosa
+          </span>
+        );
+      } else {
+        return (
+          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600 flex items-center gap-1">
+            <Ban className="w-3 h-3" />
+            Cancelada
+          </span>
+        );
+      }
+    }
+
     const badges: Record<string, { bg: string; text: string; label: string }> = {
       active: { bg: 'bg-green-100', text: 'text-green-800', label: 'Activa' },
       paused: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'En pausa' },
-      closed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Cerrada' },
       draft: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Borrador' }
     };
 
@@ -172,13 +215,19 @@ export default function CompanyJobsTable({
 
                 {/* Métricas */}
                 <div className="flex items-center gap-6 ml-6">
-                  {/* Candidatos */}
-                  <div className="text-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-700 rounded-full font-bold text-lg">
+                  {/* Candidatos - Clickeable */}
+                  <button
+                    onClick={() => onViewCandidates?.(job.id, job.title)}
+                    className="text-center group cursor-pointer"
+                    title="Ver candidatos de esta vacante"
+                  >
+                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-700 rounded-full font-bold text-lg group-hover:bg-blue-200 group-hover:scale-110 transition-all duration-200">
                       {getApplicationCount(job)}
                     </div>
-                    <span className="text-xs text-gray-500 mt-1 block">Candidatos</span>
-                  </div>
+                    <span className="text-xs text-gray-500 mt-1 block group-hover:text-blue-600 transition-colors">
+                      Candidatos
+                    </span>
+                  </button>
 
                   {/* Fecha de publicación */}
                   <div className="text-center">
@@ -202,13 +251,32 @@ export default function CompanyJobsTable({
                   </button>
                 )}
 
-                {onEdit && job.status !== 'closed' && (
+                {onEdit && job.status !== 'closed' && canEdit(job) && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onEdit(job.id)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Editar
+                    </button>
+                    {getEditTimeRemaining(job) && (
+                      <span className="text-xs text-orange-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {getEditTimeRemaining(job)}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Publicar borrador */}
+                {onPublish && job.status === 'draft' && (
                   <button
-                    onClick={() => onEdit(job.id)}
-                    className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+                    onClick={() => onPublish(job.id)}
+                    className="px-3 py-1.5 text-sm text-white bg-button-green hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1 font-medium"
                   >
-                    <Edit2 className="w-4 h-4" />
-                    Editar
+                    <Send className="w-4 h-4" />
+                    Publicar
                   </button>
                 )}
 
@@ -233,20 +301,33 @@ export default function CompanyJobsTable({
                   </button>
                 )}
 
-                {/* Cerrar */}
+                {/* Cerrar - Dos opciones */}
                 {onClose && (job.status === 'active' || job.status === 'paused') && (
-                  <button
-                    onClick={() => onClose(job.id)}
-                    className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Cerrar
-                  </button>
+                  <>
+                    <button
+                      onClick={() => onClose(job.id, 'success')}
+                      className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-1"
+                      title="Cerrar vacante por contratación exitosa"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Exitosa
+                    </button>
+                    <button
+                      onClick={() => onClose(job.id, 'cancelled')}
+                      className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+                      title="Cancelar vacante sin contratar"
+                    >
+                      <Ban className="w-4 h-4" />
+                      Cancelar
+                    </button>
+                  </>
                 )}
 
                 {job.status === 'closed' && (
-                  <span className="text-xs text-gray-400 italic px-3 py-1.5">
-                    Vacante cerrada
+                  <span className={`text-xs italic px-3 py-1.5 ${
+                    job.closedReason === 'success' ? 'text-green-600' : 'text-gray-400'
+                  }`}>
+                    {job.closedReason === 'success' ? '✓ Contratación exitosa' : 'Vacante cancelada'}
                   </span>
                 )}
               </div>

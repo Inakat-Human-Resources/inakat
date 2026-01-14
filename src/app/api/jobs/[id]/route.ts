@@ -94,6 +94,21 @@ export async function PATCH(
       );
     }
 
+    // Verificar si el tiempo de edición ha expirado (4 horas)
+    // Solo aplica para ediciones de contenido, no para cambios de status
+    const allowedFieldsAfterExpiry = ['status', 'closedReason'];
+    const contentFields = Object.keys(body).filter(k => !allowedFieldsAfterExpiry.includes(k));
+
+    if (existingJob.editableUntil && new Date() > existingJob.editableUntil && contentFields.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'El tiempo para editar esta vacante ha expirado (4 horas después de su creación)'
+        },
+        { status: 403 }
+      );
+    }
+
     // Validar status si se proporciona
     const validJobStatuses = ['active', 'paused', 'closed', 'draft'];
     if (body.status && !validJobStatuses.includes(body.status)) {
@@ -101,6 +116,29 @@ export async function PATCH(
         {
           success: false,
           error: `Invalid status. Must be one of: ${validJobStatuses.join(', ')}`
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validar closedReason si se proporciona
+    const validClosedReasons = ['success', 'cancelled'];
+    if (body.closedReason && !validClosedReasons.includes(body.closedReason)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Invalid closedReason. Must be one of: ${validClosedReasons.join(', ')}`
+        },
+        { status: 400 }
+      );
+    }
+
+    // Si se está cerrando la vacante, se requiere closedReason
+    if (body.status === 'closed' && !body.closedReason) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'closedReason is required when closing a job'
         },
         { status: 400 }
       );
@@ -117,10 +155,39 @@ export async function PATCH(
       }
     }
 
+    // Validar rango de salario si se proporcionan min/max
+    if (body.salaryMin !== undefined && body.salaryMax !== undefined) {
+      const minNum = parseInt(body.salaryMin) || 0;
+      const maxNum = parseInt(body.salaryMax) || 0;
+
+      if (minNum > maxNum) {
+        return NextResponse.json(
+          { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
+          { status: 400 }
+        );
+      }
+
+      if (maxNum - minNum > 10000) {
+        return NextResponse.json(
+          { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Preparar datos para actualizar (convertir salaryMin/salaryMax a Int si existen)
+    const updateData = { ...body };
+    if (updateData.salaryMin !== undefined) {
+      updateData.salaryMin = updateData.salaryMin ? parseInt(updateData.salaryMin) : null;
+    }
+    if (updateData.salaryMax !== undefined) {
+      updateData.salaryMax = updateData.salaryMax ? parseInt(updateData.salaryMax) : null;
+    }
+
     // Actualizar vacante
     const updatedJob = await prisma.job.update({
       where: { id: jobId },
-      data: body
+      data: updateData
     });
 
     return NextResponse.json({
@@ -167,6 +234,17 @@ export async function PUT(
       );
     }
 
+    // Verificar si el tiempo de edición ha expirado (4 horas)
+    if (existingJob.editableUntil && new Date() > existingJob.editableUntil) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'El tiempo para editar esta vacante ha expirado (4 horas después de su creación)'
+        },
+        { status: 403 }
+      );
+    }
+
     // Validar especialidad
     const validation = await validateSpecialty(body.profile, body.subcategory);
     if (!validation.valid) {
@@ -182,6 +260,8 @@ export async function PUT(
       company,
       location,
       salary,
+      salaryMin,
+      salaryMax,
       jobType,
       workMode,
       description,
@@ -197,6 +277,26 @@ export async function PUT(
       informacionAdicional
     } = body;
 
+    // Validar rango de salario si se proporcionan min/max
+    if (salaryMin !== undefined && salaryMax !== undefined) {
+      const minNum = parseInt(salaryMin) || 0;
+      const maxNum = parseInt(salaryMax) || 0;
+
+      if (minNum > maxNum) {
+        return NextResponse.json(
+          { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
+          { status: 400 }
+        );
+      }
+
+      if (maxNum - minNum > 10000) {
+        return NextResponse.json(
+          { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Actualizar vacante
     const updatedJob = await prisma.job.update({
       where: { id: jobId },
@@ -205,6 +305,8 @@ export async function PUT(
         company,
         location,
         salary,
+        salaryMin: salaryMin !== undefined ? (salaryMin ? parseInt(salaryMin) : null) : undefined,
+        salaryMax: salaryMax !== undefined ? (salaryMax ? parseInt(salaryMax) : null) : undefined,
         jobType,
         workMode: workMode || 'presential',
         description,

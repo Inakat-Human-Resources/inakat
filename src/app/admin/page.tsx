@@ -40,6 +40,7 @@ interface Job {
   profile: string | null;
   seniority: string | null;
   createdAt: string;
+  editableUntil?: string | null; // Límite de 4 horas para editar
   userId: number | null;
   salary?: string;
   jobType?: string;
@@ -612,12 +613,35 @@ export default function AdminDashboardPage() {
                         {getStatusBadge(job.status)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <p className="text-sm text-gray-500">
-                          {new Date(job.createdAt).toLocaleDateString('es-MX', {
-                            day: '2-digit',
-                            month: 'short'
-                          })}
-                        </p>
+                        <div className="text-sm">
+                          <p className="text-gray-700 font-medium">
+                            {new Date(job.createdAt).toLocaleDateString('es-MX', {
+                              day: '2-digit',
+                              month: 'short'
+                            })}, {new Date(job.createdAt).toLocaleTimeString('es-MX', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })}
+                          </p>
+                          {job.editableUntil && (
+                            new Date(job.editableUntil) > new Date() ? (
+                              <span className="text-xs text-orange-600 flex items-center justify-center gap-1 mt-1">
+                                <Clock size={12} />
+                                Editable hasta {new Date(job.editableUntil).toLocaleTimeString('es-MX', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-green-600 flex items-center justify-center gap-1 mt-1">
+                                <CheckCircle size={12} />
+                                Listo para procesar
+                              </span>
+                            )
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -729,8 +753,29 @@ export default function AdminDashboardPage() {
                     day: '2-digit',
                     month: 'long',
                     year: 'numeric'
+                  })}, {new Date(selectedJob.createdAt).toLocaleTimeString('es-MX', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
                   })}
                 </span>
+                {selectedJob.editableUntil && (
+                  new Date(selectedJob.editableUntil) > new Date() ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                      <Clock size={14} />
+                      Editable hasta {new Date(selectedJob.editableUntil).toLocaleTimeString('es-MX', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      <CheckCircle size={14} />
+                      Listo para procesar
+                    </span>
+                  )
+                )}
               </div>
 
               {/* Descripción */}

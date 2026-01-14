@@ -119,11 +119,14 @@ model Job {
   company         String
   location        String
   salary          String
+  salaryMin       Int?      // Salario mínimo en MXN
+  salaryMax       Int?      // Salario máximo en MXN (diferencia máxima: $10,000)
   jobType         String    // "Tiempo Completo", "Medio Tiempo", "Contrato"
   workMode        String    @default("presential") // "remote", "hybrid", "presential"
   description     String    @db.Text
   requirements    String?   @db.Text
   status          String    @default("active") // "active", "paused", "closed", "draft"
+  closedReason    String?   // 'success' (contratación exitosa), 'cancelled' (cancelada sin contratar)
   companyRating   Float?    @default(5.0)
   
   // Sistema de Créditos
@@ -154,6 +157,7 @@ model Job {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   expiresAt       DateTime?
+  editableUntil   DateTime? // Tiempo límite para editar (4 horas después de crear)
   
   @@index([status])
   @@index([userId])
@@ -217,7 +221,10 @@ model PricingMatrix {
   
   // Costo en créditos
   credits     Int
-  
+
+  // Salario mínimo requerido para esta combinación
+  minSalary   Int?     // Salario mínimo en MXN que debe ofrecer la empresa
+
   // Metadatos
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())

@@ -66,11 +66,26 @@ export async function GET(request: Request) {
       );
     }
 
+    // Status de aplicaciones visibles para la empresa
+    // La empresa SOLO ve candidatos que han sido enviados por el Especialista
+    const COMPANY_VISIBLE_STATUSES = [
+      'sent_to_company',
+      'company_interested',
+      'interviewed',
+      'accepted',
+      'rejected'
+    ];
+
     // 2. Obtener todas las vacantes de la empresa
+    // IMPORTANTE: Solo incluir applications con status visibles para empresa
     const jobs = await prisma.job.findMany({
       where: { userId: companyUserId },
       include: {
-        applications: true
+        applications: {
+          where: {
+            status: { in: COMPANY_VISIBLE_STATUSES }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -89,22 +104,7 @@ export async function GET(request: Request) {
     const draftJobs = jobs.filter((job) => job.status === 'draft').length;
 
     // 4. Obtener SOLO las aplicaciones visibles para la empresa
-    // La empresa SOLO ve candidatos que han sido enviados por el Especialista
-    // Status permitidos para empresa:
-    // - sent_to_company: Candidatos nuevos por revisar
-    // - company_interested: Candidatos que la empresa marcó "Me interesa"
-    // - interviewed: Candidatos entrevistados
-    // - accepted: Candidatos aceptados
-    // - rejected: Candidatos descartados
     const jobIds = jobs.map((job) => job.id);
-
-    const COMPANY_VISIBLE_STATUSES = [
-      'sent_to_company',
-      'company_interested',
-      'interviewed',
-      'accepted',
-      'rejected'
-    ];
 
     const allApplications = await prisma.application.findMany({
       where: {

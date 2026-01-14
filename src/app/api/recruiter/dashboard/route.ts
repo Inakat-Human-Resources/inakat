@@ -275,6 +275,18 @@ export async function PUT(request: Request) {
         }
       });
 
+      // IMPORTANTE: Si envía al especialista, también actualizar el JobAssignment
+      // para que el especialista pueda ver la vacante en su dashboard
+      if (newApplicationStatus === 'sent_to_specialist' && hasAssignment) {
+        await prisma.jobAssignment.update({
+          where: { id: hasAssignment.id },
+          data: {
+            recruiterStatus: 'sent_to_specialist',
+            specialistStatus: 'pending'
+          }
+        });
+      }
+
       return NextResponse.json({
         success: true,
         message: `Candidato movido a "${newApplicationStatus}"`,

@@ -10,13 +10,13 @@ import { prisma } from './prisma';
  * @param profile - Perfil del puesto (ej: "Tecnología")
  * @param seniority - Nivel de experiencia (ej: "Jr", "Sr")
  * @param workMode - Modalidad de trabajo (ej: "remote", "hybrid", "presential")
- * @returns Objeto con los créditos y si se encontró un precio en la matriz
+ * @returns Objeto con los créditos, minSalary y si se encontró un precio en la matriz
  */
 export async function calculateJobCreditCost(
   profile: string,
   seniority: string,
   workMode: string
-): Promise<{ credits: number; found: boolean; pricingId?: number }> {
+): Promise<{ credits: number; found: boolean; pricingId?: number; minSalary?: number | null }> {
   const DEFAULT_CREDITS = 5;
 
   if (!profile || !seniority || !workMode) {
@@ -42,7 +42,8 @@ export async function calculateJobCreditCost(
     return {
       credits: pricing.credits,
       found: true,
-      pricingId: pricing.id
+      pricingId: pricing.id,
+      minSalary: pricing.minSalary
     };
   }
 
@@ -64,7 +65,8 @@ export async function calculateJobCreditCost(
     return {
       credits: pricingAny.credits,
       found: true,
-      pricingId: pricingAny.id
+      pricingId: pricingAny.id,
+      minSalary: pricingAny.minSalary
     };
   }
 

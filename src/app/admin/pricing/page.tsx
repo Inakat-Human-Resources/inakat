@@ -20,6 +20,7 @@ interface PricingEntry {
   workMode: string;
   location: string | null;
   credits: number;
+  minSalary: number | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -30,6 +31,7 @@ interface FormData {
   workMode: string;
   location: string;
   credits: number;
+  minSalary: string;
 }
 
 const INITIAL_FORM: FormData = {
@@ -37,7 +39,8 @@ const INITIAL_FORM: FormData = {
   seniority: 'Jr',
   workMode: 'presential',
   location: '',
-  credits: 1
+  credits: 1,
+  minSalary: ''
 };
 
 const SENIORITIES = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
@@ -127,7 +130,8 @@ export default function AdminPricingPage() {
       seniority: entry.seniority,
       workMode: entry.workMode,
       location: entry.location || '',
-      credits: entry.credits
+      credits: entry.credits,
+      minSalary: entry.minSalary ? String(entry.minSalary) : ''
     });
     setCustomProfile(!profiles.includes(entry.profile));
     setIsModalOpen(true);
@@ -148,10 +152,11 @@ export default function AdminPricingPage() {
     setError(null);
 
     try {
-      // Solo enviar id y credits (no se puede modificar profile, seniority, workMode, location)
+      // Solo enviar id, credits y minSalary (no se puede modificar profile, seniority, workMode, location)
       const payload = {
         id: editingEntry.id,
-        credits: Number(formData.credits)
+        credits: Number(formData.credits),
+        minSalary: formData.minSalary ? Number(formData.minSalary) : null
       };
 
       const response = await fetch('/api/admin/pricing', {
@@ -324,6 +329,7 @@ export default function AdminPricingPage() {
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Modalidad</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Ubicación</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Créditos</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Salario Mín.</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
                 </tr>
@@ -331,14 +337,14 @@ export default function AdminPricingPage() {
               <tbody className="divide-y">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                       <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
                       Cargando precios...
                     </td>
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                       <DollarSign className="mx-auto mb-2 text-gray-400" size={40} />
                       No hay precios configurados
                     </td>
@@ -367,6 +373,15 @@ export default function AdminPricingPage() {
                           <DollarSign size={16} />
                           {entry.credits}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {entry.minSalary ? (
+                          <span className="text-sm font-medium text-blue-600">
+                            ${entry.minSalary.toLocaleString('es-MX')}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-sm">No definido</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -441,7 +456,7 @@ export default function AdminPricingPage() {
                 </div>
               </div>
 
-              {/* Credits - único campo editable */}
+              {/* Credits */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Créditos *</label>
                 <input
@@ -455,6 +470,25 @@ export default function AdminPricingPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Costo en créditos para publicar vacantes con esta configuración
+                </p>
+              </div>
+
+              {/* Salario Mínimo */}
+              <div>
+                <label className="block text-sm font-semibold mb-1">Salario Mínimo (MXN)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={formData.minSalary}
+                    onChange={(e) => setFormData({ ...formData, minSalary: e.target.value })}
+                    min="0"
+                    placeholder="Ej: 15000"
+                    className="w-full p-3 pl-8 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Salario mínimo que debe ofrecer la empresa para publicar. Dejar vacío para no requerir mínimo.
                 </p>
               </div>
 

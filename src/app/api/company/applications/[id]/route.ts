@@ -48,7 +48,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { status, notes } = body;
+    const { status, notes, closeJob } = body;
 
     if (!status) {
       return NextResponse.json(
@@ -122,8 +122,10 @@ export async function PATCH(
     }
 
     // Validar transiciones de status válidas
+    // Nota: Permitimos ir directo a 'accepted' desde cualquier estado visible
+    // porque Eduardo pidió "En proceso de contratación" como opción directa
     const validTransitions: Record<string, string[]> = {
-      'sent_to_company': ['company_interested', 'rejected'],
+      'sent_to_company': ['company_interested', 'accepted', 'rejected'],
       'company_interested': ['interviewed', 'accepted', 'rejected'],
       'interviewed': ['accepted', 'rejected']
     };
@@ -160,6 +162,7 @@ export async function PATCH(
       include: {
         job: {
           select: {
+            id: true,
             title: true,
             company: true
           }
@@ -167,18 +170,31 @@ export async function PATCH(
       }
     });
 
+    // Si es 'accepted' y closeJob es true, cerrar la vacante
+    let jobClosed = false;
+    if (status === 'accepted' && closeJob === true) {
+      await prisma.job.update({
+        where: { id: application.job.id },
+        data: { status: 'closed' }
+      });
+      jobClosed = true;
+    }
+
     // Mensaje de éxito según la acción
     const statusMessages: Record<string, string> = {
       company_interested: 'Candidato marcado como "Me interesa"',
       interviewed: 'Candidato marcado como entrevistado',
       rejected: 'Candidato descartado',
-      accepted: 'Candidato aceptado'
+      accepted: jobClosed
+        ? '¡Candidato en proceso de contratación! La vacante ha sido cerrada.'
+        : 'Candidato en proceso de contratación'
     };
 
     return NextResponse.json({
       success: true,
       message: statusMessages[status] || 'Aplicación actualizada',
-      data: updatedApplication
+      data: updatedApplication,
+      jobClosed
     });
   } catch (error) {
     console.error('Error updating application:', error);

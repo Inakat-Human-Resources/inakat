@@ -118,6 +118,8 @@ export async function POST(request: Request) {
       company,
       location,
       salary,
+      salaryMin,
+      salaryMax,
       jobType,
       workMode,
       description,
@@ -127,7 +129,13 @@ export async function POST(request: Request) {
       profile,
       subcategory,
       seniority,
-      publishNow
+      publishNow,
+      // Campos extendidos
+      habilidades,
+      responsabilidades,
+      resultadosEsperados,
+      valoresActitudes,
+      informacionAdicional
     } = body;
 
     if (
@@ -142,6 +150,26 @@ export async function POST(request: Request) {
         { success: false, error: 'Faltan campos requeridos' },
         { status: 400 }
       );
+    }
+
+    // Validar rango de salario si se proporcionan min/max
+    if (salaryMin !== undefined && salaryMax !== undefined) {
+      const minNum = parseInt(salaryMin) || 0;
+      const maxNum = parseInt(salaryMax) || 0;
+
+      if (minNum > maxNum) {
+        return NextResponse.json(
+          { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
+          { status: 400 }
+        );
+      }
+
+      if (maxNum - minNum > 10000) {
+        return NextResponse.json(
+          { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
+          { status: 400 }
+        );
+      }
     }
 
     // Validar que la especialidad (profile) existe en el catálogo
@@ -166,6 +194,32 @@ export async function POST(request: Request) {
         if (!subcategories.includes(subcategory)) {
           return NextResponse.json(
             { success: false, error: 'La sub-especialidad seleccionada no es válida para esta especialidad' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Validar salario mínimo configurado en PricingMatrix
+    if (profile && seniority && workMode && salaryMin) {
+      const pricingEntry = await prisma.pricingMatrix.findFirst({
+        where: {
+          profile,
+          seniority,
+          workMode,
+          isActive: true
+        }
+      });
+
+      if (pricingEntry?.minSalary) {
+        const offeredMinSalary = parseInt(salaryMin) || 0;
+        if (offeredMinSalary < pricingEntry.minSalary) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `El salario mínimo ofrecido ($${offeredMinSalary.toLocaleString()} MXN) es menor al mínimo requerido para esta especialidad ($${pricingEntry.minSalary.toLocaleString()} MXN)`,
+              minSalaryRequired: pricingEntry.minSalary
+            },
             { status: 400 }
           );
         }
@@ -225,6 +279,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // Calcular tiempo límite para editar (4 horas desde ahora)
+    const editableUntil = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
     // Crear vacante
     const job = await prisma.job.create({
       data: {
@@ -232,6 +289,8 @@ export async function POST(request: Request) {
         company,
         location,
         salary,
+        salaryMin: salaryMin ? parseInt(salaryMin) : null,
+        salaryMax: salaryMax ? parseInt(salaryMax) : null,
         jobType,
         workMode: workMode || 'presential',
         description,
@@ -243,7 +302,14 @@ export async function POST(request: Request) {
         profile: profile || null,
         subcategory: subcategory || null,
         seniority: seniority || null,
-        creditCost: initialStatus === 'active' ? creditCost : 0
+        creditCost: initialStatus === 'active' ? creditCost : 0,
+        editableUntil, // 4 horas para editar
+        // Campos extendidos
+        habilidades: habilidades || null,
+        responsabilidades: responsabilidades || null,
+        resultadosEsperados: resultadosEsperados || null,
+        valoresActitudes: valoresActitudes || null,
+        informacionAdicional: informacionAdicional || null
       }
     });
 
