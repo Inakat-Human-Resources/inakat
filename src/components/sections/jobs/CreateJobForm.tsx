@@ -166,10 +166,8 @@ const CreateJobForm = () => {
           }
         });
 
-        // Formatear ubicación como "Ciudad, Estado"
-        const locationStr = ciudad && estado
-          ? `${ciudad}, ${estado}`
-          : place.formatted_address || '';
+        // Usar la dirección completa de Google Maps para mayor precisión
+        const locationStr = place.formatted_address || `${ciudad}, ${estado}`;
 
         setFormData(prev => ({
           ...prev,
@@ -203,9 +201,8 @@ const CreateJobForm = () => {
             }
           });
 
-          const locationStr = ciudad && estado
-            ? `${ciudad}, ${estado}`
-            : results[0].formatted_address || '';
+          // Usar la dirección completa del reverse geocoding
+          const locationStr = results[0].formatted_address || `${ciudad}, ${estado}`;
 
           setFormData(prev => ({
             ...prev,
@@ -483,6 +480,9 @@ const CreateJobForm = () => {
       }
 
       if (data.success) {
+        // Scroll hacia arriba para mostrar el mensaje de éxito
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
         if (isEditing) {
           setSubmitStatus({
             type: 'success',
