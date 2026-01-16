@@ -33,6 +33,9 @@ const ContactForm = () => {
       const data = await response.json();
 
       if (response.ok) {
+        // Scroll hacia arriba para mostrar el mensaje
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
         setSubmitStatus({
           type: "success",
           message: "Se ha enviado correctamente el formulario a INAKAT",
@@ -47,6 +50,9 @@ const ContactForm = () => {
         throw new Error(data.error || "Error al enviar el mensaje");
       }
     } catch (error) {
+      // Scroll hacia arriba para mostrar el mensaje de error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
       setSubmitStatus({
         type: "error",
         message:

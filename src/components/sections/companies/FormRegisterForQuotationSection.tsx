@@ -408,6 +408,9 @@ const FormRegisterForQuotationSection = () => {
         throw new Error(data.error || 'Error al enviar solicitud');
       }
     } catch (error) {
+      // Scroll hacia arriba para mostrar el mensaje de error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
       setSubmitStatus({
         type: 'error',
         message:

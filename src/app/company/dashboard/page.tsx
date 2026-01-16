@@ -6,17 +6,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
-  Users,
-  XCircle,
   AlertCircle,
-  Coins,
-  Heart,
-  Trash2,
-  UserCheck
+  Coins
 } from 'lucide-react';
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
 import JobDetailModal from '@/components/company/JobDetailModal';
-import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 
 interface Job {
   id: number;
@@ -87,14 +81,6 @@ export default function CompanyDashboard() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [showJobModal, setShowJobModal] = useState(false);
 
-  // Modal de candidatos por vacante
-  const [showCandidatesModal, setShowCandidatesModal] = useState(false);
-  const [selectedJobForCandidates, setSelectedJobForCandidates] = useState<{ id: number; title: string } | null>(null);
-
-  // Modal de ficha de candidato individual
-  const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
-  const [showCandidateProfile, setShowCandidateProfile] = useState(false);
-  const [candidateIndex, setCandidateIndex] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
@@ -142,92 +128,11 @@ export default function CompanyDashboard() {
     }
   };
 
-  // Abrir modal de candidatos para una vacante específica
+  // Navegar a la página de candidatos de una vacante
   const handleViewCandidates = (jobId: number, jobTitle: string) => {
-    setSelectedJobForCandidates({ id: jobId, title: jobTitle });
-    setShowCandidatesModal(true);
+    router.push(`/company/jobs/${jobId}/candidates`);
   };
 
-  // Obtener candidatos filtrados por vacante
-  const getCandidatesForJob = (jobId: number) => {
-    if (!data) return [];
-    return data.allApplications.filter((app) => app.jobId === jobId);
-  };
-
-  // Abrir ficha de candidato individual
-  const handleViewCandidateProfile = (application: any, index: number) => {
-    setSelectedApplication(application);
-    setCandidateIndex(index);
-    setShowCandidateProfile(true);
-  };
-
-  // Navegación entre candidatos
-  const handleNextCandidate = () => {
-    if (!selectedJobForCandidates || !data) return;
-    const candidates = getCandidatesForJob(selectedJobForCandidates.id);
-    if (candidateIndex < candidates.length - 1) {
-      const newIndex = candidateIndex + 1;
-      setCandidateIndex(newIndex);
-      setSelectedApplication(candidates[newIndex]);
-    }
-  };
-
-  const handlePrevCandidate = () => {
-    if (!selectedJobForCandidates || !data) return;
-    const candidates = getCandidatesForJob(selectedJobForCandidates.id);
-    if (candidateIndex > 0) {
-      const newIndex = candidateIndex - 1;
-      setCandidateIndex(newIndex);
-      setSelectedApplication(candidates[newIndex]);
-    }
-  };
-
-  // Acciones de empresa sobre candidatos
-  const handleCandidateAction = async (
-    applicationId: number,
-    action: 'company_interested' | 'accepted' | 'rejected',
-    candidateName: string
-  ) => {
-    // Mensajes de confirmación según la acción
-    const confirmMessages: Record<string, string> = {
-      company_interested: `¿Marcar a ${candidateName} como "Me interesa"?`,
-      rejected: `¿Descartar a ${candidateName}? Esta acción no se puede deshacer.`,
-      accepted: `¿Iniciar proceso de contratación con ${candidateName}?`
-    };
-
-    if (!confirm(confirmMessages[action])) return;
-
-    // Si es 'accepted', preguntar si quiere cerrar la vacante
-    let closeJob = false;
-    if (action === 'accepted') {
-      closeJob = confirm('¿Deseas cerrar la vacante? Esto significa que ya no recibirás más candidatos.');
-    }
-
-    try {
-      const response = await fetch(`/api/company/applications/${applicationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: action, closeJob })
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        alert(result.message);
-        // Refrescar datos
-        fetchDashboardData();
-        // Si se cerró la vacante, cerrar el modal
-        if (result.jobClosed) {
-          setShowCandidatesModal(false);
-        }
-      } else {
-        alert(result.error || 'Error al actualizar candidato');
-      }
-    } catch (error) {
-      console.error('Error updating candidate:', error);
-      alert('Error al actualizar candidato');
-    }
-  };
 
   const handleEditJob = (jobId: number) => {
     router.push(`/create-job?edit=${jobId}`);
@@ -433,178 +338,6 @@ export default function CompanyDashboard() {
         job={selectedJob}
         isOpen={showJobModal}
         onClose={() => setShowJobModal(false)}
-      />
-
-      {/* Modal de Candidatos por Vacante */}
-      {showCandidatesModal && selectedJobForCandidates && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  Candidatos para: {selectedJobForCandidates.title}
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {getCandidatesForJob(selectedJobForCandidates.id).length} candidato(s) enviado(s) por el especialista
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCandidatesModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-2"
-              >
-                <XCircle size={24} />
-              </button>
-            </div>
-
-            {/* Lista de candidatos */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {getCandidatesForJob(selectedJobForCandidates.id).length === 0 ? (
-                <div className="text-center py-12">
-                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">No hay candidatos para esta vacante</p>
-                  <p className="text-gray-400 text-sm mt-2">
-                    Los candidatos aparecerán aquí cuando el especialista los envíe
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {getCandidatesForJob(selectedJobForCandidates.id).map((app, index) => (
-                    <div
-                      key={app.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all bg-white"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div
-                          className="flex items-center gap-4 flex-1 cursor-pointer"
-                          onClick={() => handleViewCandidateProfile(app, index)}
-                        >
-                          <div className="w-12 h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-lg font-bold">
-                            {app.candidateName?.charAt(0)?.toUpperCase() || '?'}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{app.candidateName}</h3>
-                            <p className="text-sm text-gray-500">{app.candidateEmail}</p>
-                            {app.candidateProfile?.profile && (
-                              <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
-                                {app.candidateProfile.profile}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                            app.status === 'sent_to_company' ? 'bg-blue-100 text-blue-700' :
-                            app.status === 'company_interested' ? 'bg-pink-100 text-pink-700' :
-                            app.status === 'interviewed' ? 'bg-purple-100 text-purple-700' :
-                            app.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                            app.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {app.status === 'sent_to_company' ? 'Por revisar' :
-                             app.status === 'company_interested' ? 'Me interesa' :
-                             app.status === 'interviewed' ? 'Entrevistado' :
-                             app.status === 'accepted' ? 'En contratación' :
-                             app.status === 'rejected' ? 'Descartado' : app.status}
-                          </span>
-                          <button
-                            onClick={() => handleViewCandidateProfile(app, index)}
-                            className="text-blue-600 text-sm font-medium hover:underline"
-                          >
-                            Ver ficha →
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Botones de acción - Solo si no está en estado final */}
-                      {app.status !== 'accepted' && app.status !== 'rejected' && (
-                        <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
-                          {/* Descartar */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCandidateAction(app.id, 'rejected', app.candidateName);
-                            }}
-                            className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
-                            title="Descartar candidato"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Descartar
-                          </button>
-
-                          {/* Me interesa - Solo si está en sent_to_company */}
-                          {app.status === 'sent_to_company' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCandidateAction(app.id, 'company_interested', app.candidateName);
-                              }}
-                              className="px-3 py-1.5 text-sm text-pink-600 hover:bg-pink-50 rounded-lg transition-colors flex items-center gap-1"
-                              title="Marcar como Me interesa"
-                            >
-                              <Heart className="w-4 h-4" />
-                              Me interesa
-                            </button>
-                          )}
-
-                          {/* Contratar */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCandidateAction(app.id, 'accepted', app.candidateName);
-                            }}
-                            className="px-3 py-1.5 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1 font-medium"
-                            title="Iniciar proceso de contratación"
-                          >
-                            <UserCheck className="w-4 h-4" />
-                            Contratar
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Mensaje para estados finales */}
-                      {app.status === 'accepted' && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 text-center">
-                          <span className="text-sm text-green-600 font-medium">
-                            ✓ En proceso de contratación
-                          </span>
-                        </div>
-                      )}
-                      {app.status === 'rejected' && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 text-center">
-                          <span className="text-sm text-gray-400 italic">
-                            Candidato descartado
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={() => setShowCandidatesModal(false)}
-                className="w-full px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Ficha de Candidato Individual */}
-      <CandidateProfileModal
-        application={selectedApplication}
-        isOpen={showCandidateProfile}
-        onClose={() => setShowCandidateProfile(false)}
-        onNext={handleNextCandidate}
-        onPrev={handlePrevCandidate}
-        currentIndex={candidateIndex}
-        totalCount={selectedJobForCandidates ? getCandidatesForJob(selectedJobForCandidates.id).length : 0}
       />
     </div>
   );

@@ -205,8 +205,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Calcular tiempo límite para editar (4 horas desde ahora)
-    const editableUntil = new Date(Date.now() + 4 * 60 * 60 * 1000);
+    // Calcular tiempo límite para editar (4 horas desde publicación)
+    // Solo aplica cuando se publica, NO para borradores
+    const editableUntil = publishNow && initialStatus === 'active'
+      ? new Date(Date.now() + 4 * 60 * 60 * 1000)
+      : null;
 
     // Crear vacante
     const job = await prisma.job.create({
@@ -377,12 +380,16 @@ export async function PUT(request: Request) {
       });
     }
 
+    // Calcular tiempo límite para editar (4 horas desde publicación)
+    const editableUntil = new Date(Date.now() + 4 * 60 * 60 * 1000);
+
     // Actualizar vacante a activa
     const updatedJob = await prisma.job.update({
       where: { id: jobId },
       data: {
         status: 'active',
-        creditCost: creditCost
+        creditCost: creditCost,
+        editableUntil // Ahora sí inicia el cronómetro de 4 horas
       }
     });
 

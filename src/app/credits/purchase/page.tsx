@@ -204,17 +204,58 @@ export default function PurchaseCreditsPage() {
 
       await bricksBuilder.create('cardPayment', 'mp-checkout-container', {
         initialization: {
-          amount: finalPrice
+          amount: finalPrice,
+          payer: {
+            email: '' // Se llenará por el usuario
+          }
         },
         customization: {
           visual: {
             style: {
-              theme: 'default'
-            }
+              theme: 'default',
+              customVariables: {
+                formBackgroundColor: '#FFFFFF',
+                baseColor: '#f97316' // button-orange
+              }
+            },
+            hideFormTitle: false,
+            hidePaymentButton: false
           },
           paymentMethods: {
             maxInstallments: 12,
-            minInstallments: 1
+            minInstallments: 1,
+            types: {
+              // Habilitar todos los métodos de pago en México
+              excluded: []
+            }
+          },
+          // Personalizar textos de validación
+          texts: {
+            formTitle: 'Datos de la tarjeta',
+            cardNumber: {
+              label: 'Número de tarjeta',
+              placeholder: '1234 5678 9012 3456'
+            },
+            expirationDate: {
+              label: 'Fecha de vencimiento',
+              placeholder: 'MM/AA'
+            },
+            securityCode: {
+              label: 'Código de seguridad',
+              placeholder: 'CVV'
+            },
+            cardholderName: {
+              label: 'Nombre del titular',
+              placeholder: 'Como aparece en la tarjeta'
+            },
+            cardholderIdentification: {
+              label: 'RFC del titular'
+            },
+            email: {
+              label: 'Correo electrónico',
+              placeholder: 'tu@email.com'
+            },
+            formSubmit: 'Pagar'
           }
         },
         callbacks: {
@@ -226,7 +267,16 @@ export default function PurchaseCreditsPage() {
           },
           onError: (error: any) => {
             console.error('Brick error:', error);
-            alert('Error al cargar el formulario de pago');
+            // No mostrar alert para errores de validación menores
+            if (error?.message?.includes('validation')) {
+              console.log('Validation error:', error);
+            } else {
+              alert('Error al cargar el formulario de pago. Por favor recarga la página.');
+            }
+          },
+          onBinChange: (bin: string) => {
+            // Log para debugging de tipo de tarjeta
+            console.log('Card BIN:', bin);
           }
         }
       });

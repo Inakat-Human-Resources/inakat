@@ -61,9 +61,13 @@ export default function LoginPage() {
         }
       } else {
         setError(data.error || 'Error al iniciar sesión');
+        // Scroll hacia arriba para mostrar el mensaje de error
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
       setError('Error al conectar con el servidor');
+      // Scroll hacia arriba para mostrar el mensaje de error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       console.error('Error logging in:', error);
     } finally {
       setIsSubmitting(false);

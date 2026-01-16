@@ -311,12 +311,18 @@ export default function RegisterPage() {
         if (data.errors) {
           setErrors(data.errors);
           setCurrentStep(1);
+          // Scroll hacia arriba para mostrar los errores
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           setGeneralError(data.error || 'Error al registrarse');
+          // Scroll hacia arriba para mostrar el mensaje de error
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }
     } catch (error) {
       setGeneralError('Error al conectar con el servidor');
+      // Scroll hacia arriba para mostrar el mensaje de error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       console.error('Error registering:', error);
     } finally {
       setIsSubmitting(false);

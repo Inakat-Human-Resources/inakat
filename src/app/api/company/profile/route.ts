@@ -51,6 +51,8 @@ export async function GET(request: Request) {
             razonSocial: true,
             rfc: true,
             direccionEmpresa: true,
+            latitud: true,
+            longitud: true,
             status: true,
             createdAt: true,
             approvedAt: true
@@ -93,6 +95,8 @@ export async function GET(request: Request) {
         razonSocial: user.companyRequest.razonSocial,
         rfc: user.companyRequest.rfc,
         direccionEmpresa: user.companyRequest.direccionEmpresa,
+        latitud: user.companyRequest.latitud,
+        longitud: user.companyRequest.longitud,
         status: user.companyRequest.status,
         createdAt: user.companyRequest.createdAt,
         approvedAt: user.companyRequest.approvedAt
@@ -158,7 +162,9 @@ export async function PUT(request: Request) {
       correoEmpresa,
       sitioWeb,
       razonSocial,
-      direccionEmpresa
+      direccionEmpresa,
+      latitud,
+      longitud
     } = body;
 
     // Validaciones básicas
@@ -187,7 +193,7 @@ export async function PUT(request: Request) {
     }
 
     // Construir objeto de actualización solo con campos proporcionados
-    const updateData: Record<string, string | null> = {};
+    const updateData: Record<string, string | number | null> = {};
 
     if (nombre !== undefined) updateData.nombre = nombre.trim();
     if (apellidoPaterno !== undefined) updateData.apellidoPaterno = apellidoPaterno.trim();
@@ -197,6 +203,8 @@ export async function PUT(request: Request) {
     if (sitioWeb !== undefined) updateData.sitioWeb = sitioWeb?.trim() || null;
     if (razonSocial !== undefined) updateData.razonSocial = razonSocial.trim();
     if (direccionEmpresa !== undefined) updateData.direccionEmpresa = direccionEmpresa.trim();
+    if (latitud !== undefined) updateData.latitud = latitud;
+    if (longitud !== undefined) updateData.longitud = longitud;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -225,7 +233,9 @@ export async function PUT(request: Request) {
         sitioWeb: updated.sitioWeb,
         razonSocial: updated.razonSocial,
         rfc: updated.rfc,
-        direccionEmpresa: updated.direccionEmpresa
+        direccionEmpresa: updated.direccionEmpresa,
+        latitud: updated.latitud,
+        longitud: updated.longitud
       }
     });
   } catch (error) {

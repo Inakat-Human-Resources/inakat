@@ -17,6 +17,19 @@ import {
   CheckCircle,
   ArrowLeft
 } from 'lucide-react';
+import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
+
+// Configuración de Google Maps
+const libraries: ("places")[] = ["places"];
+const mapContainerStyle = {
+  width: '100%',
+  height: '250px',
+  borderRadius: '8px'
+};
+const defaultCenter = {
+  lat: 19.4326, // CDMX por defecto
+  lng: -99.1332
+};
 
 interface CompanyProfile {
   userId: number;
@@ -34,6 +47,8 @@ interface CompanyProfile {
   razonSocial: string;
   rfc: string;
   direccionEmpresa: string;
+  latitud: number | null;
+  longitud: number | null;
   status: string;
   createdAt: string;
   approvedAt: string | null;
@@ -50,6 +65,8 @@ interface FormData {
   sitioWeb: string;
   razonSocial: string;
   direccionEmpresa: string;
+  latitud: number | null;
+  longitud: number | null;
 }
 
 export default function CompanyProfilePage() {
@@ -68,8 +85,73 @@ export default function CompanyProfilePage() {
     correoEmpresa: '',
     sitioWeb: '',
     razonSocial: '',
-    direccionEmpresa: ''
+    direccionEmpresa: '',
+    latitud: null,
+    longitud: null
   });
+
+  // Estados para Google Maps
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+
+  // Cargar Google Maps
+  const { isLoaded: isMapLoaded, loadError: mapLoadError } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries,
+  });
+
+  // Funciones para Google Maps
+  const onAutocompleteLoad = (auto: google.maps.places.Autocomplete) => {
+    setAutocomplete(auto);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+
+        setMapCenter({ lat, lng });
+        setMarkerPosition({ lat, lng });
+
+        // Usar dirección completa
+        const direccion = place.formatted_address || '';
+
+        setFormData(prev => ({
+          ...prev,
+          direccionEmpresa: direccion,
+          latitud: lat,
+          longitud: lng
+        }));
+      }
+    }
+  };
+
+  const onMapClick = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setMarkerPosition({ lat, lng });
+
+      // Reverse geocoding para obtener la dirección
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results?.[0]) {
+          const direccion = results[0].formatted_address || '';
+
+          setFormData(prev => ({
+            ...prev,
+            direccionEmpresa: direccion,
+            latitud: lat,
+            longitud: lng
+          }));
+        }
+      });
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -102,8 +184,20 @@ export default function CompanyProfilePage() {
           correoEmpresa: result.data.correoEmpresa || '',
           sitioWeb: result.data.sitioWeb || '',
           razonSocial: result.data.razonSocial || '',
-          direccionEmpresa: result.data.direccionEmpresa || ''
+          direccionEmpresa: result.data.direccionEmpresa || '',
+          latitud: result.data.latitud || null,
+          longitud: result.data.longitud || null
         });
+
+        // Si hay coordenadas guardadas, centrar el mapa ahí
+        if (result.data.latitud && result.data.longitud) {
+          const savedPosition = {
+            lat: result.data.latitud,
+            lng: result.data.longitud
+          };
+          setMapCenter(savedPosition);
+          setMarkerPosition(savedPosition);
+        }
       } else {
         setError(result.error || 'Error al cargar el perfil');
       }
@@ -145,7 +239,9 @@ export default function CompanyProfilePage() {
             correoEmpresa: formData.correoEmpresa,
             sitioWeb: formData.sitioWeb || null,
             razonSocial: formData.razonSocial,
-            direccionEmpresa: formData.direccionEmpresa
+            direccionEmpresa: formData.direccionEmpresa,
+            latitud: formData.latitud,
+            longitud: formData.longitud
           });
         }
         // Limpiar mensaje de éxito después de 3 segundos
@@ -365,15 +461,66 @@ export default function CompanyProfilePage() {
                   <MapPin size={14} />
                   Dirección de la Empresa *
                 </label>
-                <textarea
-                  name="direccionEmpresa"
-                  value={formData.direccionEmpresa}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent resize-none"
-                  placeholder="Calle, número, colonia, ciudad, CP"
-                  required
-                />
+
+                {mapLoadError && (
+                  <p className="text-red-500 text-sm mb-2">Error al cargar el mapa</p>
+                )}
+
+                {!isMapLoaded ? (
+                  <div className="w-full h-[250px] bg-gray-100 rounded-lg flex items-center justify-center">
+                    <p className="text-gray-500">Cargando mapa...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Autocomplete de Google Places */}
+                    <Autocomplete
+                      onLoad={onAutocompleteLoad}
+                      onPlaceChanged={onPlaceChanged}
+                      options={{
+                        componentRestrictions: { country: 'mx' },
+                        types: ['address']
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={formData.direccionEmpresa}
+                        onChange={(e) =>
+                          setFormData(prev => ({ ...prev, direccionEmpresa: e.target.value }))
+                        }
+                        placeholder="Busca tu dirección..."
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
+                        required
+                      />
+                    </Autocomplete>
+
+                    {/* Mapa */}
+                    <GoogleMap
+                      mapContainerStyle={mapContainerStyle}
+                      zoom={16}
+                      center={mapCenter}
+                      onClick={onMapClick}
+                      options={{
+                        streetViewControl: false,
+                        mapTypeControl: false,
+                        fullscreenControl: false,
+                      }}
+                    >
+                      <Marker
+                        position={markerPosition}
+                        draggable={true}
+                        onDragEnd={(e) => {
+                          if (e.latLng) {
+                            onMapClick(e as google.maps.MapMouseEvent);
+                          }
+                        }}
+                      />
+                    </GoogleMap>
+
+                    <p className="text-xs text-gray-500">
+                      Busca tu dirección o haz clic en el mapa para seleccionar la ubicación exacta
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -71,7 +71,9 @@ model CompanyRequest {
   razonSocial               String
   rfc                       String    @unique
   direccionEmpresa          String
-  
+  latitud                   Float?
+  longitud                  Float?
+
   // Documentos
   identificacionUrl         String?
   documentosConstitucionUrl String?

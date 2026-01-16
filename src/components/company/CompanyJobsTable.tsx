@@ -54,12 +54,17 @@ export default function CompanyJobsTable({
 
   // Determinar si aún se puede editar (dentro de 4 horas)
   const canEdit = (job: Job) => {
-    if (!job.editableUntil) return true; // Si no tiene límite, siempre se puede editar
+    // Borradores siempre son editables
+    if (job.status === 'draft') return true;
+    // Vacantes activas: verificar tiempo límite
+    if (!job.editableUntil) return true;
     return new Date(job.editableUntil) > new Date();
   };
 
   // Obtener tiempo restante para editar
   const getEditTimeRemaining = (job: Job) => {
+    // No mostrar contador para borradores
+    if (job.status === 'draft') return null;
     if (!job.editableUntil) return null;
     const now = new Date();
     const editableUntil = new Date(job.editableUntil);

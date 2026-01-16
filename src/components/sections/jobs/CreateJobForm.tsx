@@ -525,6 +525,9 @@ const CreateJobForm = () => {
         );
       }
     } catch (error) {
+      // Scroll hacia arriba para mostrar el mensaje de error
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
       setSubmitStatus({
         type: 'error',
         message:
@@ -744,7 +747,7 @@ const CreateJobForm = () => {
                   onPlaceChanged={onPlaceChanged}
                   options={{
                     componentRestrictions: { country: 'mx' },
-                    types: ['(cities)']
+                    types: ['address']
                   }}
                 >
                   <div className="relative">
@@ -755,7 +758,7 @@ const CreateJobForm = () => {
                       onChange={(e) =>
                         setFormData({ ...formData, location: e.target.value })
                       }
-                      placeholder="Busca una ciudad..."
+                      placeholder="Busca una dirección..."
                       className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
                       required
                     />
@@ -765,7 +768,7 @@ const CreateJobForm = () => {
                 {/* Mapa interactivo */}
                 <GoogleMap
                   mapContainerStyle={mapContainerStyle}
-                  zoom={12}
+                  zoom={16}
                   center={mapCenter}
                   onClick={onMapClick}
                   options={{
@@ -786,7 +789,7 @@ const CreateJobForm = () => {
                 </GoogleMap>
 
                 <p className="text-xs text-gray-500">
-                  Busca la ciudad o haz clic en el mapa para seleccionar la ubicación
+                  Busca la dirección o haz clic en el mapa para seleccionar la ubicación exacta
                 </p>
               </div>
             )}
