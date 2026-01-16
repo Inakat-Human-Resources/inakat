@@ -612,9 +612,9 @@ const CreateJobForm = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-      {/* Header con créditos */}
-      <div className="flex justify-between items-start mb-6">
+    <div className="max-w-4xl mx-auto bg-white p-4 md:p-8 rounded-lg shadow-lg">
+      {/* Header con créditos - Responsive */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
         <div>
           {isEditing && (
             <button
@@ -625,10 +625,10 @@ const CreateJobForm = () => {
               Volver al Dashboard
             </button>
           )}
-          <h2 className="text-3xl font-bold">
+          <h2 className="text-2xl md:text-3xl font-bold">
             {isEditing ? 'Editar Vacante' : 'Publicar Nueva Vacante'}
           </h2>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-600 mt-1 text-sm md:text-base">
             {isEditing
               ? 'Modifica la información de la vacante'
               : 'Completa la información de la vacante'}
@@ -636,10 +636,10 @@ const CreateJobForm = () => {
         </div>
 
         {userInfo && userInfo.role !== 'admin' && !isEditing && (
-          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-right">
+          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 flex items-center justify-between sm:block sm:text-right">
             <p className="text-sm text-gray-600">Tus créditos</p>
-            <p className="text-2xl font-bold text-green-600 flex items-center gap-1">
-              <Coins size={24} />
+            <p className="text-xl md:text-2xl font-bold text-green-600 flex items-center gap-1">
+              <Coins size={20} className="md:w-6 md:h-6" />
               {userInfo.credits}
             </p>
           </div>
@@ -1267,8 +1267,8 @@ const CreateJobForm = () => {
           />
         </div>
 
-        {/* Botones de acción */}
-        <div className="flex gap-4 pt-4">
+        {/* Botones de acción - Stack en móvil, row en desktop */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
           {isEditing ? (
             <>
               {/* Botón cancelar para edición */}
@@ -1276,7 +1276,7 @@ const CreateJobForm = () => {
                 type="button"
                 onClick={() => router.push('/company/dashboard')}
                 disabled={isSubmitting}
-                className="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-2 sm:order-1"
               >
                 Cancelar
               </button>
@@ -1284,7 +1284,7 @@ const CreateJobForm = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 bg-button-green text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-button-green text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-1 sm:order-2"
               >
                 <Save size={20} />
                 {isSubmitting ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
@@ -1292,33 +1292,42 @@ const CreateJobForm = () => {
             </>
           ) : (
             <>
-              {/* Guardar como borrador */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                <Save size={20} />
-                {isSubmitting ? 'GUARDANDO...' : 'GUARDAR BORRADOR'}
-              </button>
-
-              {/* Publicar ahora */}
+              {/* Publicar ahora - Primero en móvil */}
               <button
                 type="button"
                 onClick={(e) => handleSubmit(e, true)}
                 disabled={isSubmitting || !calculatedCost}
-                className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-1 sm:order-2 ${
                   hasEnoughCredits
                     ? 'bg-button-green text-white hover:bg-green-700'
                     : 'bg-orange-500 text-white hover:bg-orange-600'
                 }`}
               >
                 <Send size={20} />
-                {isSubmitting
-                  ? 'PUBLICANDO...'
-                  : hasEnoughCredits
-                  ? `PUBLICAR (${calculatedCost} créditos)`
-                  : 'COMPRAR CRÉDITOS Y PUBLICAR'}
+                <span className="hidden sm:inline">
+                  {isSubmitting
+                    ? 'PUBLICANDO...'
+                    : hasEnoughCredits
+                    ? `PUBLICAR (${calculatedCost} créditos)`
+                    : 'COMPRAR CRÉDITOS'}
+                </span>
+                <span className="sm:hidden">
+                  {isSubmitting
+                    ? 'PUBLICANDO...'
+                    : hasEnoughCredits
+                    ? `PUBLICAR (${calculatedCost})`
+                    : 'COMPRAR CRÉDITOS'}
+                </span>
+              </button>
+
+              {/* Guardar como borrador */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-2 sm:order-1"
+              >
+                <Save size={20} />
+                {isSubmitting ? 'GUARDANDO...' : 'GUARDAR BORRADOR'}
               </button>
             </>
           )}

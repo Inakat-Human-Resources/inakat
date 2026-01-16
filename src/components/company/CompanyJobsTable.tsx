@@ -155,34 +155,36 @@ export default function CompanyJobsTable({
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200">
       {/* Header con tabs */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-4 md:p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Mis Vacantes</h2>
-          <span className="text-sm text-gray-500">{jobs.length} total</span>
+          <h2 className="text-lg md:text-xl font-bold text-gray-900">Mis Vacantes</h2>
+          <span className="text-xs md:text-sm text-gray-500">{jobs.length} total</span>
         </div>
 
-        {/* Tabs estilo OCC */}
-        <div className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2 ${
-                activeTab === tab.key
-                  ? 'bg-button-orange text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {tab.label}
-              <span className={`px-2 py-0.5 text-xs rounded-full ${
-                activeTab === tab.key
-                  ? 'bg-white/20 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
+        {/* Tabs - scrollable en móvil */}
+        <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+          <div className="flex gap-2 min-w-max md:flex-wrap">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-1.5 md:gap-2 whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? 'bg-button-orange text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {tab.label}
+                <span className={`px-1.5 md:px-2 py-0.5 text-xs rounded-full ${
+                  activeTab === tab.key
+                    ? 'bg-white/20 text-white'
+                    : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -200,33 +202,34 @@ export default function CompanyJobsTable({
               key={job.id}
               className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
             >
-              <div className="flex items-start justify-between">
+              {/* Layout responsive: stack en móvil, row en desktop */}
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                 {/* Info principal */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">{job.title}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-900 break-words">{job.title}</h3>
                     {getStatusBadge(job)}
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                  <div className="flex flex-wrap items-center gap-2 md:gap-4 text-sm text-gray-600">
                     <span>{job.location}</span>
-                    <span className="text-gray-300">|</span>
+                    <span className="hidden md:inline text-gray-300">|</span>
                     <span>{job.salary}</span>
-                    <span className="text-gray-300">|</span>
-                    <span>{job.jobType}</span>
-                    <span className="text-gray-300">|</span>
+                    <span className="hidden md:inline text-gray-300">|</span>
+                    <span className="hidden sm:inline">{job.jobType}</span>
+                    <span className="hidden md:inline text-gray-300">|</span>
                     <span>{job.workMode === 'remote' ? 'Remoto' : job.workMode === 'hybrid' ? 'Híbrido' : 'Presencial'}</span>
                   </div>
                 </div>
 
-                {/* Métricas */}
-                <div className="flex items-center gap-6 ml-6">
+                {/* Métricas - horizontal en móvil, vertical en desktop */}
+                <div className="flex items-center justify-start md:justify-end gap-4 md:gap-6">
                   {/* Candidatos - Clickeable */}
                   <button
                     onClick={() => onViewCandidates?.(job.id, job.title)}
                     className="text-center group cursor-pointer"
                     title="Ver candidatos de esta vacante"
                   >
-                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-700 rounded-full font-bold text-lg group-hover:bg-blue-200 group-hover:scale-110 transition-all duration-200">
+                    <div className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-blue-100 text-blue-700 rounded-full font-bold text-base md:text-lg group-hover:bg-blue-200 group-hover:scale-110 transition-all duration-200">
                       {getApplicationCount(job)}
                     </div>
                     <span className="text-xs text-gray-500 mt-1 block group-hover:text-blue-600 transition-colors">
@@ -236,16 +239,16 @@ export default function CompanyJobsTable({
 
                   {/* Fecha de publicación */}
                   <div className="text-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-gray-100 text-gray-600 rounded-full">
-                      <Clock className="w-5 h-5" />
+                    <div className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-gray-100 text-gray-600 rounded-full">
+                      <Clock className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <span className="text-xs text-gray-500 mt-1 block">{formatDate(job.createdAt)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Acciones */}
-              <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+              {/* Acciones - wrap en móvil */}
+              <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
                 {onView && (
                   <button
                     onClick={() => onView(job.id)}

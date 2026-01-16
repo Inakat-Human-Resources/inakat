@@ -320,29 +320,29 @@ export default function JobCandidatesPage() {
           <span className="text-gray-900 font-medium">Candidatos</span>
         </nav>
 
-        {/* Header con info de la vacante */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
+        {/* Header con info de la vacante - Responsive */}
+        <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="flex items-start gap-3 md:gap-4">
               <button
                 onClick={() => router.push('/company/dashboard')}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">{job?.title}</h1>
-                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+              <div className="min-w-0">
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">{job?.title}</h1>
+                <div className="flex flex-wrap items-center gap-2 md:gap-4 text-sm text-gray-600">
                   <span className="flex items-center gap-1">
-                    <Building className="w-4 h-4" />
-                    {job?.company}
+                    <Building className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{job?.company}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4" />
-                    {job?.location}
+                    <MapPin className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{job?.location}</span>
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Briefcase className="w-4 h-4" />
+                  <span className="hidden sm:flex items-center gap-1">
+                    <Briefcase className="w-4 h-4 flex-shrink-0" />
                     {job?.salary}
                   </span>
                   {job?.profile && (
@@ -353,17 +353,17 @@ export default function JobCandidatesPage() {
                 </div>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Total de candidatos</p>
-              <p className="text-3xl font-bold text-button-orange">{applications.length}</p>
+            <div className="flex items-center justify-between md:justify-end md:text-right bg-orange-50 md:bg-transparent rounded-lg p-3 md:p-0">
+              <p className="text-sm text-gray-500 md:mb-0">Total de candidatos</p>
+              <p className="text-2xl md:text-3xl font-bold text-button-orange ml-3 md:ml-0">{applications.length}</p>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Responsive */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="border-b border-gray-200">
-            <div className="flex flex-wrap">
+          <div className="border-b border-gray-200 overflow-x-auto">
+            <div className="flex min-w-max md:min-w-0">
               {TABS.map((tab) => {
                 const count = getCandidateCount(tab.key);
                 const Icon = tab.icon;
@@ -373,15 +373,15 @@ export default function JobCandidatesPage() {
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                    className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-3 md:py-4 text-xs md:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                       isActive
                         ? 'border-button-orange text-button-orange bg-orange-50'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    <Icon className="w-5 h-5" />
-                    {tab.label}
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                    <Icon className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className={`px-1.5 md:px-2 py-0.5 text-xs rounded-full ${
                       isActive ? 'bg-button-orange text-white' : 'bg-gray-100 text-gray-600'
                     }`}>
                       {count}
@@ -393,14 +393,14 @@ export default function JobCandidatesPage() {
           </div>
 
           {/* Lista de candidatos */}
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {filteredCandidates.length === 0 ? (
               <div className="text-center py-12">
-                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg font-medium">
+                <Users className="w-12 h-12 md:w-16 md:h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-base md:text-lg font-medium">
                   No hay candidatos en esta categoría
                 </p>
-                <p className="text-gray-400 text-sm mt-2">
+                <p className="text-gray-400 text-sm mt-2 px-4">
                   {activeTab === 'new' && 'Los candidatos aparecerán aquí cuando el especialista los envíe'}
                   {activeTab === 'in_process' && 'Marca candidatos como "Me interesa" para verlos aquí'}
                   {activeTab === 'rejected' && 'Los candidatos descartados aparecerán aquí'}
@@ -412,33 +412,34 @@ export default function JobCandidatesPage() {
                 {filteredCandidates.map((app, index) => (
                   <div
                     key={app.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all bg-white"
+                    className="border border-gray-200 rounded-lg p-3 md:p-4 hover:border-blue-300 hover:shadow-md transition-all bg-white"
                   >
-                    <div className="flex items-center justify-between">
+                    {/* Layout responsive del candidato */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       {/* Info del candidato */}
                       <div
-                        className="flex items-center gap-4 flex-1 cursor-pointer"
+                        className="flex items-center gap-3 md:gap-4 flex-1 cursor-pointer min-w-0"
                         onClick={() => handleViewCandidateProfile(app, index)}
                       >
-                        <div className="w-12 h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-base md:text-lg font-bold flex-shrink-0">
                           {app.candidateName?.charAt(0)?.toUpperCase() || '?'}
                         </div>
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate">{app.candidateName}</h3>
-                          <p className="text-sm text-gray-500 truncate">{app.candidateEmail}</p>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-900 truncate text-sm md:text-base">{app.candidateName}</h3>
+                          <p className="text-xs md:text-sm text-gray-500 truncate">{app.candidateEmail}</p>
+                          <div className="flex items-center gap-1.5 md:gap-2 mt-1 flex-wrap">
                             {app.candidateProfile?.profile && (
-                              <span className="inline-block px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                              <span className="inline-block px-1.5 md:px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
                                 {app.candidateProfile.profile}
                               </span>
                             )}
                             {app.candidateProfile?.seniority && (
-                              <span className="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                              <span className="inline-block px-1.5 md:px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
                                 {app.candidateProfile.seniority}
                               </span>
                             )}
                             {app.candidateProfile?.universidad && (
-                              <span className="inline-block px-2 py-0.5 text-xs bg-purple-100 text-purple-600 rounded">
+                              <span className="hidden md:inline-block px-2 py-0.5 text-xs bg-purple-100 text-purple-600 rounded">
                                 {app.candidateProfile.universidad}
                               </span>
                             )}
@@ -446,14 +447,14 @@ export default function JobCandidatesPage() {
                         </div>
                       </div>
 
-                      {/* Estado y acciones */}
-                      <div className="flex items-center gap-4">
-                        <div className="text-right hidden sm:block">
-                          <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
+                      {/* Estado y acciones - responsive */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 md:gap-4 pl-13 sm:pl-0">
+                        <div className="text-left sm:text-right">
+                          <p className="text-xs text-gray-400 flex items-center gap-1 sm:justify-end">
                             <Calendar className="w-3 h-3" />
                             {formatDate(app.createdAt)}
                           </p>
-                          {getStatusBadge(app.status)}
+                          <div className="mt-1">{getStatusBadge(app.status)}</div>
                         </div>
                         <button
                           onClick={() => handleViewCandidateProfile(app, index)}
@@ -464,9 +465,9 @@ export default function JobCandidatesPage() {
                       </div>
                     </div>
 
-                    {/* Botones de acción */}
+                    {/* Botones de acción - responsive wrap */}
                     {app.status !== 'accepted' && app.status !== 'rejected' && (
-                      <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
                         {/* Descartar */}
                         <button
                           onClick={(e) => {

@@ -135,6 +135,24 @@ export async function PATCH(
       }
     });
 
+    // IMPORTANTE: Si el status cambia a 'sent_to_specialist', actualizar JobAssignment
+    // para que el especialista pueda ver la vacante en su dashboard
+    if (status === 'sent_to_specialist') {
+      const jobAssignment = await prisma.jobAssignment.findFirst({
+        where: { jobId: existingApplication.jobId }
+      });
+
+      if (jobAssignment && jobAssignment.specialistId) {
+        await prisma.jobAssignment.update({
+          where: { id: jobAssignment.id },
+          data: {
+            recruiterStatus: 'sent_to_specialist',
+            specialistStatus: jobAssignment.specialistStatus === 'pending' ? 'pending' : jobAssignment.specialistStatus
+          }
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Application updated successfully',

@@ -271,21 +271,21 @@ export default function AdminUsersPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        {/* Header - Responsive */}
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
               Gestión de Usuarios
             </h1>
-            <p className="text-gray-600">
-              Administra reclutadores, especialistas y otros administradores
+            <p className="text-gray-600 text-sm md:text-base">
+              Administra reclutadores y especialistas
             </p>
           </div>
           <button
             onClick={openNewModal}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-semibold"
+            className="w-full sm:w-auto px-4 md:px-6 py-2 md:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-semibold text-sm md:text-base"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             Nuevo Usuario
           </button>
         </div>

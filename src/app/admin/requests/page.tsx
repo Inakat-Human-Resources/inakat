@@ -184,18 +184,18 @@ export default function AdminRequestsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        {/* HEADER */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Panel de Administración
+        {/* HEADER - Responsive */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
+            Solicitudes de Empresas
           </h1>
-          <p className="text-gray-600">
-            Gestiona las solicitudes de registro de empresas
+          <p className="text-gray-600 text-sm md:text-base">
+            Gestiona las solicitudes de registro
           </p>
         </div>
 
-        {/* ESTADÍSTICAS */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* ESTADÍSTICAS - Responsive */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
             <p className="text-sm text-gray-600 mb-1">Total</p>
             <p className="text-3xl font-bold text-gray-800">{stats.total}</p>

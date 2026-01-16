@@ -242,11 +242,11 @@ export default function AssignmentsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Asignaciones</h1>
-          <p className="text-gray-600 mt-1">
-            Asigna reclutadores y especialistas a las vacantes
+        {/* Header - Responsive */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Asignaciones</h1>
+          <p className="text-gray-600 mt-1 text-sm md:text-base">
+            Asigna reclutadores y especialistas a vacantes
           </p>
         </div>
 
@@ -381,65 +381,41 @@ export default function AssignmentsPage() {
           </div>
         </div>
 
-        {/* Tabla de vacantes */}
-        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Vacante
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Empresa
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Reclutador
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Especialista
-                </th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                  Acción
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center text-gray-500"
-                  >
-                    No hay vacantes para mostrar
-                  </td>
-                </tr>
-              ) : (
-                jobs.map((job) => (
-                  <tr key={job.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-gray-900">{job.title}</p>
-                        <p className="text-sm text-gray-500">{job.location}</p>
-                        {job.profile && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                            {job.profile}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Building2 size={16} className="text-gray-400" />
-                        <span className="text-sm text-gray-700">
-                          {job.user?.companyRequest?.nombreEmpresa ||
-                            job.company}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
+        {/* Lista de vacantes - Desktop: Tabla, Mobile: Cards */}
+        {jobs.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border p-12 text-center text-gray-500">
+            <Briefcase className="mx-auto mb-2 text-gray-400" size={40} />
+            No hay vacantes para mostrar
+          </div>
+        ) : (
+          <>
+            {/* Mobile: Cards */}
+            <div className="md:hidden space-y-4">
+              {jobs.map((job) => (
+                <div key={job.id} className="bg-white rounded-lg shadow-sm border p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{job.title}</h3>
+                      <p className="text-sm text-gray-500 flex items-center gap-1">
+                        <Building2 size={14} />
+                        {job.user?.companyRequest?.nombreEmpresa || job.company}
+                      </p>
+                      <p className="text-xs text-gray-400">{job.location}</p>
+                    </div>
+                    {getStatusBadge(job)}
+                  </div>
+
+                  {job.profile && (
+                    <span className="inline-block text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded mb-3">
+                      {job.profile}
+                    </span>
+                  )}
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-500 flex items-center gap-1 mb-1">
+                        <UserCheck size={12} /> Reclutador
+                      </label>
                       <select
                         value={selections[job.id]?.recruiterId || ''}
                         onChange={(e) =>
@@ -447,9 +423,7 @@ export default function AssignmentsPage() {
                             ...selections,
                             [job.id]: {
                               ...selections[job.id],
-                              recruiterId: e.target.value
-                                ? parseInt(e.target.value)
-                                : undefined
+                              recruiterId: e.target.value ? parseInt(e.target.value) : undefined
                             }
                           })
                         }
@@ -462,8 +436,12 @@ export default function AssignmentsPage() {
                           </option>
                         ))}
                       </select>
-                    </td>
-                    <td className="px-4 py-3">
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-500 flex items-center gap-1 mb-1">
+                        <UserCog size={12} /> Especialista
+                      </label>
                       <select
                         value={selections[job.id]?.specialistId || ''}
                         onChange={(e) =>
@@ -471,9 +449,7 @@ export default function AssignmentsPage() {
                             ...selections,
                             [job.id]: {
                               ...selections[job.id],
-                              specialistId: e.target.value
-                                ? parseInt(e.target.value)
-                                : undefined
+                              specialistId: e.target.value ? parseInt(e.target.value) : undefined
                             }
                           })
                         }
@@ -482,35 +458,148 @@ export default function AssignmentsPage() {
                         <option value="">Sin asignar</option>
                         {specialists.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.nombre} {s.apellidoPaterno || ''}
-                            {s.specialty ? ` (${s.specialty})` : ''}
+                            {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}
                           </option>
                         ))}
                       </select>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {getStatusBadge(job)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleSaveAssignment(job.id)}
-                        disabled={savingJobId === job.id}
-                        className="p-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                        title="Guardar asignación"
-                      >
-                        {savingJobId === job.id ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
+                    </div>
+
+                    <button
+                      onClick={() => handleSaveAssignment(job.id)}
+                      disabled={savingJobId === job.id}
+                      className="w-full py-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {savingJobId === job.id ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <>
                           <Save size={18} />
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                          Guardar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: Tabla */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Vacante
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Empresa
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Reclutador
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                        Especialista
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
+                        Estado
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
+                        Acción
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobs.map((job) => (
+                      <tr key={job.id} className="border-b hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-gray-900">{job.title}</p>
+                            <p className="text-sm text-gray-500">{job.location}</p>
+                            {job.profile && (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                                {job.profile}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 size={16} className="text-gray-400" />
+                            <span className="text-sm text-gray-700">
+                              {job.user?.companyRequest?.nombreEmpresa || job.company}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={selections[job.id]?.recruiterId || ''}
+                            onChange={(e) =>
+                              setSelections({
+                                ...selections,
+                                [job.id]: {
+                                  ...selections[job.id],
+                                  recruiterId: e.target.value ? parseInt(e.target.value) : undefined
+                                }
+                              })
+                            }
+                            className="w-full p-2 border rounded-lg text-sm"
+                          >
+                            <option value="">Sin asignar</option>
+                            {recruiters.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.nombre} {r.apellidoPaterno || ''}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={selections[job.id]?.specialistId || ''}
+                            onChange={(e) =>
+                              setSelections({
+                                ...selections,
+                                [job.id]: {
+                                  ...selections[job.id],
+                                  specialistId: e.target.value ? parseInt(e.target.value) : undefined
+                                }
+                              })
+                            }
+                            className="w-full p-2 border rounded-lg text-sm"
+                          >
+                            <option value="">Sin asignar</option>
+                            {specialists.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {getStatusBadge(job)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleSaveAssignment(job.id)}
+                            disabled={savingJobId === job.id}
+                            className="p-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                            title="Guardar asignación"
+                          >
+                            {savingJobId === job.id ? (
+                              <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                              <Save size={18} />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

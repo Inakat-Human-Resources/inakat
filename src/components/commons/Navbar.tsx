@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, User, ChevronDown } from 'lucide-react';
+import { LogOut, User, ChevronDown, Menu, X } from 'lucide-react';
 import logo from '@/assets/images/logo/logo.png';
 
 interface UserData {
@@ -22,6 +22,7 @@ const Navbar = () => {
   const router = useRouter();
   const [user, setUser] = useState<UserData | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -175,15 +176,24 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="fixed top-0 left-0 w-full bg-custom-beige py-10 md:py-12 z-50">
-      <div className="container mx-auto flex justify-between items-center">
+    <nav className="fixed top-0 left-0 w-full bg-custom-beige py-6 md:py-10 z-50">
+      <div className="container mx-auto flex justify-between items-center px-4">
         {/* Logo */}
         <Link href="/">
-          <Image src={logo} alt="INAKAT" className="w-32" priority />
+          <Image src={logo} alt="INAKAT" className="w-24 md:w-32" priority />
         </Link>
 
-        {/* Menu */}
-        <ul className="flex space-x-4 md:space-x-6 items-center">
+        {/* Mobile Menu Button */}
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="md:hidden p-2 text-title-dark"
+          aria-label="Toggle menu"
+        >
+          {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+        </button>
+
+        {/* Desktop Menu */}
+        <ul className="hidden md:flex space-x-4 lg:space-x-6 items-center">
           <li>
             <Link href="/" className={getLinkClass('/')}>
               INICIO
@@ -711,6 +721,142 @@ const Navbar = () => {
           </li>
         </ul>
       </div>
+
+      {/* Mobile Menu Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-full left-0 w-full bg-custom-beige shadow-lg border-t border-gray-200">
+          <div className="container mx-auto px-4 py-4">
+            <ul className="flex flex-col space-y-2">
+              <li>
+                <Link
+                  href="/"
+                  className={getLinkClass('/')}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  INICIO
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/about"
+                  className={getLinkClass('/about')}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  SOBRE NOSOTROS
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/companies"
+                  className={getLinkClass('/companies')}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  EMPRESAS
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/talents"
+                  className={getLinkClass('/talents')}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  TALENTOS
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contact"
+                  className={getLinkClass('/contact')}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  CONTACTO
+                </Link>
+              </li>
+
+              {/* Mobile User Menu / Login */}
+              <li className="pt-4 border-t border-gray-200">
+                {user ? (
+                  <div className="space-y-2">
+                    {/* User Info */}
+                    <div className="px-4 py-2 bg-white rounded-lg">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {user.nombre || user.email}
+                      </p>
+                      <p className="text-xs text-button-orange font-medium">
+                        {getRoleLabel()}
+                      </p>
+                      {user.role === 'company' && (
+                        <p className="text-xs text-green-600 font-bold mt-1">
+                          {user.credits} créditos
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Dashboard Link */}
+                    <Link
+                      href={getDashboardLink()}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm bg-button-green text-white rounded-lg"
+                    >
+                      <User className="w-4 h-4" />
+                      {getDashboardLabel()}
+                    </Link>
+
+                    {/* Mi Perfil */}
+                    <Link
+                      href="/profile"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      Mi Perfil
+                    </Link>
+
+                    {/* Company specific links */}
+                    {user.role === 'company' && (
+                      <>
+                        <Link
+                          href="/company/profile"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                        >
+                          Perfil de Empresa
+                        </Link>
+                        <Link
+                          href="/credits/purchase"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-button-orange font-medium hover:bg-orange-50 rounded-lg"
+                        >
+                          Comprar Créditos
+                        </Link>
+                      </>
+                    )}
+
+                    {/* Logout */}
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Cerrar Sesión
+                    </button>
+                  </div>
+                ) : (
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block w-full text-center bg-button-orange text-white px-4 py-3 rounded-full hover:bg-opacity-90 transition-colors"
+                  >
+                    Iniciar Sesión
+                  </Link>
+                )}
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

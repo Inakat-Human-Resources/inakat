@@ -314,22 +314,22 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        {/* Header - Responsive */}
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              Dashboard Administrativo
+            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
+              Dashboard Admin
             </h1>
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm md:text-base">
               Vista general de INAKAT
             </p>
           </div>
           <button
             onClick={fetchDashboardData}
-            className="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-3 py-2 bg-white border rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm"
           >
-            <RefreshCw size={20} />
-            Actualizar
+            <RefreshCw size={18} />
+            <span className="hidden sm:inline">Actualizar</span>
           </button>
         </div>
 

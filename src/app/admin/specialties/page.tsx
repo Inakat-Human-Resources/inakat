@@ -253,16 +253,16 @@ export default function SpecialtiesPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Especialidades</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Especialidades</h1>
+            <p className="text-gray-600 mt-1 text-sm md:text-base">
               Gestiona los perfiles profesionales disponibles en la plataforma
             </p>
           </div>
           <button
             onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <Plus size={20} />
             Nueva Especialidad
@@ -288,29 +288,140 @@ export default function SpecialtiesPage() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <p className="text-sm text-gray-500">Total Especialidades</p>
-            <p className="text-2xl font-bold text-gray-900">
+        <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
+            <p className="text-xs md:text-sm text-gray-500">Total</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-900">
               {specialties.length}
             </p>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <p className="text-sm text-gray-500">Activas</p>
-            <p className="text-2xl font-bold text-green-600">
+          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
+            <p className="text-xs md:text-sm text-gray-500">Activas</p>
+            <p className="text-xl md:text-2xl font-bold text-green-600">
               {specialties.filter((s) => s.isActive).length}
             </p>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border">
-            <p className="text-sm text-gray-500">Inactivas</p>
-            <p className="text-2xl font-bold text-gray-400">
+          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
+            <p className="text-xs md:text-sm text-gray-500">Inactivas</p>
+            <p className="text-xl md:text-2xl font-bold text-gray-400">
               {specialties.filter((s) => !s.isActive).length}
             </p>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+        {/* Mobile Cards */}
+        <div className="md:hidden space-y-3">
+          {specialties.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border p-8 text-center text-gray-500">
+              No hay especialidades registradas. ¡Crea la primera!
+            </div>
+          ) : (
+            specialties.map((specialty) => (
+              <div
+                key={specialty.id}
+                className="bg-white rounded-lg shadow-sm border p-4"
+              >
+                {/* Header con nombre y estado */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: specialty.color }}
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {specialty.icon && (
+                          <span className="mr-1">{specialty.icon}</span>
+                        )}
+                        {specialty.name}
+                      </p>
+                      <span className="text-xs text-gray-400">
+                        Orden: {specialty.sortOrder}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleActive(specialty)}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
+                      specialty.isActive
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {specialty.isActive ? (
+                      <>
+                        <ToggleRight size={12} />
+                        Activa
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft size={12} />
+                        Inactiva
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Descripción */}
+                {specialty.description && (
+                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                    {specialty.description}
+                  </p>
+                )}
+
+                {/* Subcategorías */}
+                {specialty.subcategories.length > 0 && (
+                  <div className="mb-3">
+                    <button
+                      onClick={() => toggleRowExpand(specialty.id)}
+                      className="flex items-center gap-1 text-sm text-blue-600"
+                    >
+                      {specialty.subcategories.length} subcategorías
+                      {expandedRows.has(specialty.id) ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )}
+                    </button>
+                    {expandedRows.has(specialty.id) && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {specialty.subcategories.map((sub, index) => (
+                          <span
+                            key={index}
+                            className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600"
+                          >
+                            #{sub}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Acciones */}
+                <div className="flex gap-2 pt-3 border-t">
+                  <button
+                    onClick={() => openEditModal(specialty)}
+                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-blue-600 bg-blue-50 rounded-lg text-sm"
+                  >
+                    <Edit2 size={16} />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmId(specialty.id)}
+                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-red-600 bg-red-50 rounded-lg text-sm"
+                  >
+                    <Trash2 size={16} />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block bg-white rounded-lg shadow-sm border overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>

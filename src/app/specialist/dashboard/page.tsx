@@ -306,12 +306,12 @@ export default function SpecialistDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+        {/* Header - Responsive */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Dashboard Especialista
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-600 mt-1 text-sm md:text-base">
             {specialist?.specialty && (
               <span className="inline-flex items-center gap-1">
                 <Star size={16} className="text-yellow-500" />
@@ -337,9 +337,9 @@ export default function SpecialistDashboard() {
           </div>
         )}
 
-        {/* Pestañas */}
+        {/* Pestañas - Responsive scrollable */}
         <div className="bg-white rounded-lg shadow-sm border mb-6">
-          <div className="flex border-b">
+          <div className="flex border-b overflow-x-auto">
             {tabs.map((tab) => {
               const count = getTabCount(tab.id);
               const isActive = activeTab === tab.id;
@@ -430,33 +430,35 @@ export default function SpecialistDashboard() {
                 >
                   {/* Header de la vacante */}
                   <div
-                    className="p-4 cursor-pointer hover:bg-gray-50"
+                    className="p-3 md:p-4 cursor-pointer hover:bg-gray-50"
                     onClick={() => setExpandedId(expandedId === assignment.id ? null : assignment.id)}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-gray-900">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-gray-900 text-sm md:text-base">
                             {assignment.job.title}
                           </h3>
-                          <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full whitespace-nowrap">
                             {tabCount} candidato{tabCount !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs md:text-sm text-gray-500">
                           <span className="flex items-center gap-1">
-                            <Building2 size={14} />
-                            {assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company}
+                            <Building2 size={14} className="flex-shrink-0" />
+                            <span className="truncate">{assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company}</span>
                           </span>
-                          <span>{assignment.job.location}</span>
+                          <span className="truncate">{assignment.job.location}</span>
                           {assignment.job.profile && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                            <span className="hidden sm:inline px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
                               {assignment.job.profile}
                             </span>
                           )}
                         </div>
                       </div>
-                      {expandedId === assignment.id ? <ChevronUp /> : <ChevronDown />}
+                      <div className="flex-shrink-0">
+                        {expandedId === assignment.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </div>
                     </div>
                   </div>
 
@@ -494,32 +496,32 @@ export default function SpecialistDashboard() {
                           filteredApps.map((app) => (
                             <div
                               key={app.id}
-                              className="p-4 hover:bg-gray-50"
+                              className="p-3 md:p-4 hover:bg-gray-50"
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-medium text-gray-900">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-medium text-gray-900 text-sm md:text-base">
                                       {app.candidateName}
                                     </p>
                                     <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
                                       {getStatusLabel(app.status)}
                                     </span>
                                   </div>
-                                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                                    <span className="flex items-center gap-1">
-                                      <Mail size={14} />
-                                      {app.candidateEmail}
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs md:text-sm text-gray-500">
+                                    <span className="flex items-center gap-1 truncate">
+                                      <Mail size={14} className="flex-shrink-0" />
+                                      <span className="truncate">{app.candidateEmail}</span>
                                     </span>
                                     {app.candidatePhone && (
                                       <span className="flex items-center gap-1">
-                                        <Phone size={14} />
+                                        <Phone size={14} className="flex-shrink-0" />
                                         {app.candidatePhone}
                                       </span>
                                     )}
                                   </div>
                                   {app.candidateProfile && (
-                                    <div className="flex items-center gap-2 mt-2">
+                                    <div className="flex flex-wrap items-center gap-2 mt-2">
                                       {app.candidateProfile.profile && (
                                         <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
                                           {app.candidateProfile.profile}
@@ -536,7 +538,7 @@ export default function SpecialistDashboard() {
                                         </span>
                                       )}
                                       {app.candidateProfile.universidad && (
-                                        <span className="text-xs text-gray-500">
+                                        <span className="hidden md:inline text-xs text-gray-500">
                                           {app.candidateProfile.universidad}
                                         </span>
                                       )}
@@ -552,7 +554,7 @@ export default function SpecialistDashboard() {
                                         className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                                       >
                                         <FileText size={12} />
-                                        Ver CV
+                                        CV
                                       </a>
                                     )}
                                     {app.candidateProfile?.linkedinUrl && (
@@ -570,7 +572,7 @@ export default function SpecialistDashboard() {
                                 </div>
 
                                 {/* Acciones */}
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-end gap-2 flex-shrink-0">
                                   {/* Ver perfil */}
                                   <button
                                     onClick={() => openApplicationProfile(app, assignment.recruiterNotes || '', filteredApps)}

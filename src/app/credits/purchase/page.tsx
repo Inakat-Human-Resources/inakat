@@ -357,9 +357,9 @@ export default function PurchaseCreditsPage() {
         onLoad={() => console.log('Mercado Pago SDK loaded')}
       />
 
-      <div className="min-h-screen bg-custom-beige py-20">
+      <div className="min-h-screen bg-custom-beige py-12 md:py-20">
         <div className="container mx-auto px-4 max-w-6xl">
-          <h1 className="text-4xl font-bold text-title-dark mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-title-dark mb-6 md:mb-8">
             Comprar Créditos
           </h1>
 
@@ -377,11 +377,11 @@ export default function PurchaseCreditsPage() {
                   <p className="text-yellow-800">No hay paquetes disponibles en este momento.</p>
                 </div>
               ) : (
-                <div className={`grid grid-cols-1 gap-6 mb-8 ${
-                  packages.length === 1 ? 'md:grid-cols-1 max-w-sm mx-auto' :
+                <div className={`grid grid-cols-2 gap-3 sm:gap-6 mb-8 ${
+                  packages.length === 1 ? 'grid-cols-1 md:grid-cols-1 max-w-sm mx-auto' :
                   packages.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' :
                   packages.length === 3 ? 'md:grid-cols-3' :
-                  'md:grid-cols-4'
+                  'lg:grid-cols-4'
                 }`}>
                   {packages.map((pkg) => {
                     // Calcular precio con descuento para este paquete
@@ -395,56 +395,56 @@ export default function PurchaseCreditsPage() {
                         key={pkg.id}
                         onClick={() => setSelectedPackageId(pkg.id)}
                         className={`
-                          relative bg-white rounded-xl p-6 cursor-pointer border-2 transition-all
+                          relative bg-white rounded-xl p-4 sm:p-6 cursor-pointer border-2 transition-all
                           ${
                             selectedPackageId === pkg.id
-                              ? 'border-button-orange shadow-lg scale-105'
+                              ? 'border-button-orange shadow-lg scale-[1.02] sm:scale-105'
                               : 'border-gray-200 hover:border-gray-300'
                           }
                         `}
                       >
                         {pkg.badge === 'MÁS POPULAR' && (
-                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-button-orange text-white px-4 py-1 rounded-full text-sm font-bold">
+                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-button-orange text-white px-2 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap">
                             MÁS POPULAR
                           </div>
                         )}
 
                         {pkg.badge === 'PROMOCIÓN' && (
-                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-1 rounded-full text-sm font-bold">
+                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-2 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap">
                             PROMOCIÓN
                           </div>
                         )}
 
                         <div className="text-center">
-                          <h3 className="text-5xl font-bold text-title-dark mb-2">
+                          <h3 className="text-3xl sm:text-5xl font-bold text-title-dark mb-1 sm:mb-2">
                             {pkg.credits}
                           </h3>
-                          <p className="text-gray-600 mb-4">
+                          <p className="text-gray-600 mb-2 sm:mb-4 text-sm">
                             {pkg.credits === 1 ? 'crédito' : 'créditos'}
                           </p>
 
                           {/* Precio con descuento */}
                           {discountInfo ? (
                             <div>
-                              <p className="text-lg text-gray-400 line-through">
+                              <p className="text-sm sm:text-lg text-gray-400 line-through">
                                 {formatPrice(pkg.price)}
                               </p>
-                              <p className="text-3xl font-bold text-button-green mb-1">
+                              <p className="text-xl sm:text-3xl font-bold text-button-green mb-1">
                                 {formatPrice(pkgFinalPrice)}
                               </p>
-                              <p className="text-sm text-green-600 font-medium">
+                              <p className="text-xs sm:text-sm text-green-600 font-medium">
                                 Ahorras {formatPrice(pkgDiscount)}
                               </p>
                             </div>
                           ) : (
-                            <p className="text-3xl font-bold text-button-orange mb-2">
+                            <p className="text-xl sm:text-3xl font-bold text-button-orange mb-2">
                               {formatPrice(pkg.price)}
                             </p>
                           )}
 
-                          <p className="text-sm text-gray-500 mt-2">MXN</p>
+                          <p className="text-xs sm:text-sm text-gray-500 mt-2">MXN</p>
                           <p className="text-xs text-gray-400 mt-1">
-                            {formatPrice(Math.round(pkgFinalPrice / pkg.credits))} por crédito
+                            {formatPrice(Math.round(pkgFinalPrice / pkg.credits))} / crédito
                           </p>
                         </div>
                       </div>
@@ -455,15 +455,15 @@ export default function PurchaseCreditsPage() {
 
               {/* Código de Descuento */}
               {packages.length > 0 && (
-                <div className="bg-white rounded-xl p-6 mb-8 max-w-xl mx-auto">
+                <div className="bg-white rounded-xl p-4 sm:p-6 mb-8 max-w-xl mx-auto">
                   <div className="flex items-center gap-2 mb-4">
-                    <Tag className="w-5 h-5 text-button-orange" />
-                    <h3 className="font-semibold text-gray-900">¿Tienes un código de descuento?</h3>
+                    <Tag className="w-5 h-5 text-button-orange flex-shrink-0" />
+                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base">¿Tienes un código de descuento?</h3>
                   </div>
 
                   {!discountInfo ? (
                     <div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <input
                           type="text"
                           value={discountCodeInput}
@@ -480,7 +480,7 @@ export default function PurchaseCreditsPage() {
                         <button
                           onClick={handleValidateCode}
                           disabled={validatingCode || !discountCodeInput.trim()}
-                          className="px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center gap-2"
+                          className="px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2 w-full sm:w-auto"
                         >
                           {validatingCode ? (
                             <Loader2 className="w-5 h-5 animate-spin" />

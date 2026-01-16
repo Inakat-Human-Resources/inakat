@@ -221,16 +221,14 @@ export default function AdminPricingPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              Matriz de Precios
-            </h1>
-            <p className="text-gray-600">
-              Los precios se generan automáticamente al crear especialidades. Solo puedes editar los créditos.
-            </p>
-          </div>
+        {/* Header - Responsive */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
+            Matriz de Precios
+          </h1>
+          <p className="text-gray-600 text-sm md:text-base">
+            Solo puedes editar los créditos asignados
+          </p>
         </div>
 
         {/* Mensajes */}

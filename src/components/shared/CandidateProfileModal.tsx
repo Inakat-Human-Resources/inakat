@@ -345,23 +345,23 @@ export default function CandidateProfileModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-lg font-bold">
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 md:p-6 flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 md:gap-3 mb-2">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-base md:text-lg font-bold flex-shrink-0">
                 {data.name.charAt(0).toUpperCase()}
               </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{data.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
+              <div className="min-w-0">
+                <h2 className="text-lg md:text-2xl font-bold text-gray-900 truncate">{data.name}</h2>
+                <div className="flex items-center gap-1 md:gap-2 mt-1 flex-wrap">
                   {getStatusBadge(data.status)}
                   {data.seniority && (
-                    <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                    <span className="px-2 py-0.5 md:py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
                       {getSeniorityLabel(data.seniority)}
                     </span>
                   )}
                   {data.profile && (
-                    <span className="px-2 py-1 text-xs font-medium bg-[#e8f4f4] text-[#2b5d62] rounded">
+                    <span className="px-2 py-0.5 md:py-1 text-xs font-medium bg-[#e8f4f4] text-[#2b5d62] rounded hidden sm:inline">
                       {data.profile}
                     </span>
                   )}
@@ -371,16 +371,16 @@ export default function CandidateProfileModal({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1"
+            className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0"
           >
             <X size={24} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {/* Contact Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6">
             <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
               <Mail className="w-5 h-5 text-[#2b5d62]" />
               <div>
@@ -651,38 +651,38 @@ export default function CandidateProfileModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-4 flex justify-between items-center">
+        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
           {/* Navigation */}
           {(onPrev || onNext) && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
               <button
                 onClick={onPrev}
                 disabled={!onPrev || currentIndex === 0}
-                className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1 px-2 md:px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Anterior
+                <span className="hidden sm:inline">Anterior</span>
               </button>
               {currentIndex !== undefined && totalCount !== undefined && (
                 <span className="text-sm text-gray-500 px-2">
-                  {currentIndex + 1} de {totalCount}
+                  {currentIndex + 1}/{totalCount}
                 </span>
               )}
               <button
                 onClick={onNext}
                 disabled={!onNext || (currentIndex !== undefined && totalCount !== undefined && currentIndex >= totalCount - 1)}
-                className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1 px-2 md:px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Siguiente
+                <span className="hidden sm:inline">Siguiente</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}
-          {!(onPrev || onNext) && <div />}
+          {!(onPrev || onNext) && <div className="hidden sm:block" />}
 
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+            className="w-full sm:w-auto px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
           >
             Cerrar
           </button>

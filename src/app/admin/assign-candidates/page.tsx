@@ -314,11 +314,11 @@ function AssignCandidatesContent() {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Asignar Candidatos a Vacantes
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
+            Asignar Candidatos
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-sm md:text-base">
             Selecciona una vacante y asigna candidatos del banco de talentos
           </p>
         </div>
@@ -341,10 +341,10 @@ function AssignCandidatesContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Panel izquierdo: Selección de vacante */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-lg shadow p-4 md:p-6">
               <div className="flex items-center gap-2 mb-4">
-                <Briefcase className="text-blue-600" size={24} />
-                <h2 className="text-xl font-bold">Seleccionar Vacante</h2>
+                <Briefcase className="text-blue-600" size={20} />
+                <h2 className="text-lg md:text-xl font-bold">Seleccionar Vacante</h2>
               </div>
 
               {isLoadingJobs ? (
@@ -392,11 +392,11 @@ function AssignCandidatesContent() {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow">
               {/* Header del panel */}
-              <div className="p-6 border-b">
+              <div className="p-4 md:p-6 border-b">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Users className="text-green-600" size={24} />
-                    <h2 className="text-xl font-bold">Candidatos Disponibles</h2>
+                    <Users className="text-green-600" size={20} />
+                    <h2 className="text-lg md:text-xl font-bold">Candidatos Disponibles</h2>
                   </div>
 
                   {selectedJob && (
@@ -500,7 +500,7 @@ function AssignCandidatesContent() {
 
               {/* Lista de candidatos */}
               {selectedJob && (
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                   {isLoadingCandidates ? (
                     <div className="flex items-center justify-center py-12">
                       <RefreshCw className="animate-spin text-gray-400" size={32} />
@@ -614,13 +614,13 @@ function AssignCandidatesContent() {
 
               {/* Footer con botón de asignar */}
               {selectedJob && selectedCandidates.size > 0 && (
-                <div className="p-6 border-t bg-gray-50">
-                  <div className="flex items-center justify-between">
+                <div className="p-4 md:p-6 border-t bg-gray-50">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-gray-900 text-sm md:text-base">
                         {selectedCandidates.size} candidato(s) seleccionado(s)
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs md:text-sm text-gray-600 truncate max-w-[250px] sm:max-w-none">
                         Para: {selectedJob.title} - {selectedJob.company}
                       </p>
                     </div>
@@ -628,17 +628,17 @@ function AssignCandidatesContent() {
                     <button
                       onClick={handleAssign}
                       disabled={isAssigning}
-                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+                      className="w-full sm:w-auto px-4 md:px-6 py-2.5 md:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-sm md:text-base"
                     >
                       {isAssigning ? (
                         <>
-                          <RefreshCw className="animate-spin" size={20} />
+                          <RefreshCw className="animate-spin" size={18} />
                           Asignando...
                         </>
                       ) : (
                         <>
-                          Asignar a Vacante
-                          <ArrowRight size={20} />
+                          Asignar
+                          <ArrowRight size={18} />
                         </>
                       )}
                     </button>

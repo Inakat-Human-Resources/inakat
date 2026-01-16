@@ -560,22 +560,22 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-32 pb-12">
+    <div className="min-h-screen bg-gray-50 pt-24 md:pt-32 pb-12">
       <div className="max-w-3xl mx-auto px-4">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-button-orange text-white rounded-full flex items-center justify-center text-2xl font-bold">
+        <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
+            <div className="w-14 h-14 md:w-16 md:h-16 bg-button-orange text-white rounded-full flex items-center justify-center text-xl md:text-2xl font-bold flex-shrink-0">
               {candidateNombre || nombre ? (candidateNombre || nombre).substring(0, 2).toUpperCase() : profile.email.substring(0, 2).toUpperCase()}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate">
                 {candidateNombre && apellidoPaterno
                   ? `${candidateNombre} ${apellidoPaterno} ${apellidoMaterno || ''}`
                   : nombre || profile.email}
               </h1>
-              <p className="text-gray-500">{profile.email}</p>
-              <div className="flex items-center gap-2 mt-1">
+              <p className="text-gray-500 text-sm md:text-base truncate">{profile.email}</p>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-1">
                 <span className="px-3 py-1 bg-button-orange/10 text-button-orange text-sm font-medium rounded-full">
                   {getRoleLabel(profile.role)}
                 </span>

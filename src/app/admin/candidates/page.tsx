@@ -360,27 +360,27 @@ export default function AdminCandidatesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        {/* Header - Responsive */}
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
               Gestión de Candidatos
             </h1>
-            <p className="text-gray-600">
-              Inyecta y administra candidatos de LinkedIn, OCC y otras fuentes
+            <p className="text-gray-600 text-sm md:text-base">
+              Inyecta candidatos de LinkedIn, OCC y otras fuentes
             </p>
           </div>
           <button
             onClick={handleNew}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-semibold"
+            className="w-full sm:w-auto px-4 md:px-6 py-2 md:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-semibold text-sm md:text-base"
           >
-            <Plus size={20} />
-            Nuevo Candidato
+            <Plus size={18} />
+            <span className="sm:inline">Nuevo Candidato</span>
           </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* Stats - Responsive grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
             <div className="flex items-center gap-3">
               <Users className="text-blue-500" size={24} />
@@ -673,172 +673,175 @@ export default function AdminCandidatesPage() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                    Candidato
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                    Contacto
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                    Perfil
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                    Educación
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                    Exp.
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                    Edad
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                    Estado
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                    Fuente
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {isLoading ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center text-gray-500"
-                    >
-                      <RefreshCw
-                        className="animate-spin mx-auto mb-2"
-                        size={24}
-                      />
-                      Cargando candidatos...
-                    </td>
-                  </tr>
-                ) : candidates.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center text-gray-500"
-                    >
-                      <Users className="mx-auto mb-2 text-gray-400" size={40} />
-                      No hay candidatos registrados
-                    </td>
-                  </tr>
-                ) : (
-                  candidates.map((candidate) => (
-                    <tr key={candidate.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {candidate.nombre} {candidate.apellidoPaterno}
-                          </p>
-                          {candidate.sexo && (
-                            <span className="text-xs text-gray-500">
-                              {candidate.sexo === 'M'
-                                ? '👨'
-                                : candidate.sexo === 'F'
-                                ? '👩'
-                                : '🧑'}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-gray-600">
-                          {candidate.email}
-                        </p>
-                        {candidate.telefono && (
-                          <p className="text-xs text-gray-400">
-                            {candidate.telefono}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium">
-                          {candidate.profile || '-'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {candidate.seniority || '-'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm">
-                          {candidate.universidad || '-'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {candidate.carrera || '-'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-medium">
-                          {candidate.añosExperiencia}
-                        </span>
-                        <span className="text-xs text-gray-500"> años</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {candidate.edad ? (
-                          <span>{candidate.edad}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {getStatusBadge(candidate.status)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {getSourceBadge(candidate.source)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
-                          <button
-                            onClick={() => handleView(candidate)}
-                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                            title="Ver detalles"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(candidate)}
-                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                            title="Editar"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          {candidate.linkedinUrl && (
-                            <a
-                              href={candidate.linkedinUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                              title="Ver LinkedIn"
-                            >
-                              <ExternalLink size={18} />
-                            </a>
-                          )}
-                          <button
-                            onClick={() => handleDelete(candidate.id)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        {/* Candidates List */}
+        {isLoading ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+            <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
+            Cargando candidatos...
           </div>
-        </div>
+        ) : candidates.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+            <Users className="mx-auto mb-2 text-gray-400" size={40} />
+            No hay candidatos registrados
+          </div>
+        ) : (
+          <>
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+              {candidates.map((candidate) => (
+                <div key={candidate.id} className="bg-white rounded-lg shadow p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {candidate.nombre} {candidate.apellidoPaterno}
+                        {candidate.sexo && (
+                          <span className="ml-1 text-xs">
+                            {candidate.sexo === 'M' ? '👨' : candidate.sexo === 'F' ? '👩' : '🧑'}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-500 truncate">{candidate.email}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {getStatusBadge(candidate.status)}
+                      {getSourceBadge(candidate.source)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                    <div>
+                      <span className="text-gray-500">Perfil:</span>{' '}
+                      <span className="font-medium">{candidate.profile || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Nivel:</span>{' '}
+                      <span className="font-medium">{candidate.seniority || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Exp:</span>{' '}
+                      <span className="font-medium">{candidate.añosExperiencia} años</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Edad:</span>{' '}
+                      <span className="font-medium">{candidate.edad || '-'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-1 pt-2 border-t">
+                    <button
+                      onClick={() => handleView(candidate)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleEdit(candidate)}
+                      className="p-2 text-yellow-600 hover:bg-yellow-50 rounded"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    {candidate.linkedinUrl && (
+                      <a
+                        href={candidate.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        <ExternalLink size={18} />
+                      </a>
+                    )}
+                    <button
+                      onClick={() => handleDelete(candidate.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Candidato</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Contacto</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Perfil</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Educación</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Exp.</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Edad</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Fuente</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {candidates.map((candidate) => (
+                      <tr key={candidate.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {candidate.nombre} {candidate.apellidoPaterno}
+                            </p>
+                            {candidate.sexo && (
+                              <span className="text-xs text-gray-500">
+                                {candidate.sexo === 'M' ? '👨' : candidate.sexo === 'F' ? '👩' : '🧑'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm text-gray-600">{candidate.email}</p>
+                          {candidate.telefono && (
+                            <p className="text-xs text-gray-400">{candidate.telefono}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium">{candidate.profile || '-'}</p>
+                          <p className="text-xs text-gray-500">{candidate.seniority || '-'}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm">{candidate.universidad || '-'}</p>
+                          <p className="text-xs text-gray-500">{candidate.carrera || '-'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="font-medium">{candidate.añosExperiencia}</span>
+                          <span className="text-xs text-gray-500"> años</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {candidate.edad ? <span>{candidate.edad}</span> : <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">{getStatusBadge(candidate.status)}</td>
+                        <td className="px-4 py-3 text-center">{getSourceBadge(candidate.source)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center gap-1">
+                            <button onClick={() => handleView(candidate)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Ver detalles">
+                              <Eye size={18} />
+                            </button>
+                            <button onClick={() => handleEdit(candidate)} className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded" title="Editar">
+                              <Edit size={18} />
+                            </button>
+                            {candidate.linkedinUrl && (
+                              <a href={candidate.linkedinUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Ver LinkedIn">
+                                <ExternalLink size={18} />
+                              </a>
+                            )}
+                            <button onClick={() => handleDelete(candidate.id)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded" title="Eliminar">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Results count */}
         {!isLoading && candidates.length > 0 && (

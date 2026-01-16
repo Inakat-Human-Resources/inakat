@@ -197,11 +197,11 @@ export default function MyApplicationsPage() {
     <div className="min-h-screen bg-custom-beige py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-title-dark mb-2">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-title-dark mb-1 md:mb-2">
             Mis Aplicaciones
           </h1>
-          <p className="text-gray-600">Seguimiento de tus postulaciones</p>
+          <p className="text-gray-600 text-sm md:text-base">Seguimiento de tus postulaciones</p>
         </div>
 
         {/* Stats Cards */}
@@ -267,9 +267,9 @@ export default function MyApplicationsPage() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-wrap gap-2">
+        {/* Filters - Scrollable on mobile */}
+        <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-6 overflow-x-auto">
+          <div className="flex gap-2 min-w-max md:flex-wrap">
             <button
               onClick={() => setFilterStatus('all')}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${

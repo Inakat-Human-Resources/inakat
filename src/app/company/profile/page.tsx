@@ -294,20 +294,20 @@ export default function CompanyProfilePage() {
   return (
     <div className="min-h-screen bg-custom-beige py-8">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
+        {/* Header - Responsive */}
+        <div className="mb-6 md:mb-8">
           <button
             onClick={() => router.push('/company/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 text-sm md:text-base"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
             Volver al Dashboard
           </button>
-          <h1 className="text-3xl font-bold text-title-dark flex items-center gap-3">
-            <Building2 className="text-button-green" />
+          <h1 className="text-2xl md:text-3xl font-bold text-title-dark flex items-center gap-2 md:gap-3">
+            <Building2 className="text-button-green w-6 h-6 md:w-8 md:h-8" />
             Perfil de Empresa
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-gray-600 mt-2 text-sm md:text-base">
             Actualiza la información de tu empresa
           </p>
         </div>
@@ -328,11 +328,11 @@ export default function CompanyProfilePage() {
         )}
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
           {/* Datos del Representante */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <User className="text-button-green" size={20} />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <User className="text-button-green" size={18} />
               Datos del Representante
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -378,9 +378,9 @@ export default function CompanyProfilePage() {
           </div>
 
           {/* Datos de la Empresa */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Building2 className="text-button-green" size={20} />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Building2 className="text-button-green" size={18} />
               Datos de la Empresa
             </h2>
             <div className="space-y-4">
@@ -550,11 +550,11 @@ export default function CompanyProfilePage() {
           </div>
 
           {/* Botón Guardar */}
-          <div className="flex justify-end">
+          <div className="flex justify-center md:justify-end">
             <button
               type="submit"
               disabled={saving}
-              className="px-8 py-3 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full md:w-auto px-8 py-3 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>

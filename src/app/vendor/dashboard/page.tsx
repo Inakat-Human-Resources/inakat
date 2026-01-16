@@ -213,74 +213,74 @@ export default function VendorDashboardPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Panel de Vendedor</h1>
-          <p className="text-gray-600 mt-1">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Panel de Vendedor</h1>
+          <p className="text-gray-600 mt-1 text-sm md:text-base">
             Gestiona tu código de descuento y visualiza tus comisiones
           </p>
         </div>
 
         {/* Resumen de Comisiones */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+          <div className="bg-white rounded-lg shadow p-3 md:p-6">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-2 md:p-3 bg-blue-100 rounded-lg">
+                <TrendingUp className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Ventas Totales</p>
-                <p className="text-2xl font-bold">{summary.totalSales}</p>
+                <p className="text-xs md:text-sm text-gray-500">Ventas</p>
+                <p className="text-xl md:text-2xl font-bold">{summary.totalSales}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="w-6 h-6 text-green-600" />
+          <div className="bg-white rounded-lg shadow p-3 md:p-6">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-2 md:p-3 bg-green-100 rounded-lg">
+                <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Comisiones Totales</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary.totalCommission)}</p>
+                <p className="text-xs md:text-sm text-gray-500">Totales</p>
+                <p className="text-lg md:text-2xl font-bold">{formatCurrency(summary.totalCommission)}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-yellow-100 rounded-lg">
-                <Clock className="w-6 h-6 text-yellow-600" />
+          <div className="bg-white rounded-lg shadow p-3 md:p-6">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-2 md:p-3 bg-yellow-100 rounded-lg">
+                <Clock className="w-5 h-5 md:w-6 md:h-6 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Pendientes</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary.pendingCommission)}</p>
+                <p className="text-xs md:text-sm text-gray-500">Pendientes</p>
+                <p className="text-lg md:text-2xl font-bold">{formatCurrency(summary.pendingCommission)}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-emerald-100 rounded-lg">
-                <CheckCircle className="w-6 h-6 text-emerald-600" />
+          <div className="bg-white rounded-lg shadow p-3 md:p-6">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="p-2 md:p-3 bg-emerald-100 rounded-lg">
+                <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Pagadas</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary.paidCommission)}</p>
+                <p className="text-xs md:text-sm text-gray-500">Pagadas</p>
+                <p className="text-lg md:text-2xl font-bold">{formatCurrency(summary.paidCommission)}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Mi Código de Descuento */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
+        <div className="bg-white rounded-lg shadow mb-6 md:mb-8">
+          <div className="p-4 md:p-6 border-b">
+            <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
               <Gift className="w-5 h-5 text-button-orange" />
               Mi Código de Descuento
             </h2>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {loadingCode ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -404,121 +404,177 @@ export default function VendorDashboardPage() {
 
         {/* Historial de Ventas */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-semibold">Historial de Ventas</h2>
-            <p className="text-gray-500 text-sm mt-1">
+          <div className="p-4 md:p-6 border-b">
+            <h2 className="text-lg md:text-xl font-semibold">Historial de Ventas</h2>
+            <p className="text-gray-500 text-xs md:text-sm mt-1">
               Ventas realizadas usando tu código de descuento
             </p>
           </div>
 
-          <div className="overflow-x-auto">
-            {loadingSales ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          {loadingSales ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : sales.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <TrendingUp className="w-12 h-12 md:w-16 md:h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-base md:text-lg font-medium text-gray-900 mb-2">
+                Aún no tienes ventas
+              </h3>
+              <p className="text-gray-500 text-sm">
+                Comparte tu código con empresas para empezar a ganar comisiones
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile Cards */}
+              <div className="md:hidden p-4 space-y-4">
+                {sales.map((sale) => (
+                  <div key={sale.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {sale.company.nombreEmpresa}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {sale.purchase.credits} créditos • {formatDate(sale.createdAt)}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        getStatusColor(sale.commission.status)
+                      }`}>
+                        {sale.commission.statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                      <div>
+                        <p className="text-gray-500 text-xs">Original</p>
+                        <p>{formatCurrency(sale.purchase.originalPrice)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs">Descuento</p>
+                        <p className="text-red-600">-{formatCurrency(sale.purchase.discountAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs">Final</p>
+                        <p className="font-medium">{formatCurrency(sale.purchase.finalPrice)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs">Mi Comisión</p>
+                        <p className="font-bold text-button-green">{formatCurrency(sale.commission.amount)}</p>
+                      </div>
+                    </div>
+
+                    {sale.commission.proofUrl && (
+                      <a
+                        href={sale.commission.proofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-button-green hover:underline inline-flex items-center gap-1 text-sm"
+                      >
+                        Ver comprobante <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : sales.length === 0 ? (
-              <div className="text-center py-12">
-                <TrendingUp className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Aún no tienes ventas
-                </h3>
-                <p className="text-gray-500">
-                  Comparte tu código con empresas para empezar a ganar comisiones
-                </p>
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Empresa
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Fecha
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Original
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Descuento
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Final
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Mi Comisión
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Comprobante
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {sales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {sale.company.nombreEmpresa}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {sale.purchase.credits} créditos
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {formatDate(sale.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-500">
-                        {formatCurrency(sale.purchase.originalPrice)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-red-600">
-                        -{formatCurrency(sale.purchase.discountAmount)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-medium">
-                        {formatCurrency(sale.purchase.finalPrice)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-bold text-button-green">
-                        {formatCurrency(sale.commission.amount)}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          getStatusColor(sale.commission.status)
-                        }`}>
-                          {sale.commission.statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {sale.commission.proofUrl ? (
-                          <a
-                            href={sale.commission.proofUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-button-green hover:underline inline-flex items-center gap-1"
-                          >
-                            Ver <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
+
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Empresa
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Fecha
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Original
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Descuento
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Final
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Mi Comisión
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Estado
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Comprobante
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sales.map((sale) => (
+                      <tr key={sale.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {sale.company.nombreEmpresa}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {sale.purchase.credits} créditos
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {formatDate(sale.createdAt)}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-500">
+                          {formatCurrency(sale.purchase.originalPrice)}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-red-600">
+                          -{formatCurrency(sale.purchase.discountAmount)}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm font-medium">
+                          {formatCurrency(sale.purchase.finalPrice)}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm font-bold text-button-green">
+                          {formatCurrency(sale.commission.amount)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            getStatusColor(sale.commission.status)
+                          }`}>
+                            {sale.commission.statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {sale.commission.proofUrl ? (
+                            <a
+                              href={sale.commission.proofUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-button-green hover:underline inline-flex items-center gap-1"
+                            >
+                              Ver <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Info sobre pagos */}
-        <div className="mt-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="font-semibold text-blue-900 mb-2">
+        <div className="mt-6 md:mt-8 p-4 md:p-6 bg-blue-50 rounded-lg border border-blue-200">
+          <h3 className="font-semibold text-blue-900 mb-2 text-sm md:text-base">
             Información sobre pagos de comisiones
           </h3>
-          <ul className="text-sm text-blue-800 space-y-1">
+          <ul className="text-xs md:text-sm text-blue-800 space-y-1">
             <li>• Las comisiones se pagan dentro de los 4 meses siguientes a la venta</li>
             <li>• Recibirás un comprobante de pago cuando se procese tu comisión</li>
             <li>• Si tienes dudas, contacta al administrador</li>
