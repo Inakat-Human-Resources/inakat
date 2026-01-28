@@ -75,8 +75,7 @@ export default function PurchaseCreditsPage() {
         setPackages(DEFAULT_PACKAGES);
         setSelectedPackageId(2); // Pack 10 por defecto
       }
-    } catch (err) {
-      console.error('Error fetching packages:', err);
+    } catch {
       setPackages(DEFAULT_PACKAGES);
       setSelectedPackageId(2);
     } finally {
@@ -120,8 +119,7 @@ export default function PurchaseCreditsPage() {
         setDiscountError(data.error || 'Código inválido o expirado');
         setDiscountInfo(null);
       }
-    } catch (err) {
-      console.error('Error validating code:', err);
+    } catch {
       setDiscountError('Error al validar el código');
       setDiscountInfo(null);
     } finally {
@@ -156,8 +154,8 @@ export default function PurchaseCreditsPage() {
           if (data.success && data.valid) {
             setDiscountInfo(data.data);
           }
-        } catch (err) {
-          console.error('Error revalidating code:', err);
+        } catch {
+          // Silent fail for revalidation
         }
       };
 
@@ -181,7 +179,6 @@ export default function PurchaseCreditsPage() {
       const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
 
       if (!publicKey) {
-        console.error('Mercado Pago public key not found');
         alert('Error de configuración. Por favor contacta al administrador.');
         return;
       }
@@ -262,26 +259,17 @@ export default function PurchaseCreditsPage() {
           onSubmit: async (formData: any) => {
             return await handlePayment(formData);
           },
-          onReady: () => {
-            console.log('Brick is ready');
-          },
+          onReady: () => {},
           onError: (error: any) => {
-            console.error('Brick error:', error);
             // No mostrar alert para errores de validación menores
-            if (error?.message?.includes('validation')) {
-              console.log('Validation error:', error);
-            } else {
+            if (!error?.message?.includes('validation')) {
               alert('Error al cargar el formulario de pago. Por favor recarga la página.');
             }
           },
-          onBinChange: (bin: string) => {
-            // Log para debugging de tipo de tarjeta
-            console.log('Card BIN:', bin);
-          }
+          onBinChange: () => {}
         }
       });
-    } catch (error) {
-      console.error('Error initializing MP:', error);
+    } catch {
       alert('Error al inicializar Mercado Pago');
     }
   };
@@ -331,8 +319,7 @@ export default function PurchaseCreditsPage() {
       } else {
         alert(data.error || 'Error al procesar pago');
       }
-    } catch (error) {
-      console.error('Error:', error);
+    } catch {
       alert('Error al procesar pago');
     } finally {
       setLoading(false);
@@ -354,7 +341,7 @@ export default function PurchaseCreditsPage() {
       <Script
         src="https://sdk.mercadopago.com/js/v2"
         strategy="lazyOnload"
-        onLoad={() => console.log('Mercado Pago SDK loaded')}
+        onLoad={() => {}}
       />
 
       <div className="min-h-screen bg-custom-beige py-12 md:py-20">

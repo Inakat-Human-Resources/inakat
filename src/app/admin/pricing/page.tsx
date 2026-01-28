@@ -10,7 +10,9 @@ import {
   X,
   Check,
   AlertCircle,
-  Filter
+  Filter,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 
 interface PricingEntry {
@@ -82,12 +84,18 @@ export default function AdminPricingPage() {
   const [filterSeniority, setFilterSeniority] = useState('');
   const [filterWorkMode, setFilterWorkMode] = useState('');
 
-  // Modal
+  // Modal de edición
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<PricingEntry | null>(null);
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customProfile, setCustomProfile] = useState(false);
+
+  // Estado para eliminación
+  const [deleteConfirm, setDeleteConfirm] = useState<PricingEntry | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictJobs, setConflictJobs] = useState<any[]>([]);
 
   useEffect(() => {
     fetchPricing();
@@ -203,6 +211,49 @@ export default function AdminPricingPage() {
     } catch (err) {
       setError('Error de conexión');
     }
+  };
+
+  const handleDelete = async (entry: PricingEntry) => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    setConflictJobs([]);
+
+    try {
+      const response = await fetch(`/api/admin/pricing?id=${entry.id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (response.status === 409) {
+        // Hay vacantes usando este precio
+        setDeleteError(data.error);
+        setConflictJobs(data.activeJobs || []);
+        return;
+      }
+
+      if (!response.ok) {
+        setDeleteError(data.error || 'Error al eliminar');
+        return;
+      }
+
+      // Éxito - cerrar modal y recargar datos
+      setDeleteConfirm(null);
+      setSuccess('Entrada de precios eliminada exitosamente');
+      fetchPricing();
+      setTimeout(() => setSuccess(null), 3000);
+
+    } catch (err) {
+      setDeleteError('Error de conexión');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteConfirm(null);
+    setDeleteError(null);
+    setConflictJobs([]);
   };
 
   const getWorkModeLabel = (mode: string) => {
@@ -394,13 +445,20 @@ export default function AdminPricingPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex justify-center">
+                        <div className="flex justify-center gap-1">
                           <button
                             onClick={() => openEditModal(entry)}
                             className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
                             title="Editar créditos"
                           >
                             <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(entry)}
+                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={18} />
                           </button>
                         </div>
                       </td>
@@ -518,6 +576,100 @@ export default function AdminPricingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">
+                ¿Eliminar entrada de precios?
+              </h2>
+              <button
+                onClick={closeDeleteModal}
+                disabled={isDeleting}
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Información del precio a eliminar */}
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <p className="font-semibold text-gray-900 mb-2">{deleteConfirm.profile}</p>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                    {deleteConfirm.seniority}
+                  </span>
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded">
+                    {getWorkModeLabel(deleteConfirm.workMode)}
+                  </span>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+                    {deleteConfirm.credits} créditos
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-gray-600 mb-4">
+                Esta acción no se puede deshacer. Solo se permite eliminar si no hay vacantes activas usando esta configuración.
+              </p>
+
+              {/* Error y lista de vacantes en conflicto */}
+              {deleteError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 font-medium mb-2">{deleteError}</p>
+                  {conflictJobs.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-red-600 text-sm font-medium mb-1">Vacantes que usan esta configuración:</p>
+                      <ul className="text-red-600 text-sm space-y-1">
+                        {conflictJobs.map((job) => (
+                          <li key={job.id} className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-red-400 rounded-full"></span>
+                            <span className="font-medium">{job.title}</span>
+                            <span className="text-red-500">({job.company})</span>
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">
+                              {job.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-3">
+                <button
+                  onClick={closeDeleteModal}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteConfirm)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      Eliminar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

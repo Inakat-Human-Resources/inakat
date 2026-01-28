@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       body: paymentBody
     });
 
-    console.log('✅ Payment created:', paymentResult.id, paymentResult.status);
+    console.log('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
 
     // Registrar compra en DB
     const purchase = await prisma.creditPurchase.create({
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      console.log(`📋 Discount code ${validDiscountCode.code} used: ${discountAmount} discount, ${commissionAmount} commission`);
+      console.log('[Payments] Discount code applied:', { code: validDiscountCode.code, discountAmount, commissionAmount });
     }
 
     // Si el pago fue aprobado inmediatamente, agregar créditos
@@ -206,9 +206,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      console.log(
-        `✅ Credits added: ${pkg.credits} credits to user ${payload.userId}`
-      );
+      console.log('[Payments] Credits added:', { credits: pkg.credits, userId: payload.userId });
 
       return NextResponse.json({
         success: true,
@@ -248,7 +246,7 @@ export async function POST(req: NextRequest) {
       } : null
     });
   } catch (error: any) {
-    console.error('❌ Error processing purchase:', error);
+    console.error('[Payments] Error processing purchase:', error instanceof Error ? error.message : 'Unknown error');
 
     // Errores específicos de Mercado Pago
     if (error.cause) {

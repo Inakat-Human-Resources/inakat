@@ -5,8 +5,12 @@ import { prisma } from '@/lib/prisma';
  * GET /api/company/dashboard
  * Obtiene estadísticas y datos del dashboard para una empresa
  * Requiere autenticación como empresa (role: "company")
+ *
+ * OPTIMIZADO: Eliminadas queries N+1, usa batch queries
  */
 export async function GET(request: Request) {
+  const startTime = Date.now();
+
   try {
     // Obtener userId de los headers (agregado por middleware)
     const userId = request.headers.get('x-user-id');
@@ -14,20 +18,14 @@ export async function GET(request: Request) {
 
     if (!userId) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'No autenticado'
-        },
+        { success: false, error: 'No autenticado' },
         { status: 401 }
       );
     }
 
     if (userRole !== 'company') {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Acceso denegado. Solo empresas pueden acceder a este recurso.'
-        },
+        { success: false, error: 'Acceso denegado. Solo empresas pueden acceder a este recurso.' },
         { status: 403 }
       );
     }
@@ -58,16 +56,12 @@ export async function GET(request: Request) {
 
     if (!user) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Usuario no encontrado'
-        },
+        { success: false, error: 'Usuario no encontrado' },
         { status: 404 }
       );
     }
 
     // Status de aplicaciones visibles para la empresa
-    // La empresa SOLO ve candidatos que han sido enviados por el Especialista
     const COMPANY_VISIBLE_STATUSES = [
       'sent_to_company',
       'company_interested',
@@ -76,14 +70,18 @@ export async function GET(request: Request) {
       'rejected'
     ];
 
-    // 2. Obtener todas las vacantes de la empresa
-    // IMPORTANTE: Solo incluir applications con status visibles para empresa
+    // 2. Obtener todas las vacantes de la empresa con applications
     const jobs = await prisma.job.findMany({
       where: { userId: companyUserId },
       include: {
         applications: {
-          where: {
-            status: { in: COMPANY_VISIBLE_STATUSES }
+          where: { status: { in: COMPANY_VISIBLE_STATUSES } }
+        },
+        // Incluir assignment para obtener notas del recruiter/specialist
+        assignment: {
+          select: {
+            recruiterNotes: true,
+            specialistNotes: true
           }
         }
       },
@@ -103,7 +101,7 @@ export async function GET(request: Request) {
     const closedJobs = jobs.filter((job) => job.status === 'closed').length;
     const draftJobs = jobs.filter((job) => job.status === 'draft').length;
 
-    // 4. Obtener SOLO las aplicaciones visibles para la empresa
+    // 4. Obtener todas las aplicaciones visibles
     const jobIds = jobs.map((job) => job.id);
 
     const allApplications = await prisma.application.findMany({
@@ -124,63 +122,85 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
-    // 4.1 Enriquecer aplicaciones con datos de Candidate y JobAssignment
-    const enrichedApplications = await Promise.all(
-      allApplications.map(async (app) => {
-        // Buscar candidato por email
-        const candidate = await prisma.candidate.findFirst({
-          where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
-          include: {
-            experiences: {
-              orderBy: { fechaInicio: 'desc' },
-              take: 3
-            }
-          }
-        });
+    // =========================================================================
+    // OPTIMIZACIÓN: Batch query para todos los candidatos
+    // En lugar de N queries (una por application), hacemos 1 query con todos los emails
+    // =========================================================================
 
-        // Buscar JobAssignment para obtener notas
-        const jobAssignment = await prisma.jobAssignment.findFirst({
-          where: { jobId: app.jobId }
-        });
+    // Obtener emails únicos de todas las applications
+    const uniqueEmails = [...new Set(
+      allApplications.map(app => app.candidateEmail.toLowerCase())
+    )];
 
-        return {
-          ...app,
-          candidateProfile: candidate
-            ? {
-                id: candidate.id,
-                nombre: candidate.nombre,
-                apellidoPaterno: candidate.apellidoPaterno,
-                apellidoMaterno: candidate.apellidoMaterno,
-                email: candidate.email,
-                telefono: candidate.telefono,
-                sexo: candidate.sexo,
-                fechaNacimiento: candidate.fechaNacimiento,
-                universidad: candidate.universidad,
-                carrera: candidate.carrera,
-                nivelEstudios: candidate.nivelEstudios,
-                añosExperiencia: candidate.añosExperiencia,
-                profile: candidate.profile,
-                seniority: candidate.seniority,
-                experienciasRecientes: candidate.experiences,
-                cvUrl: candidate.cvUrl,
-                linkedinUrl: candidate.linkedinUrl,
-                portafolioUrl: candidate.portafolioUrl,
-                notas: candidate.notas
-              }
-            : null,
-          recruiterNotes: jobAssignment?.recruiterNotes || null,
-          specialistNotes: jobAssignment?.specialistNotes || null
-        };
-      })
+    // Una sola query para obtener TODOS los candidatos
+    const candidatesFromBank = await prisma.candidate.findMany({
+      where: {
+        email: { in: uniqueEmails, mode: 'insensitive' }
+      },
+      include: {
+        experiences: {
+          orderBy: { fechaInicio: 'desc' },
+          take: 3
+        }
+      }
+    });
+
+    // Crear mapa para acceso O(1)
+    const candidateMap = new Map(
+      candidatesFromBank.map(c => [c.email.toLowerCase(), c])
     );
 
-    // 5. Calcular estadísticas de aplicaciones (solo las visibles para empresa)
+    // Crear mapa de notas por jobId
+    const jobNotesMap = new Map(
+      jobs.map(job => [
+        job.id,
+        {
+          recruiterNotes: job.assignment?.recruiterNotes || null,
+          specialistNotes: job.assignment?.specialistNotes || null
+        }
+      ])
+    );
+
+    // Enriquecer applications SIN queries adicionales
+    const enrichedApplications = allApplications.map((app) => {
+      const candidate = candidateMap.get(app.candidateEmail.toLowerCase());
+      const notes = jobNotesMap.get(app.jobId);
+
+      return {
+        ...app,
+        candidateProfile: candidate
+          ? {
+              id: candidate.id,
+              nombre: candidate.nombre,
+              apellidoPaterno: candidate.apellidoPaterno,
+              apellidoMaterno: candidate.apellidoMaterno,
+              email: candidate.email,
+              telefono: candidate.telefono,
+              sexo: candidate.sexo,
+              fechaNacimiento: candidate.fechaNacimiento,
+              universidad: candidate.universidad,
+              carrera: candidate.carrera,
+              nivelEstudios: candidate.nivelEstudios,
+              añosExperiencia: candidate.añosExperiencia,
+              profile: candidate.profile,
+              seniority: candidate.seniority,
+              experienciasRecientes: candidate.experiences,
+              cvUrl: candidate.cvUrl,
+              linkedinUrl: candidate.linkedinUrl,
+              portafolioUrl: candidate.portafolioUrl,
+              notas: candidate.notas
+            }
+          : null,
+        recruiterNotes: notes?.recruiterNotes || null,
+        specialistNotes: notes?.specialistNotes || null
+      };
+    });
+
+    // 5. Calcular estadísticas de aplicaciones
     const totalApplications = allApplications.length;
-    // Para empresa: "sent_to_company" = Nuevos candidatos por revisar
     const pendingReview = allApplications.filter(
       (app) => app.status === 'sent_to_company'
     ).length;
-    // Candidatos que la empresa marcó como interesados
     const interestedCandidates = allApplications.filter(
       (app) => app.status === 'company_interested'
     ).length;
@@ -190,12 +210,11 @@ export async function GET(request: Request) {
     const acceptedApplications = allApplications.filter(
       (app) => app.status === 'accepted'
     ).length;
-    // Candidatos descartados por la empresa
     const rejectedApplications = allApplications.filter(
       (app) => app.status === 'rejected'
     ).length;
 
-    // 6. Aplicaciones recientes (últimas 5) - con datos enriquecidos
+    // 6. Aplicaciones recientes (últimas 5)
     const recentApplications = enrichedApplications.slice(0, 5);
 
     // 7. Vacantes con más aplicaciones (top 5)
@@ -212,7 +231,7 @@ export async function GET(request: Request) {
       .sort((a, b) => b.applicationCount - a.applicationCount)
       .slice(0, 5);
 
-    // 8. Estadísticas por vacante (solo candidatos visibles para empresa)
+    // 8. Estadísticas por vacante
     const jobStats = jobs.map((job) => {
       const jobApplications = allApplications.filter(
         (app) => app.jobId === job.id
@@ -240,6 +259,9 @@ export async function GET(request: Request) {
       };
     });
 
+    const duration = Date.now() - startTime;
+    console.log(`[PERF] Company dashboard loaded in ${duration}ms (${allApplications.length} applications, ${uniqueEmails.length} unique candidates)`);
+
     // 9. Respuesta completa
     return NextResponse.json({
       success: true,
@@ -262,15 +284,15 @@ export async function GET(request: Request) {
           },
           applications: {
             total: totalApplications,
-            pendingReview, // Candidatos enviados por especialista, sin revisar
-            interested: interestedCandidates, // Candidatos marcados como "Me interesa"
+            pendingReview,
+            interested: interestedCandidates,
             interviewed: interviewedApplications,
             accepted: acceptedApplications,
             rejected: rejectedApplications
           }
         },
         recentApplications,
-        allApplications: enrichedApplications, // Todas las aplicaciones con datos completos
+        allApplications: enrichedApplications,
         topJobs,
         jobStats,
         allJobs: jobs.map((job) => ({
@@ -282,10 +304,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error fetching company dashboard:', error);
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Error al obtener datos del dashboard'
-      },
+      { success: false, error: 'Error al obtener datos del dashboard' },
       { status: 500 }
     );
   }

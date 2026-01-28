@@ -203,14 +203,98 @@ export async function PUT(request: Request) {
 
 /**
  * DELETE /api/admin/pricing
- * DESHABILITADO - Los precios no se pueden eliminar, solo desactivar con isActive=false
+ * Eliminar una entrada de la matriz de precios
+ * Solo si no hay vacantes activas usando ese perfil/seniority/workMode
  */
-export async function DELETE() {
-  return NextResponse.json(
-    {
-      success: false,
-      error: 'La eliminación de precios está deshabilitada. Puedes desactivar un precio cambiando su estado a "Inactivo".'
-    },
-    { status: 403 }
-  );
+export async function DELETE(request: Request) {
+  try {
+    const auth = await verifyAdmin();
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'ID requerido' },
+        { status: 400 }
+      );
+    }
+
+    const pricingId = parseInt(id);
+    if (isNaN(pricingId)) {
+      return NextResponse.json(
+        { success: false, error: 'ID inválido' },
+        { status: 400 }
+      );
+    }
+
+    // Obtener el registro a eliminar
+    const pricingEntry = await prisma.pricingMatrix.findUnique({
+      where: { id: pricingId }
+    });
+
+    if (!pricingEntry) {
+      return NextResponse.json(
+        { success: false, error: 'Entrada no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    // Verificar si hay vacantes activas usando esta combinación
+    const activeJobs = await prisma.job.findMany({
+      where: {
+        profile: pricingEntry.profile,
+        seniority: pricingEntry.seniority,
+        workMode: pricingEntry.workMode,
+        status: {
+          in: ['active', 'paused', 'draft'] // Cualquier estado que no sea 'closed'
+        }
+      },
+      select: {
+        id: true,
+        title: true,
+        company: true,
+        status: true
+      }
+    });
+
+    if (activeJobs.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No se puede eliminar. Hay ${activeJobs.length} vacante(s) usando esta configuración de precios.`,
+          activeJobs: activeJobs.map(j => ({
+            id: j.id,
+            title: j.title,
+            company: j.company,
+            status: j.status
+          }))
+        },
+        { status: 409 } // Conflict
+      );
+    }
+
+    // Si no hay vacantes activas, eliminar
+    await prisma.pricingMatrix.delete({
+      where: { id: pricingId }
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Entrada de precios eliminada: ${pricingEntry.profile} - ${pricingEntry.seniority} - ${pricingEntry.workMode}`
+    });
+
+  } catch (error) {
+    console.error('Error deleting pricing entry:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error al eliminar entrada de precios' },
+      { status: 500 }
+    );
+  }
 }

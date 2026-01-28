@@ -1,5 +1,8 @@
+// RUTA: src/app/api/jobs/[id]/route.ts
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { calculateJobCreditCost } from '@/lib/pricing';
 
 // GET - Obtener vacante por ID
 export async function GET(
@@ -298,6 +301,122 @@ export async function PUT(
       }
     }
 
+    // ========== VALIDACIÓN DE CRÉDITOS AL EDITAR ==========
+    // Solo aplica a vacantes activas cuando cambian campos que afectan el precio
+    let creditChange: { original: number; new: number; difference: number; action: string } | null = null;
+    let newCreditCost: number | undefined = undefined;
+
+    if (existingJob.status === 'active') {
+      const originalCost = existingJob.creditCost || 0;
+
+      // Determinar valores actuales y nuevos para comparación
+      const currentProfile = existingJob.profile || '';
+      const currentSeniority = existingJob.seniority || '';
+      const currentWorkMode = existingJob.workMode || 'presential';
+
+      const newProfile = profile !== undefined ? (profile || '') : currentProfile;
+      const newSeniority = seniority !== undefined ? (seniority || '') : currentSeniority;
+      const newWorkMode = workMode !== undefined ? (workMode || 'presential') : currentWorkMode;
+
+      // Verificar si cambiaron campos que afectan el precio
+      const priceAffectingFieldsChanged =
+        newProfile !== currentProfile ||
+        newSeniority !== currentSeniority ||
+        newWorkMode !== currentWorkMode;
+
+      if (priceAffectingFieldsChanged && newProfile && newSeniority && newWorkMode) {
+        // Calcular nuevo costo usando la función centralizada
+        const newCostResult = await calculateJobCreditCost(newProfile, newSeniority, newWorkMode);
+        const newCost = newCostResult.credits;
+        const difference = newCost - originalCost;
+
+        // Obtener usuario/empresa propietario de la vacante
+        const company = await prisma.user.findUnique({
+          where: { id: existingJob.userId! }
+        });
+
+        if (!company) {
+          return NextResponse.json(
+            { success: false, error: 'Usuario propietario de la vacante no encontrado' },
+            { status: 404 }
+          );
+        }
+
+        if (difference > 0) {
+          // Cobrar diferencia - verificar créditos suficientes
+          if (company.credits < difference) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Créditos insuficientes. Necesitas ${difference} créditos adicionales para este cambio.`,
+                required: difference,
+                available: company.credits
+              },
+              { status: 402 }
+            );
+          }
+
+          // Descontar créditos
+          await prisma.user.update({
+            where: { id: existingJob.userId! },
+            data: { credits: { decrement: difference } }
+          });
+
+          // Registrar transacción de créditos
+          await prisma.creditTransaction.create({
+            data: {
+              userId: existingJob.userId!,
+              type: 'spend',
+              amount: -difference,
+              balanceBefore: company.credits,
+              balanceAfter: company.credits - difference,
+              description: `Ajuste por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
+              jobId: jobId
+            }
+          });
+
+          creditChange = {
+            original: originalCost,
+            new: newCost,
+            difference: difference,
+            action: 'charged'
+          };
+        } else if (difference < 0) {
+          // Devolver créditos (diferencia es negativa)
+          const refundAmount = Math.abs(difference);
+
+          await prisma.user.update({
+            where: { id: existingJob.userId! },
+            data: { credits: { increment: refundAmount } }
+          });
+
+          // Registrar transacción de créditos (devolución)
+          await prisma.creditTransaction.create({
+            data: {
+              userId: existingJob.userId!,
+              type: 'refund',
+              amount: refundAmount,
+              balanceBefore: company.credits,
+              balanceAfter: company.credits + refundAmount,
+              description: `Devolución por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
+              jobId: jobId
+            }
+          });
+
+          creditChange = {
+            original: originalCost,
+            new: newCost,
+            difference: difference,
+            action: 'refunded'
+          };
+        }
+
+        // Actualizar el creditCost del job
+        newCreditCost = newCost;
+      }
+    }
+    // ========== FIN VALIDACIÓN DE CRÉDITOS ==========
+
     // Actualizar vacante
     const updatedJob = await prisma.job.update({
       where: { id: jobId },
@@ -321,14 +440,27 @@ export async function PUT(
         responsabilidades: responsabilidades || null,
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
-        informacionAdicional: informacionAdicional || null
+        informacionAdicional: informacionAdicional || null,
+        // Actualizar creditCost si cambió
+        ...(newCreditCost !== undefined && { creditCost: newCreditCost })
       }
     });
 
+    // Construir mensaje de respuesta
+    let message = 'Vacante actualizada exitosamente';
+    if (creditChange) {
+      if (creditChange.action === 'charged') {
+        message = `Vacante actualizada. Se han cobrado ${creditChange.difference} créditos adicionales.`;
+      } else if (creditChange.action === 'refunded') {
+        message = `Vacante actualizada. Se han devuelto ${Math.abs(creditChange.difference)} créditos.`;
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Vacante actualizada exitosamente',
-      data: updatedJob
+      message,
+      data: updatedJob,
+      ...(creditChange && { creditChange })
     });
   } catch (error) {
     console.error('Error updating job:', error);

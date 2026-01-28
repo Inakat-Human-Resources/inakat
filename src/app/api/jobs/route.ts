@@ -81,8 +81,7 @@ export async function GET(request: Request) {
       data: jobs,
       count: jobs.length
     });
-  } catch (error) {
-    console.error('Error fetching jobs:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch jobs' },
       { status: 500 }
@@ -342,8 +341,7 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error('Error creating job:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to create job' },
       { status: 500 }

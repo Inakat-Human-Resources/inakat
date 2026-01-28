@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   AlertCircle,
-  Coins
+  Coins,
+  Plus
 } from 'lucide-react';
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
 import JobDetailModal from '@/components/company/JobDetailModal';
@@ -111,8 +112,7 @@ export default function CompanyDashboard() {
       } else {
         setError(result.error || 'Error desconocido');
       }
-    } catch (err) {
-      console.error('Error fetching dashboard:', err);
+    } catch {
       setError('Error al cargar el dashboard');
     } finally {
       setLoading(false);
@@ -171,8 +171,7 @@ export default function CompanyDashboard() {
       } else {
         alert(result.error || 'Error al publicar la vacante');
       }
-    } catch (error) {
-      console.error('Error publishing job:', error);
+    } catch {
       alert('Error al publicar la vacante');
     }
   };
@@ -195,8 +194,7 @@ export default function CompanyDashboard() {
         const result = await response.json();
         alert(result.error || 'Error al pausar la vacante');
       }
-    } catch (error) {
-      console.error('Error pausing job:', error);
+    } catch {
       alert('Error al pausar la vacante');
     }
   };
@@ -215,8 +213,7 @@ export default function CompanyDashboard() {
         const result = await response.json();
         alert(result.error || 'Error al reanudar la vacante');
       }
-    } catch (error) {
-      console.error('Error resuming job:', error);
+    } catch {
       alert('Error al reanudar la vacante');
     }
   };
@@ -250,8 +247,7 @@ export default function CompanyDashboard() {
         const result = await response.json();
         alert(result.error || 'Error al cerrar la vacante');
       }
-    } catch (error) {
-      console.error('Error closing job:', error);
+    } catch {
       alert('Error al cerrar la vacante');
     }
   };
@@ -334,6 +330,18 @@ export default function CompanyDashboard() {
           />
         </div>
       </div>
+
+      {/* Botón flotante para crear vacante (UX-01) */}
+      <button
+        onClick={() => router.push('/create-job')}
+        className="fixed bottom-6 right-6 z-40 px-4 py-4 bg-button-green text-white font-bold rounded-full shadow-lg hover:bg-green-700 hover:shadow-xl transition-all flex items-center gap-2 group"
+        title="Crear nueva vacante"
+      >
+        <Plus size={24} />
+        <span className="hidden group-hover:inline whitespace-nowrap pr-2">
+          Crear vacante
+        </span>
+      </button>
 
       {/* Job Detail Modal */}
       <JobDetailModal

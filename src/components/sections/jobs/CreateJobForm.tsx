@@ -14,7 +14,9 @@ import {
   Loader2,
   MapPin,
   X,
-  Plus
+  Plus,
+  CheckCircle,
+  Clock
 } from 'lucide-react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 
@@ -123,6 +125,16 @@ const CreateJobForm = () => {
     type: 'success' | 'error' | 'draft' | null;
     message: string;
   }>({ type: null, message: '' });
+
+  // Estado para errores de validación de campos (BUG-02)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Estado para modal de éxito (BUG-03)
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successData, setSuccessData] = useState<{
+    creditCost: number;
+    action: 'published' | 'draft' | 'updated';
+  } | null>(null);
 
   // Estados para Google Maps
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -304,8 +316,7 @@ const CreateJobForm = () => {
       } else {
         setLoadError('Error al cargar los datos de la vacante.');
       }
-    } catch (error) {
-      console.error('Error fetching job:', error);
+    } catch {
       setLoadError('Error de conexión. Intenta de nuevo.');
     } finally {
       setIsLoadingJob(false);
@@ -319,8 +330,8 @@ const CreateJobForm = () => {
       if (data.success) {
         setPricingOptions(data.options);
       }
-    } catch (error) {
-      console.error('Error fetching pricing options:', error);
+    } catch {
+      // Silent fail - form will use defaults
     }
   };
 
@@ -331,8 +342,8 @@ const CreateJobForm = () => {
       if (data.success) {
         setSpecialties(data.data);
       }
-    } catch (error) {
-      console.error('Error fetching specialties:', error);
+    } catch {
+      // Silent fail - specialties will be empty
     }
   };
 
@@ -361,15 +372,15 @@ const CreateJobForm = () => {
                 }));
               }
             }
-          } catch (companyError) {
-            console.error('Error fetching company profile:', companyError);
+          } catch {
+            // Silent fail - company name won't be pre-filled
           }
         }
 
         setUserInfo(userInfoData);
       }
-    } catch (error) {
-      console.error('Error fetching user info:', error);
+    } catch {
+      // Silent fail - user info unavailable
     }
   };
 
@@ -390,10 +401,62 @@ const CreateJobForm = () => {
         setCalculatedCost(data.credits);
         setMinSalaryRequired(data.minSalary || null);
       }
-    } catch (error) {
-      console.error('Error calculating cost:', error);
+    } catch {
+      // Silent fail - cost remains at 0
     } finally {
       setIsCalculating(false);
+    }
+  };
+
+  // Función de validación del formulario (BUG-02)
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.title.trim()) {
+      errors.title = 'El título del puesto es requerido';
+    }
+    if (!formData.company.trim()) {
+      errors.company = 'El nombre de la empresa es requerido';
+    }
+    if (!formData.location.trim()) {
+      errors.location = 'La ubicación es requerida';
+    }
+    if (!formData.profile) {
+      errors.profile = 'Selecciona una especialidad';
+    }
+    if (!formData.seniority) {
+      errors.seniority = 'Selecciona el nivel de experiencia';
+    }
+    if (!formData.salaryMin || !formData.salaryMax) {
+      errors.salary = 'Ingresa el rango salarial completo';
+    }
+    if (!formData.description.trim()) {
+      errors.description = 'La descripción del puesto es requerida';
+    }
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      // Scroll al primer error
+      const firstErrorField = Object.keys(errors)[0];
+      const element = document.getElementById(`field-${firstErrorField}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return false;
+    }
+
+    return true;
+  };
+
+  // Limpiar error de un campo específico
+  const clearFieldError = (fieldName: string) => {
+    if (fieldErrors[fieldName]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldName];
+        return newErrors;
+      });
     }
   };
 
@@ -402,6 +465,14 @@ const CreateJobForm = () => {
     publishNow: boolean = false
   ) => {
     e.preventDefault();
+
+    // Limpiar errores previos
+    setFieldErrors({});
+
+    // Validar formulario primero (BUG-02)
+    if (!validateForm()) {
+      return;
+    }
 
     // Validar salarios
     const salaryMinNum = parseInt(formData.salaryMin) || 0;
@@ -480,23 +551,14 @@ const CreateJobForm = () => {
       }
 
       if (data.success) {
-        // Scroll hacia arriba para mostrar el mensaje de éxito
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-
         if (isEditing) {
-          setSubmitStatus({
-            type: 'success',
-            message: '¡Vacante actualizada exitosamente!'
-          });
-          // Redirigir al dashboard después de 2 segundos
-          setTimeout(() => {
-            router.push('/company/dashboard');
-          }, 2000);
+          // Para edición, mostrar modal de éxito
+          setSuccessData({ creditCost: 0, action: 'updated' });
+          setShowSuccessModal(true);
         } else if (data.status === 'active') {
-          setSubmitStatus({
-            type: 'success',
-            message: `¡Vacante publicada! Se descontaron ${data.creditCost} créditos. Redirigiendo...`
-          });
+          // Para publicación, mostrar modal de éxito (BUG-03)
+          setSuccessData({ creditCost: data.creditCost, action: 'published' });
+          setShowSuccessModal(true);
           // Actualizar créditos del usuario
           if (userInfo) {
             setUserInfo({
@@ -504,17 +566,12 @@ const CreateJobForm = () => {
               credits: userInfo.credits - data.creditCost
             });
           }
-          // Redirigir al dashboard después de mostrar el mensaje
-          setTimeout(() => {
-            router.push('/company/dashboard');
-          }, 1500);
         } else {
+          // Borrador guardado - redirigir directamente
           setSubmitStatus({
             type: 'draft',
-            message:
-              'Vacante guardada como borrador. Redirigiendo al dashboard...'
+            message: 'Vacante guardada como borrador. Redirigiendo...'
           });
-          // Redirigir al dashboard después de guardar borrador
           setTimeout(() => {
             router.push('/company/dashboard');
           }, 1500);
@@ -664,27 +721,55 @@ const CreateJobForm = () => {
         </div>
       )}
 
+      {/* Mensaje de errores de validación (BUG-02) */}
+      {Object.keys(fieldErrors).length > 0 && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="font-semibold text-red-700">
+                Por favor corrige los siguientes errores:
+              </p>
+              <ul className="list-disc list-inside text-red-600 text-sm mt-1">
+                {Object.values(fieldErrors).filter(Boolean).map((error, i) => (
+                  <li key={i}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
         {/* Título */}
-        <div>
+        <div id="field-title">
           <label className="block text-sm font-semibold mb-2">
             Título del Puesto *
           </label>
           <input
             type="text"
             value={formData.title}
-            onChange={(e) =>
-              setFormData({ ...formData, title: e.target.value })
-            }
+            onChange={(e) => {
+              setFormData({ ...formData, title: e.target.value });
+              clearFieldError('title');
+            }}
             placeholder="ej. Desarrollador Full Stack"
-            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
+            className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent ${
+              fieldErrors.title ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            }`}
             required
           />
+          {fieldErrors.title && (
+            <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+              <AlertCircle size={14} />
+              {fieldErrors.title}
+            </p>
+          )}
         </div>
 
         {/* Empresa y Ubicación */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+          <div id="field-company">
             <label className="block text-sm font-semibold mb-2">
               Nombre de la Empresa *
             </label>
@@ -695,7 +780,9 @@ const CreateJobForm = () => {
                   type="text"
                   value={formData.company}
                   readOnly
-                  className="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                  className={`w-full p-3 border rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed ${
+                    fieldErrors.company ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   required
                 />
                 <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
@@ -707,17 +794,26 @@ const CreateJobForm = () => {
               <input
                 type="text"
                 value={formData.company}
-                onChange={(e) =>
-                  setFormData({ ...formData, company: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, company: e.target.value });
+                  clearFieldError('company');
+                }}
                 placeholder="ej. Tech Corp"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green ${
+                  fieldErrors.company ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 required
               />
             )}
+            {fieldErrors.company && (
+              <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                <AlertCircle size={14} />
+                {fieldErrors.company}
+              </p>
+            )}
           </div>
 
-          <div>
+          <div id="field-location">
             <label className="block text-sm font-semibold mb-2">
               Ubicación *
             </label>
@@ -732,11 +828,14 @@ const CreateJobForm = () => {
               <input
                 type="text"
                 value={formData.location}
-                onChange={(e) =>
-                  setFormData({ ...formData, location: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, location: e.target.value });
+                  clearFieldError('location');
+                }}
                 placeholder="Cargando mapa... ej. Monterrey, Nuevo León"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green ${
+                  fieldErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 required
               />
             ) : (
@@ -744,7 +843,10 @@ const CreateJobForm = () => {
                 {/* Autocomplete de Google Places */}
                 <Autocomplete
                   onLoad={onAutocompleteLoad}
-                  onPlaceChanged={onPlaceChanged}
+                  onPlaceChanged={() => {
+                    onPlaceChanged();
+                    clearFieldError('location');
+                  }}
                   options={{
                     componentRestrictions: { country: 'mx' },
                     types: ['address']
@@ -755,11 +857,14 @@ const CreateJobForm = () => {
                     <input
                       type="text"
                       value={formData.location}
-                      onChange={(e) =>
-                        setFormData({ ...formData, location: e.target.value })
-                      }
+                      onChange={(e) => {
+                        setFormData({ ...formData, location: e.target.value });
+                        clearFieldError('location');
+                      }}
                       placeholder="Busca una dirección..."
-                      className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green"
+                      className={`w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-button-green ${
+                        fieldErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                      }`}
                       required
                     />
                   </div>
@@ -793,11 +898,17 @@ const CreateJobForm = () => {
                 </p>
               </div>
             )}
+            {fieldErrors.location && (
+              <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                <AlertCircle size={14} />
+                {fieldErrors.location}
+              </p>
+            )}
           </div>
         </div>
 
         {/* Salario (Rango) */}
-        <div>
+        <div id="field-salary">
           <label className="block text-sm font-semibold mb-2">
             Salario mensual (MXN) *
           </label>
@@ -811,10 +922,11 @@ const CreateJobForm = () => {
                   onChange={(e) => {
                     setFormData({ ...formData, salaryMin: e.target.value });
                     setSalaryError(null);
+                    clearFieldError('salary');
                   }}
                   placeholder="15,000"
                   className={`w-full p-3 pl-8 border rounded-lg focus:ring-2 focus:ring-button-green ${
-                    salaryError ? 'border-red-500' : 'border-gray-300'
+                    salaryError || fieldErrors.salary ? 'border-red-500 bg-red-50' : 'border-gray-300'
                   }`}
                   min="0"
                   required
@@ -831,10 +943,11 @@ const CreateJobForm = () => {
                   onChange={(e) => {
                     setFormData({ ...formData, salaryMax: e.target.value });
                     setSalaryError(null);
+                    clearFieldError('salary');
                   }}
                   placeholder="22,000"
                   className={`w-full p-3 pl-8 border rounded-lg focus:ring-2 focus:ring-button-green ${
-                    salaryError ? 'border-red-500' : 'border-gray-300'
+                    salaryError || fieldErrors.salary ? 'border-red-500 bg-red-50' : 'border-gray-300'
                   }`}
                   min="0"
                   required
@@ -843,6 +956,12 @@ const CreateJobForm = () => {
               <span className="text-xs text-gray-500 mt-1 block">Máximo</span>
             </div>
           </div>
+          {fieldErrors.salary && !salaryError && (
+            <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+              <AlertCircle size={14} />
+              {fieldErrors.salary}
+            </p>
+          )}
           {salaryError && (
             <div className="flex items-center gap-2 mt-2 text-red-600 text-sm">
               <AlertCircle size={16} />
@@ -918,16 +1037,19 @@ const CreateJobForm = () => {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+            <div id="field-profile">
               <label className="block text-sm font-semibold mb-2">
                 Especialidad del Puesto *
               </label>
               <select
                 value={formData.profile}
-                onChange={(e) =>
-                  setFormData({ ...formData, profile: e.target.value })
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green bg-white"
+                onChange={(e) => {
+                  setFormData({ ...formData, profile: e.target.value });
+                  clearFieldError('profile');
+                }}
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green bg-white ${
+                  fieldErrors.profile ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 required
               >
                 <option value="">Selecciona una especialidad</option>
@@ -938,23 +1060,32 @@ const CreateJobForm = () => {
                   </option>
                 ))}
               </select>
-              {specialties.length === 0 && (
+              {fieldErrors.profile && (
+                <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                  <AlertCircle size={14} />
+                  {fieldErrors.profile}
+                </p>
+              )}
+              {specialties.length === 0 && !fieldErrors.profile && (
                 <p className="text-xs text-gray-500 mt-1">
                   Cargando especialidades...
                 </p>
               )}
             </div>
 
-            <div>
+            <div id="field-seniority">
               <label className="block text-sm font-semibold mb-2">
                 Nivel de Experiencia *
               </label>
               <select
                 value={formData.seniority}
-                onChange={(e) =>
-                  setFormData({ ...formData, seniority: e.target.value })
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green bg-white"
+                onChange={(e) => {
+                  setFormData({ ...formData, seniority: e.target.value });
+                  clearFieldError('seniority');
+                }}
+                className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green bg-white ${
+                  fieldErrors.seniority ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 required
               >
                 <option value="">Selecciona el nivel</option>
@@ -964,6 +1095,12 @@ const CreateJobForm = () => {
                   </option>
                 ))}
               </select>
+              {fieldErrors.seniority && (
+                <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                  <AlertCircle size={14} />
+                  {fieldErrors.seniority}
+                </p>
+              )}
             </div>
           </div>
 
@@ -1069,20 +1206,29 @@ const CreateJobForm = () => {
         </div>
 
         {/* Descripción */}
-        <div>
+        <div id="field-description">
           <label className="block text-sm font-semibold mb-2">
             Descripción del Puesto *
           </label>
           <textarea
             value={formData.description}
-            onChange={(e) =>
-              setFormData({ ...formData, description: e.target.value })
-            }
+            onChange={(e) => {
+              setFormData({ ...formData, description: e.target.value });
+              clearFieldError('description');
+            }}
             placeholder="Describe las responsabilidades, el ambiente de trabajo, beneficios, etc."
             rows={6}
-            className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+            className={`w-full p-3 border rounded-lg resize-none focus:ring-2 focus:ring-button-green ${
+              fieldErrors.description ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            }`}
             required
           />
+          {fieldErrors.description && (
+            <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+              <AlertCircle size={14} />
+              {fieldErrors.description}
+            </p>
+          )}
         </div>
 
         {/* Requisitos */}
@@ -1371,6 +1517,110 @@ const CreateJobForm = () => {
                 >
                   Comprar Créditos
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de éxito al publicar/actualizar (BUG-03) */}
+      {showSuccessModal && successData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 md:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="text-center">
+              {/* Icono de éxito */}
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle className="text-green-600" size={40} />
+              </div>
+
+              {/* Título según acción */}
+              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
+                {successData.action === 'published'
+                  ? '¡Tu vacante ha sido publicada!'
+                  : '¡Vacante actualizada exitosamente!'}
+              </h3>
+
+              {/* Créditos descontados (solo para publicación) */}
+              {successData.action === 'published' && successData.creditCost > 0 && (
+                <p className="text-gray-600 mb-6">
+                  Se han descontado{' '}
+                  <span className="font-semibold text-button-green">
+                    {successData.creditCost} créditos
+                  </span>{' '}
+                  de tu cuenta.
+                </p>
+              )}
+
+              {/* Info del proceso (solo para publicación) */}
+              {successData.action === 'published' && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock className="text-button-orange" size={20} />
+                    <span className="font-semibold text-gray-700">
+                      Tienes 4 horas para editar
+                    </span>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-3">
+                    <strong>Próximos pasos:</strong>
+                  </p>
+                  <ol className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="bg-button-green text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">
+                        1
+                      </span>
+                      Tu vacante será asignada a un reclutador
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-button-green text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">
+                        2
+                      </span>
+                      El reclutador filtrará candidatos por perfil psicológico
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-button-green text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">
+                        3
+                      </span>
+                      Un especialista evaluará las habilidades técnicas
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-button-green text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">
+                        4
+                      </span>
+                      Recibirás los candidatos finales para entrevista
+                    </li>
+                  </ol>
+                </div>
+              )}
+
+              {/* Mensaje para actualización */}
+              {successData.action === 'updated' && (
+                <p className="text-gray-600 mb-6">
+                  Los cambios se han guardado correctamente.
+                </p>
+              )}
+
+              {/* Botones */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => router.push('/company/dashboard')}
+                  className="flex-1 px-6 py-3 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Ir al Dashboard
+                </button>
+                {successData.action === 'published' && (
+                  <button
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setSuccessData(null);
+                      // Resetear formulario
+                      resetForm();
+                    }}
+                    className="flex-1 px-6 py-3 border-2 border-button-green text-button-green font-bold rounded-lg hover:bg-green-50 transition-colors"
+                  >
+                    Crear otra vacante
+                  </button>
+                )}
               </div>
             </div>
           </div>

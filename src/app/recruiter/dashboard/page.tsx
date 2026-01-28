@@ -7,80 +7,37 @@ import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   Users,
-  Clock,
-  Send,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  User,
-  Mail,
-  Phone,
-  Building2,
-  FileText,
+  ChevronRight,
   Loader2,
   AlertCircle,
-  XCircle,
-  Trash2,
-  Eye,
-  PlayCircle,
-  RotateCcw,
-  Inbox,
-  Archive
+  Building2,
+  MapPin,
+  CheckCircle
 } from 'lucide-react';
-import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 
-interface CandidateProfile {
-  id?: number;
-  universidad?: string;
-  carrera?: string;
-  nivelEstudios?: string;
-  añosExperiencia?: number;
-  profile?: string;
-  seniority?: string;
-  linkedinUrl?: string;
-  portafolioUrl?: string;
-  cvUrl?: string;
-  telefono?: string;
-  sexo?: string;
-  fechaNacimiento?: string;
-  source?: string;
-  notas?: string;
-  experiences?: any[];
-}
+// Key para localStorage de candidatos vistos
+const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_recruiter';
 
 interface Application {
   id: number;
-  candidateName: string;
-  candidateEmail: string;
-  candidatePhone: string | null;
   status: string;
-  createdAt: string;
-  cvUrl: string | null;
-  coverLetter?: string;
-  notes?: string;
-  candidateProfile?: CandidateProfile | null;
 }
 
 interface Assignment {
   id: number;
   jobId: number;
-  recruiterStatus: string;
-  recruiterNotes: string | null;
-  candidatesSentToSpecialist: string | null;
   job: {
     id: number;
     title: string;
     company: string;
     location: string;
+    workMode: string;
     profile: string;
-    seniority: string;
-    description: string;
     applications: Application[];
     user: {
       nombre: string;
       companyRequest?: {
         nombreEmpresa: string;
-        correoEmpresa: string;
       };
     };
   };
@@ -88,53 +45,29 @@ interface Assignment {
     id: number;
     nombre: string;
     apellidoPaterno: string;
-    email: string;
-    specialty: string;
   };
 }
 
-interface Stats {
-  total: number;
-  pending: number;
-  reviewing: number;
-  sentToSpecialist: number;
-  discarded: number;
+interface JobSummary {
+  id: number;
+  jobId: number;
+  title: string;
+  company: string;
+  location: string;
+  workMode: string;
+  profile: string;
+  totalCandidates: number;
+  pendingCandidates: number;
+  unseenCandidates: number;
+  hasSpecialist: boolean;
+  specialistName: string | null;
 }
-
-type TabType = 'pending' | 'reviewing' | 'sent' | 'discarded';
 
 export default function RecruiterDashboard() {
   const router = useRouter();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  // Pestaña activa
-  const [activeTab, setActiveTab] = useState<TabType>('pending');
-
-  // Asignación expandida
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  // Estados de carga para acciones
-  const [actionLoading, setActionLoading] = useState<number | null>(null);
-
-  // Modal de perfil de candidato
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
-
-  // Navegación entre candidatos
-  const [currentCandidatesList, setCurrentCandidatesList] = useState<Application[]>([]);
-  const [currentCandidateIndex, setCurrentCandidateIndex] = useState<number>(0);
-
-  // Pestañas configuración
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
-    { id: 'pending', label: 'Sin Revisar', icon: <Inbox size={18} />, color: 'yellow' },
-    { id: 'reviewing', label: 'En Proceso', icon: <Clock size={18} />, color: 'blue' },
-    { id: 'sent', label: 'Enviadas', icon: <Send size={18} />, color: 'green' },
-    { id: 'discarded', label: 'Descartados', icon: <Archive size={18} />, color: 'gray' }
-  ];
 
   useEffect(() => {
     fetchDashboard();
@@ -160,8 +93,36 @@ export default function RecruiterDashboard() {
       const data = await response.json();
 
       if (data.success) {
-        setAssignments(data.data.assignments);
-        setStats(data.data.stats);
+        // Transformar assignments a JobSummary
+        const viewedIds = getViewedCandidates();
+        const jobSummaries: JobSummary[] = data.data.assignments.map((a: Assignment) => {
+          const applications = a.job.applications || [];
+          const pendingApps = applications.filter(
+            (app: Application) => app.status === 'pending' || app.status === 'injected_by_admin'
+          );
+          const unseenApps = applications.filter(
+            (app: Application) => !viewedIds.includes(app.id)
+          );
+
+          return {
+            id: a.id,
+            jobId: a.jobId,
+            title: a.job.title,
+            company: a.job.user?.companyRequest?.nombreEmpresa || a.job.company,
+            location: a.job.location,
+            workMode: a.job.workMode,
+            profile: a.job.profile,
+            totalCandidates: applications.length,
+            pendingCandidates: pendingApps.length,
+            unseenCandidates: unseenApps.length,
+            hasSpecialist: !!a.specialist,
+            specialistName: a.specialist
+              ? `${a.specialist.nombre} ${a.specialist.apellidoPaterno}`
+              : null
+          };
+        });
+
+        setJobs(jobSummaries);
       } else {
         setError(data.error);
       }
@@ -172,125 +133,22 @@ export default function RecruiterDashboard() {
     }
   };
 
-  // Filtrar applications por pestaña activa
-  const filterApplicationsByTab = (applications: Application[]): Application[] => {
-    switch (activeTab) {
-      case 'pending':
-        return applications.filter(app =>
-          app.status === 'pending' || app.status === 'injected_by_admin'
-        );
-      case 'reviewing':
-        return applications.filter(app => app.status === 'reviewing');
-      case 'sent':
-        return applications.filter(app => app.status === 'sent_to_specialist');
-      case 'discarded':
-        return applications.filter(app => app.status === 'discarded');
-      default:
-        return applications;
-    }
-  };
-
-  // Contar applications por tab para una vacante
-  const getTabCountForJob = (applications: Application[], tab: TabType): number => {
-    switch (tab) {
-      case 'pending':
-        return applications.filter(app =>
-          app.status === 'pending' || app.status === 'injected_by_admin'
-        ).length;
-      case 'reviewing':
-        return applications.filter(app => app.status === 'reviewing').length;
-      case 'sent':
-        return applications.filter(app => app.status === 'sent_to_specialist').length;
-      case 'discarded':
-        return applications.filter(app => app.status === 'discarded').length;
-      default:
-        return 0;
-    }
-  };
-
-  // Mover candidato a otro estado
-  const handleMoveApplication = async (applicationId: number, newStatus: string) => {
+  const getViewedCandidates = (): number[] => {
+    if (typeof window === 'undefined') return [];
     try {
-      setActionLoading(applicationId);
-      setError(null);
-
-      const response = await fetch('/api/recruiter/dashboard', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          updateApplicationId: applicationId,
-          newApplicationStatus: newStatus
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSuccess(data.message);
-        fetchDashboard();
-        setTimeout(() => setSuccess(null), 3000);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError('Error al actualizar');
-    } finally {
-      setActionLoading(null);
+      return JSON.parse(localStorage.getItem(VIEWED_CANDIDATES_KEY) || '[]');
+    } catch {
+      return [];
     }
   };
 
-  const openApplicationProfile = (application: Application, candidatesList: Application[] = []) => {
-    const index = candidatesList.findIndex(app => app.id === application.id);
-    setSelectedApplication(application);
-    setCurrentCandidatesList(candidatesList);
-    setCurrentCandidateIndex(index >= 0 ? index : 0);
-    setProfileModalOpen(true);
-  };
-
-  const closeProfileModal = () => {
-    setProfileModalOpen(false);
-    setSelectedApplication(null);
-    setCurrentCandidatesList([]);
-    setCurrentCandidateIndex(0);
-  };
-
-  const goToNextCandidate = () => {
-    if (currentCandidateIndex < currentCandidatesList.length - 1) {
-      const nextIndex = currentCandidateIndex + 1;
-      setCurrentCandidateIndex(nextIndex);
-      setSelectedApplication(currentCandidatesList[nextIndex]);
-    }
-  };
-
-  const goToPrevCandidate = () => {
-    if (currentCandidateIndex > 0) {
-      const prevIndex = currentCandidateIndex - 1;
-      setCurrentCandidateIndex(prevIndex);
-      setSelectedApplication(currentCandidatesList[prevIndex]);
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
+  const getWorkModeLabel = (mode: string) => {
     const labels: Record<string, string> = {
-      pending: 'Pendiente',
-      injected_by_admin: 'Asignado por Admin',
-      reviewing: 'En Revisión',
-      sent_to_specialist: 'Enviado a Especialista',
-      discarded: 'Descartado'
+      remote: 'Remoto',
+      hybrid: 'Híbrido',
+      presential: 'Presencial'
     };
-    return labels[status] || status;
-  };
-
-  // Obtener el contador correcto de la pestaña
-  const getTabCount = (tab: TabType): number => {
-    if (!stats) return 0;
-    switch (tab) {
-      case 'pending': return stats.pending;
-      case 'reviewing': return stats.reviewing;
-      case 'sent': return stats.sentToSpecialist;
-      case 'discarded': return stats.discarded;
-      default: return 0;
-    }
+    return labels[mode] || mode;
   };
 
   if (isLoading) {
@@ -301,383 +159,126 @@ export default function RecruiterDashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+          <p className="text-gray-600">{error}</p>
+          <button
+            onClick={fetchDashboard}
+            className="mt-4 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header - Responsive */}
-        <div className="mb-6 md:mb-8">
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Header */}
+        <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Dashboard Reclutador
           </h1>
-          <p className="text-gray-600 mt-1 text-sm md:text-base">
-            Gestiona los candidatos de tus vacantes asignadas
+          <p className="text-gray-600 mt-1">
+            Selecciona una vacante para gestionar sus candidatos
           </p>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto text-xl">×</button>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Pestañas - Responsive scrollable */}
-        <div className="bg-white rounded-lg shadow-sm border mb-6">
-          <div className="flex border-b overflow-x-auto">
-            {tabs.map((tab) => {
-              const count = getTabCount(tab.id);
-              const isActive = activeTab === tab.id;
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 px-4 py-4 flex items-center justify-center gap-2 font-medium transition-colors relative ${
-                    isActive
-                      ? `text-${tab.color}-700 border-b-2 border-${tab.color}-500 bg-${tab.color}-50`
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
-                  style={isActive ? {
-                    color: tab.color === 'yellow' ? '#b45309' : tab.color === 'blue' ? '#1d4ed8' : tab.color === 'green' ? '#15803d' : '#374151',
-                    backgroundColor: tab.color === 'yellow' ? '#fef9c3' : tab.color === 'blue' ? '#dbeafe' : tab.color === 'green' ? '#dcfce7' : '#f3f4f6',
-                    borderBottomColor: tab.color === 'yellow' ? '#eab308' : tab.color === 'blue' ? '#3b82f6' : tab.color === 'green' ? '#22c55e' : '#6b7280'
-                  } : {}}
-                >
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                    isActive
-                      ? 'bg-white shadow-sm'
-                      : 'bg-gray-100'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Stats resumen */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <div className="flex items-center gap-2 text-gray-500 mb-1">
-                <Briefcase size={16} />
-                <span className="text-sm">Vacantes</span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg shadow-sm border border-yellow-200">
-              <div className="flex items-center gap-2 text-yellow-600 mb-1">
-                <Inbox size={16} />
-                <span className="text-sm">Sin Revisar</span>
-              </div>
-              <p className="text-2xl font-bold text-yellow-700">{stats.pending}</p>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-lg shadow-sm border border-blue-200">
-              <div className="flex items-center gap-2 text-blue-600 mb-1">
-                <Clock size={16} />
-                <span className="text-sm">En Proceso</span>
-              </div>
-              <p className="text-2xl font-bold text-blue-700">{stats.reviewing}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg shadow-sm border border-green-200">
-              <div className="flex items-center gap-2 text-green-600 mb-1">
-                <Send size={16} />
-                <span className="text-sm">Enviadas</span>
-              </div>
-              <p className="text-2xl font-bold text-green-700">{stats.sentToSpecialist}</p>
-            </div>
-          </div>
-        )}
-
         {/* Lista de vacantes */}
-        <div className="space-y-4">
-          {assignments.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
-              <Briefcase className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">No tienes vacantes asignadas</p>
-            </div>
-          ) : (
-            assignments.map((assignment) => {
-              const filteredApps = filterApplicationsByTab(assignment.job.applications);
-              const tabCount = getTabCountForJob(assignment.job.applications, activeTab);
+        {jobs.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+            <Briefcase className="mx-auto text-gray-300 mb-4" size={48} />
+            <p className="text-gray-500">No tienes vacantes asignadas</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {jobs.map((job) => (
+              <div
+                key={job.id}
+                onClick={() => router.push(`/recruiter/jobs/${job.jobId}`)}
+                className="bg-white rounded-lg shadow-sm border p-4 hover:shadow-md hover:border-green-300 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    {/* Título y badges */}
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-lg text-gray-900 group-hover:text-green-700 transition-colors">
+                        {job.title}
+                      </h3>
+                      {job.profile && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                          {job.profile}
+                        </span>
+                      )}
+                      {!job.hasSpecialist && (
+                        <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full flex items-center gap-1">
+                          <AlertCircle size={12} />
+                          Sin especialista
+                        </span>
+                      )}
+                    </div>
 
-              // Solo mostrar vacantes que tienen candidatos en la pestaña activa
-              if (tabCount === 0) return null;
+                    {/* Info de la empresa y ubicación */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Building2 size={14} />
+                        {job.company}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MapPin size={14} />
+                        {job.location}
+                      </span>
+                      <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
+                        {getWorkModeLabel(job.workMode)}
+                      </span>
+                    </div>
 
-              return (
-                <div
-                  key={assignment.id}
-                  className="bg-white rounded-lg shadow-sm border overflow-hidden"
-                >
-                  {/* Header de la vacante */}
-                  <div
-                    className="p-3 md:p-4 cursor-pointer hover:bg-gray-50"
-                    onClick={() => setExpandedId(expandedId === assignment.id ? null : assignment.id)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-gray-900 text-sm md:text-base">
-                            {assignment.job.title}
-                          </h3>
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full whitespace-nowrap">
-                            {tabCount} candidato{tabCount !== 1 ? 's' : ''}
-                          </span>
-                          {/* Indicador de especialista */}
-                          {assignment.specialist ? (
-                            <span className="hidden sm:flex px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full items-center gap-1 whitespace-nowrap">
-                              <CheckCircle size={12} />
-                              {assignment.specialist.nombre}
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full flex items-center gap-1 whitespace-nowrap">
-                              <AlertCircle size={12} />
-                              <span className="hidden sm:inline">Sin especialista</span>
-                              <span className="sm:hidden">!</span>
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs md:text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Building2 size={14} className="flex-shrink-0" />
-                            <span className="truncate">{assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company}</span>
-                          </span>
-                          <span className="truncate">{assignment.job.location}</span>
-                          {assignment.job.profile && (
-                            <span className="hidden sm:inline px-2 py-0.5 bg-gray-100 rounded text-xs">
-                              {assignment.job.profile}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-shrink-0">
-                        {expandedId === assignment.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                      </div>
+                    {/* Estadísticas de candidatos */}
+                    <div className="flex flex-wrap items-center gap-4 mt-3">
+                      <span className="flex items-center gap-1.5 text-sm text-gray-600">
+                        <Users size={16} className="text-gray-400" />
+                        <span className="font-medium">{job.totalCandidates}</span> candidatos
+                      </span>
+
+                      {job.pendingCandidates > 0 && (
+                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full font-medium">
+                          {job.pendingCandidates} por revisar
+                        </span>
+                      )}
+
+                      {job.unseenCandidates > 0 && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium animate-pulse">
+                          {job.unseenCandidates} sin ver
+                        </span>
+                      )}
+
+                      {job.hasSpecialist && (
+                        <span className="hidden sm:flex items-center gap-1 text-xs text-purple-600">
+                          <CheckCircle size={12} />
+                          {job.specialistName}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Contenido expandido */}
-                  {expandedId === assignment.id && (
-                    <div className="border-t p-4">
-                      {/* Info del especialista asignado o advertencia */}
-                      {assignment.specialist ? (
-                        <div className="mb-4 p-3 bg-purple-50 rounded-lg">
-                          <p className="text-sm font-medium text-purple-800">
-                            Especialista: {assignment.specialist.nombre} {assignment.specialist.apellidoPaterno}
-                            {assignment.specialist.specialty && ` (${assignment.specialist.specialty})`}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <AlertCircle className="text-orange-500 flex-shrink-0 mt-0.5" size={18} />
-                            <div>
-                              <p className="text-sm font-medium text-orange-800">
-                                Esta vacante no tiene especialista asignado
-                              </p>
-                              <p className="text-xs text-orange-600 mt-1">
-                                No podrás enviar candidatos hasta que el administrador asigne un especialista.
-                                Contacta al admin para asignar uno en /admin/assignments.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Lista de candidatos filtrados por pestaña */}
-                      <div className="border rounded-lg divide-y">
-                        {filteredApps.length === 0 ? (
-                          <div className="p-8 text-center text-gray-500">
-                            <Users className="mx-auto mb-2 text-gray-300" size={32} />
-                            No hay candidatos en esta pestaña
-                          </div>
-                        ) : (
-                          filteredApps.map((app) => (
-                            <div
-                              key={app.id}
-                              className="p-3 md:p-4 hover:bg-gray-50"
-                            >
-                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-medium text-gray-900 text-sm md:text-base">
-                                      {app.candidateName}
-                                    </p>
-                                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                                      {getStatusLabel(app.status)}
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs md:text-sm text-gray-500">
-                                    <span className="flex items-center gap-1 truncate">
-                                      <Mail size={14} className="flex-shrink-0" />
-                                      <span className="truncate">{app.candidateEmail}</span>
-                                    </span>
-                                    {app.candidatePhone && (
-                                      <span className="flex items-center gap-1">
-                                        <Phone size={14} className="flex-shrink-0" />
-                                        {app.candidatePhone}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {app.candidateProfile && (
-                                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                                      {app.candidateProfile.profile && (
-                                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                          {app.candidateProfile.profile}
-                                        </span>
-                                      )}
-                                      {app.candidateProfile.seniority && (
-                                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
-                                          {app.candidateProfile.seniority}
-                                        </span>
-                                      )}
-                                      {app.candidateProfile.añosExperiencia !== undefined && (
-                                        <span className="text-xs text-gray-500">
-                                          {app.candidateProfile.añosExperiencia} años exp.
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Acciones */}
-                                <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                                  {/* Ver perfil */}
-                                  <button
-                                    onClick={() => openApplicationProfile(app, filteredApps)}
-                                    className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors"
-                                    title="Ver perfil"
-                                  >
-                                    <Eye size={18} />
-                                  </button>
-
-                                  {/* Acciones según pestaña */}
-                                  {activeTab === 'pending' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleMoveApplication(app.id, 'reviewing')}
-                                        disabled={actionLoading === app.id}
-                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                                        title="Iniciar revisión"
-                                      >
-                                        {actionLoading === app.id ? (
-                                          <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                          <PlayCircle size={14} />
-                                        )}
-                                        Revisar
-                                      </button>
-                                      <button
-                                        onClick={() => handleMoveApplication(app.id, 'discarded')}
-                                        disabled={actionLoading === app.id}
-                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Descartar"
-                                      >
-                                        <Trash2 size={18} />
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {activeTab === 'reviewing' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                                        disabled={actionLoading === app.id || !assignment.specialist}
-                                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                                        title={assignment.specialist ? 'Enviar al especialista' : 'No hay especialista asignado'}
-                                      >
-                                        {actionLoading === app.id ? (
-                                          <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                          <Send size={14} />
-                                        )}
-                                        Enviar
-                                      </button>
-                                      <button
-                                        onClick={() => handleMoveApplication(app.id, 'discarded')}
-                                        disabled={actionLoading === app.id}
-                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Descartar"
-                                      >
-                                        <Trash2 size={18} />
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {activeTab === 'sent' && (
-                                    <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm flex items-center gap-1">
-                                      <CheckCircle size={14} />
-                                      Enviado
-                                    </span>
-                                  )}
-
-                                  {activeTab === 'discarded' && (
-                                    <button
-                                      onClick={() => handleMoveApplication(app.id, 'reviewing')}
-                                      disabled={actionLoading === app.id}
-                                      className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                                      title="Reactivar candidato"
-                                    >
-                                      {actionLoading === app.id ? (
-                                        <Loader2 size={14} className="animate-spin" />
-                                      ) : (
-                                        <RotateCcw size={14} />
-                                      )}
-                                      Reactivar
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* Flecha */}
+                  <div className="flex-shrink-0 ml-4">
+                    <ChevronRight
+                      size={24}
+                      className="text-gray-300 group-hover:text-green-500 transition-colors"
+                    />
+                  </div>
                 </div>
-              );
-            })
-          )}
-
-          {/* Mensaje si no hay vacantes con candidatos en esta pestaña */}
-          {assignments.length > 0 &&
-           assignments.every(a => getTabCountForJob(a.job.applications, activeTab) === 0) && (
-            <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
-              <Users className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">
-                No hay candidatos en la pestaña "{tabs.find(t => t.id === activeTab)?.label}"
-              </p>
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* Modal de perfil de candidato */}
-      <CandidateProfileModal
-        application={selectedApplication}
-        candidate={null}
-        isOpen={profileModalOpen}
-        onClose={closeProfileModal}
-        showRecruiterNotes={false}
-        onNext={currentCandidatesList.length > 1 ? goToNextCandidate : undefined}
-        onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
-        currentIndex={currentCandidateIndex}
-        totalCount={currentCandidatesList.length}
-        canAddDocuments={true}
-        onDocumentsUpdated={fetchDashboard}
-      />
     </div>
   );
 }

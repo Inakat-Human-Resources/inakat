@@ -12,7 +12,7 @@ const JWT_SECRET =
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  WARNING: JWT_SECRET not set. Using fallback secret.');
+  console.warn('[Auth] WARNING: JWT_SECRET not set. Using fallback secret.');
 }
 
 // =============================================
@@ -96,8 +96,7 @@ export function generateToken(payload: JWTPayload): string {
 export function verifyToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch (error) {
-    console.error('Error verifying token:', error);
+  } catch {
     return null;
   }
 }
@@ -184,8 +183,7 @@ export async function authenticateUser(
       },
       token
     };
-  } catch (error) {
-    console.error('Error in authenticateUser:', error);
+  } catch {
     return {
       success: false,
       error: 'Error al autenticar. Intenta de nuevo.'
@@ -218,8 +216,7 @@ export async function getUserById(userId: number): Promise<AuthUser | null> {
     }
 
     return user;
-  } catch (error) {
-    console.error('Error in getUserById:', error);
+  } catch {
     return null;
   }
 }
@@ -237,8 +234,7 @@ export async function isAdmin(userId: number): Promise<boolean> {
     });
 
     return user?.role === 'admin' && user.isActive;
-  } catch (error) {
-    console.error('Error in isAdmin:', error);
+  } catch {
     return false;
   }
 }

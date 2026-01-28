@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    console.error('Error in /api/auth/login:', error);
+    console.error('[Auth] Login error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       {
         success: false,

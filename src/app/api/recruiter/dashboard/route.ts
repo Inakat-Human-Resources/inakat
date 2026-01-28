@@ -33,8 +33,12 @@ async function verifyRecruiter() {
 /**
  * GET /api/recruiter/dashboard
  * Obtener vacantes asignadas al reclutador
+ *
+ * OPTIMIZADO: Eliminadas queries N+1, usa batch queries
  */
 export async function GET(request: Request) {
+  const startTime = Date.now();
+
   try {
     const auth = await verifyRecruiter();
     if ('error' in auth) {
@@ -49,7 +53,7 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
 
     // Obtener asignaciones del reclutador
-    const whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       recruiterId: user.id
     };
 
@@ -74,11 +78,6 @@ export async function GET(request: Request) {
               }
             },
             applications: {
-              // Mostrar TODAS las applications para el filtrado por pestañas en frontend
-              // pending, injected_by_admin = Sin Revisar
-              // reviewing = En Proceso
-              // sent_to_specialist = Enviadas
-              // discarded = Descartados
               orderBy: { createdAt: 'desc' }
             }
           }
@@ -96,58 +95,76 @@ export async function GET(request: Request) {
       orderBy: { assignedAt: 'desc' }
     });
 
-    // Enriquecer applications con datos del Candidate (si existe en el banco)
-    const enrichedAssignments = await Promise.all(
-      assignments.map(async (assignment) => {
-        const enrichedApplications = await Promise.all(
-          assignment.job.applications.map(async (app) => {
-            // Buscar si hay un Candidate con este email
-            const candidateFromBank = await prisma.candidate.findFirst({
-              where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
-              select: {
-                id: true,
-                universidad: true,
-                carrera: true,
-                nivelEstudios: true,
-                añosExperiencia: true,
-                profile: true,
-                seniority: true,
-                linkedinUrl: true,
-                portafolioUrl: true,
-                cvUrl: true,
-                telefono: true,
-                sexo: true,
-                fechaNacimiento: true,
-                source: true,
-                notas: true,
-                experiences: {
-                  orderBy: { fechaInicio: 'desc' }
-                },
-                documents: {
-                  orderBy: { createdAt: 'desc' }
-                }
-              }
-            });
+    // =========================================================================
+    // OPTIMIZACIÓN: Batch query para todos los candidatos
+    // En lugar de N*M queries (por cada assignment, por cada application),
+    // hacemos 1 sola query con todos los emails únicos
+    // =========================================================================
 
-            return {
-              ...app,
-              candidateProfile: candidateFromBank
-            };
-          })
-        );
+    // Recolectar TODOS los emails de TODAS las applications
+    const allEmails: string[] = [];
+    for (const assignment of assignments) {
+      for (const app of assignment.job.applications) {
+        allEmails.push(app.candidateEmail.toLowerCase());
+      }
+    }
+    const uniqueEmails = [...new Set(allEmails)];
 
-        return {
-          ...assignment,
-          job: {
-            ...assignment.job,
-            applications: enrichedApplications
+    // Una sola query para obtener TODOS los candidatos
+    const candidatesFromBank = uniqueEmails.length > 0
+      ? await prisma.candidate.findMany({
+          where: {
+            email: { in: uniqueEmails, mode: 'insensitive' }
+          },
+          select: {
+            id: true,
+            email: true,
+            universidad: true,
+            carrera: true,
+            nivelEstudios: true,
+            añosExperiencia: true,
+            profile: true,
+            seniority: true,
+            linkedinUrl: true,
+            portafolioUrl: true,
+            cvUrl: true,
+            telefono: true,
+            sexo: true,
+            fechaNacimiento: true,
+            source: true,
+            notas: true,
+            experiences: {
+              orderBy: { fechaInicio: 'desc' }
+            },
+            documents: {
+              orderBy: { createdAt: 'desc' }
+            }
           }
-        };
-      })
+        })
+      : [];
+
+    // Crear mapa para acceso O(1)
+    const candidateMap = new Map(
+      candidatesFromBank.map(c => [c.email.toLowerCase(), c])
     );
 
-    // Estadísticas basadas en applications (no en recruiterStatus de asignación)
-    // Contar todas las applications de las vacantes asignadas a este reclutador
+    // Enriquecer assignments SIN queries adicionales
+    const enrichedAssignments = assignments.map((assignment) => {
+      const enrichedApplications = assignment.job.applications.map((app) => ({
+        ...app,
+        candidateProfile: candidateMap.get(app.candidateEmail.toLowerCase()) || null
+      }));
+
+      return {
+        ...assignment,
+        job: {
+          ...assignment.job,
+          applications: enrichedApplications
+        }
+      };
+    });
+
+    // Estadísticas basadas en applications
     let pendingCount = 0;
     let reviewingCount = 0;
     let sentCount = 0;
@@ -174,6 +191,9 @@ export async function GET(request: Request) {
       sentToSpecialist: sentCount,
       discarded: discardedCount
     };
+
+    const duration = Date.now() - startTime;
+    console.log(`[PERF] Recruiter dashboard loaded in ${duration}ms (${assignments.length} assignments, ${uniqueEmails.length} unique candidates)`);
 
     return NextResponse.json({
       success: true,
@@ -275,8 +295,7 @@ export async function PUT(request: Request) {
         }
       });
 
-      // IMPORTANTE: Si envía al especialista, también actualizar el JobAssignment
-      // para que el especialista pueda ver la vacante en su dashboard
+      // Si envía al especialista, también actualizar el JobAssignment
       if (newApplicationStatus === 'sent_to_specialist' && hasAssignment) {
         await prisma.jobAssignment.update({
           where: { id: hasAssignment.id },
@@ -378,7 +397,7 @@ export async function PUT(request: Request) {
     }
 
     // Preparar datos de actualización
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (status) {
       // Validar que hay especialista asignado antes de enviar
@@ -458,16 +477,15 @@ export async function PUT(request: Request) {
         }
       }
 
-      // IMPORTANTE: Actualizar candidatos enviados previamente para concatenar, no reemplazar
+      // Actualizar candidatos enviados previamente para concatenar, no reemplazar
       const previouslySent = assignment.candidatesSentToSpecialist || '';
       const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];
-      const allSentIds = [...new Set([...previousIds, ...candidateIds])]; // Combinar sin duplicados
+      const allSentIds = [...new Set([...previousIds, ...candidateIds])];
 
       await prisma.jobAssignment.update({
         where: { id: assignmentId },
         data: {
           candidatesSentToSpecialist: allSentIds.join(','),
-          // Solo cambiar a sent_to_specialist si se especificó el status
           ...(status === 'sent_to_specialist' ? { recruiterStatus: 'sent_to_specialist', specialistStatus: 'pending' } : {})
         }
       });

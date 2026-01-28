@@ -53,15 +53,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log detallado para debugging
     const blobConfigured = isBlobConfigured();
-    console.log('Upload attempt:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      blobConfigured,
-      environment: process.env.NODE_ENV
-    });
 
     // Validar tipo de archivo - verificar MIME type O extensión
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
@@ -69,7 +61,6 @@ export async function POST(request: Request) {
     const isValidExtension = ALLOWED_EXTENSIONS.includes(fileExtension);
 
     if (!isValidMimeType && !isValidExtension) {
-      console.error('Invalid file type:', { type: file.type, extension: fileExtension });
       return NextResponse.json(
         {
           success: false,
@@ -113,12 +104,9 @@ export async function POST(request: Request) {
 
     // Verificar si Vercel Blob está configurado
     if (!blobConfigured) {
-      console.log('BLOB_READ_WRITE_TOKEN not configured, using local storage fallback');
-
       // En desarrollo, usar almacenamiento local
       if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
         fileUrl = await saveToLocalStorage(file, uniqueFileName);
-        console.log('Upload successful (local):', { url: fileUrl, filename: uniqueFileName });
       } else {
         // En producción sin token configurado, retornar error claro
         return NextResponse.json(
@@ -135,7 +123,6 @@ export async function POST(request: Request) {
         access: 'public'
       });
       fileUrl = blob.url;
-      console.log('Upload successful (Vercel Blob):', { url: blob.url, filename: uniqueFileName });
     }
 
     return NextResponse.json({
@@ -144,7 +131,6 @@ export async function POST(request: Request) {
       filename: file.name
     });
   } catch (error: unknown) {
-    console.error('Error uploading file:', error);
 
     // Manejo específico de errores de Vercel Blob
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
