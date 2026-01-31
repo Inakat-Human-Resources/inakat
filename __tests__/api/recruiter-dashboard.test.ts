@@ -324,4 +324,126 @@ describe('Recruiter Dashboard API Logic Tests', () => {
       expect(shouldShowSendButton).toBe(true);
     });
   });
+
+  describe('PUT /api/recruiter/dashboard - Transiciones de estado de Application', () => {
+    /**
+     * Tests para validar las transiciones permitidas de estado en applications
+     * El reclutador puede mover candidatos entre pestañas según estas reglas
+     */
+
+    const allowedTransitions: Record<string, string[]> = {
+      'pending': ['reviewing', 'discarded'],
+      'injected_by_admin': ['reviewing', 'discarded'],
+      'reviewing': ['sent_to_specialist', 'discarded', 'pending'], // pending para revertir
+      'discarded': ['reviewing', 'pending'] // Permite reactivar a cualquier estado anterior
+    };
+
+    it('debería permitir pending → reviewing', () => {
+      const currentStatus = 'pending';
+      const newStatus = 'reviewing';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir pending → discarded', () => {
+      const currentStatus = 'pending';
+      const newStatus = 'discarded';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir injected_by_admin → reviewing', () => {
+      const currentStatus = 'injected_by_admin';
+      const newStatus = 'reviewing';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir injected_by_admin → discarded', () => {
+      const currentStatus = 'injected_by_admin';
+      const newStatus = 'discarded';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir reviewing → sent_to_specialist', () => {
+      const currentStatus = 'reviewing';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir reviewing → discarded', () => {
+      const currentStatus = 'reviewing';
+      const newStatus = 'discarded';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir reviewing → pending (revertir)', () => {
+      const currentStatus = 'reviewing';
+      const newStatus = 'pending';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir discarded → reviewing (reactivar)', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'reviewing';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir discarded → pending (reactivar completamente)', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'pending';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('NO debería permitir pending → sent_to_specialist (debe pasar por reviewing)', () => {
+      const currentStatus = 'pending';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(false);
+    });
+
+    it('NO debería permitir discarded → sent_to_specialist directamente', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(false);
+    });
+
+    it('debería retornar error 400 para transiciones no permitidas', () => {
+      const currentStatus = 'pending';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      const isAllowed = allowed.includes(newStatus);
+
+      // Esto simula lo que el backend devuelve
+      if (!isAllowed) {
+        const errorResponse = {
+          success: false,
+          error: `No se puede mover de "${currentStatus}" a "${newStatus}"`,
+          status: 400
+        };
+
+        expect(errorResponse.status).toBe(400);
+        expect(errorResponse.error).toContain('No se puede mover');
+      }
+    });
+  });
 });

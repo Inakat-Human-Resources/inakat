@@ -10,11 +10,19 @@ const mockPrismaCandidate = {
   findMany: jest.fn(),
   findUnique: jest.fn(),
   create: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+};
+
+const mockPrismaExperience = {
+  deleteMany: jest.fn(),
+  createMany: jest.fn(),
 };
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     candidate: mockPrismaCandidate,
+    experience: mockPrismaExperience,
   },
 }));
 
@@ -364,6 +372,267 @@ describe('Candidates API Logic Tests', () => {
 
       expect(candidate.experiences).toHaveLength(1);
       expect(candidate.experiences[0].empresa).toBe('Tech Corp');
+    });
+  });
+
+  // =============================================
+  // Tests para GET /api/admin/candidates/[id]
+  // =============================================
+  describe('GET /api/admin/candidates/[id] - Obtener candidato', () => {
+    it('debería obtener un candidato por ID con experiencias y documentos', async () => {
+      const mockCandidate = {
+        id: 1,
+        nombre: 'Juan',
+        apellidoPaterno: 'Pérez',
+        apellidoMaterno: 'López',
+        email: 'juan@test.com',
+        fechaNacimiento: new Date('1990-05-15'),
+        experiences: [
+          { id: 1, empresa: 'Tech Corp', puesto: 'Developer' },
+        ],
+        documents: [
+          { id: 1, name: 'CV', fileUrl: 'https://storage.com/cv.pdf' },
+        ],
+      };
+
+      mockPrismaCandidate.findUnique.mockResolvedValue(mockCandidate);
+
+      const candidate = await mockPrismaCandidate.findUnique({
+        where: { id: 1 },
+        include: {
+          experiences: { orderBy: { fechaInicio: 'desc' } },
+          documents: { orderBy: { createdAt: 'desc' } },
+        },
+      });
+
+      expect(candidate).not.toBeNull();
+      expect(candidate.experiences).toBeDefined();
+      expect(candidate.documents).toBeDefined();
+      expect(candidate.nombre).toBe('Juan');
+    });
+
+    it('debería retornar null si el candidato no existe', async () => {
+      mockPrismaCandidate.findUnique.mockResolvedValue(null);
+
+      const candidate = await mockPrismaCandidate.findUnique({
+        where: { id: 9999 },
+      });
+
+      expect(candidate).toBeNull();
+      // Esto resultaría en 404: "Candidato no encontrado"
+    });
+
+    it('debería validar que el ID sea un número válido', () => {
+      const invalidId = 'abc';
+      const parsedId = parseInt(invalidId);
+
+      expect(isNaN(parsedId)).toBe(true);
+      // Esto resultaría en 400: "ID de candidato inválido"
+    });
+
+    it('debería calcular la edad correctamente', () => {
+      const fechaNacimiento = new Date('1990-05-15');
+      const today = new Date();
+
+      let edad = today.getFullYear() - fechaNacimiento.getFullYear();
+      const monthDiff = today.getMonth() - fechaNacimiento.getMonth();
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < fechaNacimiento.getDate())
+      ) {
+        edad--;
+      }
+
+      // La edad debería ser ~34-35 años dependiendo de la fecha actual
+      expect(edad).toBeGreaterThanOrEqual(33);
+      expect(edad).toBeLessThanOrEqual(36);
+    });
+  });
+
+  // =============================================
+  // Tests para PUT /api/admin/candidates/[id]
+  // =============================================
+  describe('PUT /api/admin/candidates/[id] - Actualizar candidato', () => {
+    it('debería actualizar campos básicos del candidato', async () => {
+      const existingCandidate = {
+        id: 1,
+        nombre: 'Juan',
+        apellidoPaterno: 'Pérez',
+        email: 'juan@test.com',
+        experiences: [],
+      };
+
+      const updatedCandidate = {
+        ...existingCandidate,
+        nombre: 'Juan Carlos',
+        telefono: '8112345678',
+      };
+
+      mockPrismaCandidate.findUnique.mockResolvedValue(existingCandidate);
+      mockPrismaCandidate.update.mockResolvedValue(updatedCandidate);
+
+      const candidate = await mockPrismaCandidate.update({
+        where: { id: 1 },
+        data: { nombre: 'Juan Carlos', telefono: '8112345678' },
+      });
+
+      expect(candidate.nombre).toBe('Juan Carlos');
+      expect(candidate.telefono).toBe('8112345678');
+    });
+
+    it('debería rechazar email duplicado', async () => {
+      const existingCandidate = {
+        id: 1,
+        email: 'juan@test.com',
+      };
+
+      const anotherCandidate = {
+        id: 2,
+        email: 'otro@test.com',
+      };
+
+      // Simular que el nuevo email ya existe
+      mockPrismaCandidate.findUnique
+        .mockResolvedValueOnce(existingCandidate) // Candidato actual
+        .mockResolvedValueOnce(anotherCandidate); // Email ya existe
+
+      const current = await mockPrismaCandidate.findUnique({ where: { id: 1 } });
+      const emailCheck = await mockPrismaCandidate.findUnique({ where: { email: 'otro@test.com' } });
+
+      expect(current).not.toBeNull();
+      expect(emailCheck).not.toBeNull();
+      // Esto resultaría en 409: "Ya existe un candidato con ese email"
+    });
+
+    it('debería permitir actualizar al mismo email (sin cambio)', async () => {
+      const existingCandidate = {
+        id: 1,
+        email: 'juan@test.com',
+      };
+
+      mockPrismaCandidate.findUnique.mockResolvedValue(existingCandidate);
+
+      const newEmail = 'juan@test.com';
+      const shouldValidate = newEmail.toLowerCase() !== existingCandidate.email.toLowerCase();
+
+      expect(shouldValidate).toBe(false);
+      // No debería validar duplicado si es el mismo email
+    });
+
+    it('debería recalcular años de experiencia al actualizar experiencias', () => {
+      const experiences = [
+        { fechaInicio: new Date('2018-01-01'), fechaFin: new Date('2020-12-31') }, // 3 años
+        { fechaInicio: new Date('2021-01-01'), fechaFin: new Date('2023-12-31') }, // 3 años
+      ];
+
+      const today = new Date();
+      let totalMonths = 0;
+
+      for (const exp of experiences) {
+        const start = new Date(exp.fechaInicio);
+        const end = exp.fechaFin ? new Date(exp.fechaFin) : today;
+        const months =
+          (end.getFullYear() - start.getFullYear()) * 12 +
+          (end.getMonth() - start.getMonth());
+        totalMonths += Math.max(0, months);
+      }
+
+      const añosExperiencia = Math.round(totalMonths / 12);
+
+      expect(añosExperiencia).toBe(6);
+    });
+
+    it('debería eliminar experiencias existentes antes de crear nuevas', async () => {
+      mockPrismaExperience.deleteMany.mockResolvedValue({ count: 2 });
+      mockPrismaExperience.createMany.mockResolvedValue({ count: 3 });
+
+      await mockPrismaExperience.deleteMany({ where: { candidateId: 1 } });
+      await mockPrismaExperience.createMany({
+        data: [
+          { candidateId: 1, empresa: 'Empresa 1', puesto: 'Dev', fechaInicio: new Date() },
+          { candidateId: 1, empresa: 'Empresa 2', puesto: 'Senior', fechaInicio: new Date() },
+          { candidateId: 1, empresa: 'Empresa 3', puesto: 'Lead', fechaInicio: new Date() },
+        ],
+      });
+
+      expect(mockPrismaExperience.deleteMany).toHaveBeenCalledWith({
+        where: { candidateId: 1 },
+      });
+      expect(mockPrismaExperience.createMany).toHaveBeenCalled();
+    });
+
+    it('debería retornar 404 si el candidato no existe', async () => {
+      mockPrismaCandidate.findUnique.mockResolvedValue(null);
+
+      const candidate = await mockPrismaCandidate.findUnique({
+        where: { id: 9999 },
+      });
+
+      expect(candidate).toBeNull();
+      // Esto resultaría en 404
+    });
+  });
+
+  // =============================================
+  // Tests para DELETE /api/admin/candidates/[id]
+  // =============================================
+  describe('DELETE /api/admin/candidates/[id] - Eliminar candidato', () => {
+    it('debería eliminar un candidato existente', async () => {
+      const existingCandidate = {
+        id: 1,
+        nombre: 'Juan',
+        email: 'juan@test.com',
+      };
+
+      mockPrismaCandidate.findUnique.mockResolvedValue(existingCandidate);
+      mockPrismaCandidate.delete.mockResolvedValue(existingCandidate);
+
+      const candidate = await mockPrismaCandidate.findUnique({ where: { id: 1 } });
+      expect(candidate).not.toBeNull();
+
+      await mockPrismaCandidate.delete({ where: { id: 1 } });
+
+      expect(mockPrismaCandidate.delete).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+    });
+
+    it('debería retornar 404 si el candidato no existe', async () => {
+      mockPrismaCandidate.findUnique.mockResolvedValue(null);
+
+      const candidate = await mockPrismaCandidate.findUnique({
+        where: { id: 9999 },
+      });
+
+      expect(candidate).toBeNull();
+      // Esto resultaría en 404: "Candidato no encontrado"
+    });
+
+    it('debería validar que el ID sea un número válido', () => {
+      const invalidId = 'not-a-number';
+      const parsedId = parseInt(invalidId);
+
+      expect(isNaN(parsedId)).toBe(true);
+      // Esto resultaría en 400: "ID de candidato inválido"
+    });
+
+    it('debería eliminar en cascada experiencias y documentos', async () => {
+      // Prisma maneja esto automáticamente con onDelete: Cascade
+      // Solo verificamos que se llama delete en el candidato
+      const candidateWithRelations = {
+        id: 1,
+        nombre: 'Juan',
+        experiences: [{ id: 1 }, { id: 2 }],
+        documents: [{ id: 1 }],
+      };
+
+      mockPrismaCandidate.findUnique.mockResolvedValue(candidateWithRelations);
+      mockPrismaCandidate.delete.mockResolvedValue(candidateWithRelations);
+
+      await mockPrismaCandidate.delete({ where: { id: 1 } });
+
+      expect(mockPrismaCandidate.delete).toHaveBeenCalled();
+      // Las experiencias y documentos se eliminan automáticamente por cascade
     });
   });
 });

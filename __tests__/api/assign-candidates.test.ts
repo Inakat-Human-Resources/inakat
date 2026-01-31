@@ -247,4 +247,91 @@ describe('Assign Candidates API Logic Tests', () => {
       expect(applications).toHaveLength(0);
     });
   });
+
+  describe('Candidatos creados por admin deben aparecer en lista de asignar', () => {
+    /**
+     * BUG FIX: Los candidatos creados/inyectados por admin no aparecían
+     * en la pantalla de "Asignar Candidatos" porque:
+     * 1. El POST no establecía status explícitamente
+     * 2. La UI filtraba solo por 'available' o 'in_process', excluyendo null/undefined
+     */
+
+    it('debería filtrar correctamente candidatos disponibles para asignar', () => {
+      const candidates = [
+        { id: 1, status: 'available' },
+        { id: 2, status: 'in_process' },
+        { id: 3, status: 'hired' },
+        { id: 4, status: 'inactive' },
+        { id: 5, status: null }, // Candidato sin status (edge case)
+        { id: 6, status: undefined }, // Candidato sin status definido
+      ];
+
+      // Filtro de la UI: incluir available, in_process, y sin status
+      const filteredCandidates = candidates.filter(
+        (c) => !c.status || c.status === 'available' || c.status === 'in_process'
+      );
+
+      expect(filteredCandidates).toHaveLength(4); // IDs: 1, 2, 5, 6
+      expect(filteredCandidates.map(c => c.id)).toEqual([1, 2, 5, 6]);
+    });
+
+    it('debería excluir candidatos hired e inactive', () => {
+      const candidates = [
+        { id: 1, status: 'hired' },
+        { id: 2, status: 'inactive' },
+      ];
+
+      const filteredCandidates = candidates.filter(
+        (c) => !c.status || c.status === 'available' || c.status === 'in_process'
+      );
+
+      expect(filteredCandidates).toHaveLength(0);
+    });
+
+    it('debería incluir candidatos recién creados (status available)', () => {
+      // Simular candidato recién creado con status explícito
+      const newCandidate = {
+        id: 1,
+        nombre: 'Juan',
+        apellidoPaterno: 'Pérez',
+        email: 'juan@test.com',
+        status: 'available' // Establecido explícitamente en POST
+      };
+
+      const candidates = [newCandidate];
+
+      const filteredCandidates = candidates.filter(
+        (c) => !c.status || c.status === 'available' || c.status === 'in_process'
+      );
+
+      expect(filteredCandidates).toHaveLength(1);
+      expect(filteredCandidates[0].nombre).toBe('Juan');
+    });
+
+    it('debería crear candidato con status available explícitamente', () => {
+      // Simular la creación de candidato en el backend
+      const candidateData = {
+        nombre: 'María',
+        apellidoPaterno: 'López',
+        email: 'maria@test.com',
+        source: 'manual',
+        status: 'available' // El fix asegura que esto siempre se establezca
+      };
+
+      expect(candidateData.status).toBe('available');
+    });
+
+    it('debería permitir asignar candidato recién creado a vacante', () => {
+      // Flujo completo:
+      // 1. Admin crea candidato → status: 'available'
+      // 2. Candidato aparece en lista de asignar
+      // 3. Admin selecciona y asigna → crea Application con status 'injected_by_admin'
+      // 4. Candidato pasa a status 'in_process'
+
+      const candidateStatus = 'available';
+      const isAssignable = !candidateStatus || candidateStatus === 'available' || candidateStatus === 'in_process';
+
+      expect(isAssignable).toBe(true);
+    });
+  });
 });

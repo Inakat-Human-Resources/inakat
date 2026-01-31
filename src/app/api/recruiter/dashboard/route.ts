@@ -264,8 +264,8 @@ export async function PUT(request: Request) {
       const allowedTransitions: Record<string, string[]> = {
         'pending': ['reviewing', 'discarded'],
         'injected_by_admin': ['reviewing', 'discarded'],
-        'reviewing': ['sent_to_specialist', 'discarded'],
-        'discarded': ['reviewing'] // Permite reactivar
+        'reviewing': ['sent_to_specialist', 'discarded', 'pending'], // pending para revertir
+        'discarded': ['reviewing', 'pending'] // Permite reactivar a cualquier estado anterior
       };
 
       const currentStatus = application.status;

@@ -312,8 +312,8 @@ export async function PUT(request: Request) {
       // Validar transiciones permitidas para especialista
       const allowedTransitions: Record<string, string[]> = {
         'sent_to_specialist': ['evaluating', 'discarded'],
-        'evaluating': ['sent_to_company', 'discarded'],
-        'discarded': ['evaluating'] // Permite reactivar
+        'evaluating': ['sent_to_company', 'discarded', 'sent_to_specialist'], // sent_to_specialist para revertir
+        'discarded': ['evaluating', 'sent_to_specialist'] // Permite reactivar a cualquier estado anterior
       };
 
       const currentStatus = application.status;

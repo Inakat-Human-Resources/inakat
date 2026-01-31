@@ -381,4 +381,109 @@ describe('Specialist Dashboard API Logic Tests', () => {
       expect(shouldShowSendButton).toBe(true);
     });
   });
+
+  describe('PUT /api/specialist/dashboard - Transiciones de estado de Application', () => {
+    /**
+     * Tests para validar las transiciones permitidas de estado en applications
+     * El especialista puede mover candidatos entre pestañas según estas reglas
+     */
+
+    const allowedTransitions: Record<string, string[]> = {
+      'sent_to_specialist': ['evaluating', 'discarded'],
+      'evaluating': ['sent_to_company', 'discarded', 'sent_to_specialist'], // sent_to_specialist para revertir
+      'discarded': ['evaluating', 'sent_to_specialist'] // Permite reactivar a cualquier estado anterior
+    };
+
+    it('debería permitir sent_to_specialist → evaluating', () => {
+      const currentStatus = 'sent_to_specialist';
+      const newStatus = 'evaluating';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir sent_to_specialist → discarded', () => {
+      const currentStatus = 'sent_to_specialist';
+      const newStatus = 'discarded';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir evaluating → sent_to_company', () => {
+      const currentStatus = 'evaluating';
+      const newStatus = 'sent_to_company';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir evaluating → discarded', () => {
+      const currentStatus = 'evaluating';
+      const newStatus = 'discarded';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir evaluating → sent_to_specialist (revertir)', () => {
+      const currentStatus = 'evaluating';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir discarded → evaluating (reactivar)', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'evaluating';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('debería permitir discarded → sent_to_specialist (reactivar completamente)', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'sent_to_specialist';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(true);
+    });
+
+    it('NO debería permitir sent_to_specialist → sent_to_company (debe pasar por evaluating)', () => {
+      const currentStatus = 'sent_to_specialist';
+      const newStatus = 'sent_to_company';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(false);
+    });
+
+    it('NO debería permitir discarded → sent_to_company directamente', () => {
+      const currentStatus = 'discarded';
+      const newStatus = 'sent_to_company';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      expect(allowed.includes(newStatus)).toBe(false);
+    });
+
+    it('debería retornar error 400 para transiciones no permitidas', () => {
+      const currentStatus = 'sent_to_specialist';
+      const newStatus = 'sent_to_company';
+      const allowed = allowedTransitions[currentStatus] || [];
+
+      const isAllowed = allowed.includes(newStatus);
+
+      // Esto simula lo que el backend devuelve
+      if (!isAllowed) {
+        const errorResponse = {
+          success: false,
+          error: `No se puede mover de "${currentStatus}" a "${newStatus}"`,
+          status: 400
+        };
+
+        expect(errorResponse.status).toBe(400);
+        expect(errorResponse.error).toContain('No se puede mover');
+      }
+    });
+  });
 });

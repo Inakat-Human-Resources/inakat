@@ -174,8 +174,9 @@ function AssignCandidatesContent() {
 
       if (data.success) {
         // Filtrar solo available e in_process (excluir hired e inactive)
+        // También incluir candidatos sin status definido como disponibles
         const filteredCandidates = data.data.filter(
-          (c: Candidate) => c.status === 'available' || c.status === 'in_process'
+          (c: Candidate) => !c.status || c.status === 'available' || c.status === 'in_process'
         );
         setCandidates(filteredCandidates);
 

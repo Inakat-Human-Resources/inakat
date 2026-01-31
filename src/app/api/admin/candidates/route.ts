@@ -326,6 +326,7 @@ export async function POST(request: Request) {
         portafolioUrl: portafolioUrl || null,
         linkedinUrl: linkedinUrl || null,
         source: source || 'manual',
+        status: 'available', // Explícitamente establecer status para evitar problemas
         notas: notas || null,
         añosExperiencia,
         userId, // Vincular con usuario si se creó cuenta
