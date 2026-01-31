@@ -460,6 +460,37 @@ const CreateJobForm = () => {
     }
   };
 
+  // Validación en tiempo real del rango salarial
+  const validateSalaryRange = (min: string, max: string): boolean => {
+    const minNum = parseInt(min) || 0;
+    const maxNum = parseInt(max) || 0;
+
+    // Solo validar si ambos valores están presentes
+    if (!minNum || !maxNum) {
+      setSalaryError(null);
+      return true;
+    }
+
+    if (minNum > maxNum) {
+      setSalaryError('El salario mínimo no puede ser mayor al máximo');
+      return false;
+    }
+
+    if (maxNum - minNum > 10000) {
+      setSalaryError('La diferencia entre salario máximo y mínimo no puede ser mayor a $10,000 MXN');
+      return false;
+    }
+
+    // Validar salario mínimo requerido para la especialidad
+    if (minSalaryRequired && minNum < minSalaryRequired) {
+      setSalaryError(`El salario mínimo debe ser al menos $${minSalaryRequired.toLocaleString('es-MX')} MXN para esta especialidad`);
+      return false;
+    }
+
+    setSalaryError(null);
+    return true;
+  };
+
   const handleSubmit = async (
     e: React.FormEvent,
     publishNow: boolean = false
@@ -920,8 +951,9 @@ const CreateJobForm = () => {
                   type="number"
                   value={formData.salaryMin}
                   onChange={(e) => {
-                    setFormData({ ...formData, salaryMin: e.target.value });
-                    setSalaryError(null);
+                    const newMin = e.target.value;
+                    setFormData({ ...formData, salaryMin: newMin });
+                    validateSalaryRange(newMin, formData.salaryMax);
                     clearFieldError('salary');
                   }}
                   placeholder="15,000"
@@ -941,8 +973,9 @@ const CreateJobForm = () => {
                   type="number"
                   value={formData.salaryMax}
                   onChange={(e) => {
-                    setFormData({ ...formData, salaryMax: e.target.value });
-                    setSalaryError(null);
+                    const newMax = e.target.value;
+                    setFormData({ ...formData, salaryMax: newMax });
+                    validateSalaryRange(formData.salaryMin, newMax);
                     clearFieldError('salary');
                   }}
                   placeholder="22,000"
@@ -1429,7 +1462,7 @@ const CreateJobForm = () => {
               {/* Botón guardar cambios */}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !!salaryError}
                 className="flex-1 bg-button-green text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-1 sm:order-2"
               >
                 <Save size={20} />
@@ -1442,7 +1475,7 @@ const CreateJobForm = () => {
               <button
                 type="button"
                 onClick={(e) => handleSubmit(e, true)}
-                disabled={isSubmitting || !calculatedCost}
+                disabled={isSubmitting || !calculatedCost || !!salaryError}
                 className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-1 sm:order-2 ${
                   hasEnoughCredits
                     ? 'bg-button-green text-white hover:bg-green-700'
@@ -1469,7 +1502,7 @@ const CreateJobForm = () => {
               {/* Guardar como borrador */}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !!salaryError}
                 className="flex-1 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-2 sm:order-1"
               >
                 <Save size={20} />

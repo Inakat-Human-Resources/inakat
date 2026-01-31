@@ -71,6 +71,7 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Paso 1: Datos personales
   const [email, setEmail] = useState('');
@@ -210,6 +211,48 @@ export default function RegisterPage() {
     setDocuments(documents.filter((_, i) => i !== index));
   };
 
+  // Manejadores de contraseña con validación en tiempo real
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+
+    // Validar fortaleza de contraseña en tiempo real
+    const newErrors = { ...errors };
+
+    if (value.length > 0 && value.length < 8) {
+      newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
+    } else if (value.length >= 8 && !/[A-Z]/.test(value)) {
+      newErrors.password = 'Debe contener al menos una mayúscula';
+    } else if (value.length >= 8 && !/[0-9]/.test(value)) {
+      newErrors.password = 'Debe contener al menos un número';
+    } else {
+      delete newErrors.password;
+    }
+
+    // Validar coincidencia si ya hay confirmPassword
+    if (confirmPassword && value !== confirmPassword) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    } else if (confirmPassword && value === confirmPassword) {
+      delete newErrors.confirmPassword;
+    }
+
+    setErrors(newErrors);
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value);
+
+    // Validar coincidencia en tiempo real
+    const newErrors = { ...errors };
+
+    if (value !== password) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden';
+    } else {
+      delete newErrors.confirmPassword;
+    }
+
+    setErrors(newErrors);
+  };
+
   // Validaciones por paso
   const validateStep = (step: number): boolean => {
     const newErrors: FormErrors = {};
@@ -305,8 +348,11 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (response.ok) {
-        alert('¡Registro exitoso! Bienvenido a INAKAT');
-        window.location.href = '/talents';
+        setSuccessMessage('¡Registro exitoso! Bienvenido a INAKAT. Redirigiendo...');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => {
+          window.location.href = '/talents';
+        }, 1500);
       } else {
         if (data.errors) {
           setErrors(data.errors);
@@ -441,6 +487,13 @@ export default function RegisterPage() {
             </div>
           )}
 
+          {/* Mensaje de éxito */}
+          {successMessage && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">
+              {successMessage}
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
             <div className="flex-1 overflow-y-auto">
@@ -544,7 +597,7 @@ export default function RegisterPage() {
                         <input
                           type={showPassword ? 'text' : 'password'}
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) => handlePasswordChange(e.target.value)}
                           className={`${inputClass('password')} pr-10`}
                           placeholder="Mínimo 8 caracteres"
                         />
@@ -569,7 +622,7 @@ export default function RegisterPage() {
                         <input
                           type={showConfirmPassword ? 'text' : 'password'}
                           value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          onChange={(e) => handleConfirmPasswordChange(e.target.value)}
                           className={`${inputClass('confirmPassword')} pr-10`}
                           placeholder="Repite tu contraseña"
                         />

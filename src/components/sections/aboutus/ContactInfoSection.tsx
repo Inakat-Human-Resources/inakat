@@ -6,15 +6,34 @@ import decorIcon from "@/assets/images/2-about/28.png";
 
 const ContactInfoSection = () => {
   const [email, setEmail] = useState("");
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    alert(`Mensaje enviado con: ${email}`);
+    setNotification({ type: 'success', message: `Mensaje enviado con: ${email}` });
     setEmail("");
   };
 
   return (
-    <section className="flex justify-center py-16">
+    <section className="flex flex-col items-center py-16">
+      {/* Notificación */}
+      {notification.type && (
+        <div
+          className={`mb-6 p-4 rounded-lg flex items-center justify-between max-w-xl w-full mx-4 ${
+            notification.type === 'success'
+              ? 'bg-green-100 text-green-800 border border-green-300'
+              : 'bg-red-100 text-red-800 border border-red-300'
+          }`}
+        >
+          <span>{notification.message}</span>
+          <button
+            onClick={() => setNotification({ type: null, message: '' })}
+            className="ml-4 hover:opacity-70 text-xl"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="bg-orange-500 text-white px-5 py-6 rounded-lg flex flex-col md:flex-row max-w-xl w-full items-center gap-3">
         {/* Left Column: Title + Form */}
         <div className="flex flex-col w-full md:w-4/3 pr-4">

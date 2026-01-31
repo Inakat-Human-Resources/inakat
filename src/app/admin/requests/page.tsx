@@ -33,6 +33,7 @@ export default function AdminRequestsPage() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   // Modales
   const [selectedRequest, setSelectedRequest] = useState<CompanyRequest | null>(
@@ -125,14 +126,14 @@ export default function AdminRequestsPage() {
       if (response.ok) {
         await fetchRequests();
         setSelectedRequest(null);
-        alert('✅ Solicitud aprobada exitosamente');
+        setNotification({ type: 'success', message: 'Solicitud aprobada exitosamente' });
       } else {
         const data = await response.json();
-        alert('❌ ' + (data.error || 'Error al aprobar solicitud'));
+        setNotification({ type: 'error', message: data.error || 'Error al aprobar solicitud' });
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      alert('❌ Error al aprobar solicitud');
+      setNotification({ type: 'error', message: 'Error al aprobar solicitud' });
     }
   };
 
@@ -162,14 +163,14 @@ export default function AdminRequestsPage() {
         await fetchRequests();
         setRejectModalOpen(false);
         setRequestToReject(null);
-        alert('✅ Solicitud rechazada');
+        setNotification({ type: 'success', message: 'Solicitud rechazada' });
       } else {
         const data = await response.json();
-        alert('❌ ' + (data.error || 'Error al rechazar solicitud'));
+        setNotification({ type: 'error', message: data.error || 'Error al rechazar solicitud' });
       }
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert('❌ Error al rechazar solicitud');
+      setNotification({ type: 'error', message: 'Error al rechazar solicitud' });
     }
   };
 
@@ -193,6 +194,25 @@ export default function AdminRequestsPage() {
             Gestiona las solicitudes de registro
           </p>
         </div>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* ESTADÍSTICAS - Responsive */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">

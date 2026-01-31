@@ -54,6 +54,9 @@ export default function PurchaseCreditsPage() {
   const [discountInfo, setDiscountInfo] = useState<DiscountInfo | null>(null);
   const [discountError, setDiscountError] = useState<string | null>(null);
 
+  // Notificación
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
   // Cargar paquetes desde la API
   useEffect(() => {
     fetchPackages();
@@ -179,7 +182,7 @@ export default function PurchaseCreditsPage() {
       const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
 
       if (!publicKey) {
-        alert('Error de configuración. Por favor contacta al administrador.');
+        setNotification({ type: 'error', message: 'Error de configuración. Por favor contacta al administrador.' });
         return;
       }
 
@@ -261,16 +264,16 @@ export default function PurchaseCreditsPage() {
           },
           onReady: () => {},
           onError: (error: any) => {
-            // No mostrar alert para errores de validación menores
+            // No mostrar notificación para errores de validación menores
             if (!error?.message?.includes('validation')) {
-              alert('Error al cargar el formulario de pago. Por favor recarga la página.');
+              setNotification({ type: 'error', message: 'Error al cargar el formulario de pago. Por favor recarga la página.' });
             }
           },
           onBinChange: () => {}
         }
       });
     } catch {
-      alert('Error al inicializar Mercado Pago');
+      setNotification({ type: 'error', message: 'Error al inicializar Mercado Pago' });
     }
   };
 
@@ -303,24 +306,24 @@ export default function PurchaseCreditsPage() {
           if (data.discount) {
             message += ` Ahorraste $${data.discount.discountAmount.toLocaleString()} con tu código de descuento.`;
           }
-          alert(message);
-          router.push('/company/dashboard');
+          setNotification({ type: 'success', message });
+          setTimeout(() => router.push('/company/dashboard'), 1500);
         } else if (data.status === 'pending' || data.status === 'in_process') {
-          alert(`Pago recibido. Los créditos se agregarán cuando se confirme el pago.`);
+          setNotification({ type: 'success', message: 'Pago recibido. Los créditos se agregarán cuando se confirme el pago.' });
 
           if (data.paymentDetails?.ticket_url) {
             window.open(data.paymentDetails.ticket_url, '_blank');
           }
 
-          router.push('/company/dashboard');
+          setTimeout(() => router.push('/company/dashboard'), 1500);
         } else {
-          alert('El pago fue rechazado. Por favor intenta con otro método.');
+          setNotification({ type: 'error', message: 'El pago fue rechazado. Por favor intenta con otro método.' });
         }
       } else {
-        alert(data.error || 'Error al procesar pago');
+        setNotification({ type: 'error', message: data.error || 'Error al procesar pago' });
       }
     } catch {
-      alert('Error al procesar pago');
+      setNotification({ type: 'error', message: 'Error al procesar pago' });
     } finally {
       setLoading(false);
     }
@@ -349,6 +352,25 @@ export default function PurchaseCreditsPage() {
           <h1 className="text-2xl md:text-4xl font-bold text-title-dark mb-6 md:mb-8">
             Comprar Créditos
           </h1>
+
+          {/* Notificación */}
+          {notification.type && (
+            <div
+              className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+                notification.type === 'success'
+                  ? 'bg-green-100 text-green-800 border border-green-300'
+                  : 'bg-red-100 text-red-800 border border-red-300'
+              }`}
+            >
+              <span>{notification.message}</span>
+              <button
+                onClick={() => setNotification({ type: null, message: '' })}
+                className="ml-4 hover:opacity-70 text-xl"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {!showCheckout ? (
             <>

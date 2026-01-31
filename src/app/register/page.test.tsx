@@ -309,7 +309,7 @@ describe('RegisterPage', () => {
       });
     });
 
-    it('debería mostrar alerta de éxito', async () => {
+    it('debería mostrar mensaje de éxito', async () => {
       render(<RegisterPage />);
 
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
@@ -327,7 +327,7 @@ describe('RegisterPage', () => {
       fireEvent.click(screen.getByText('CREAR CUENTA'));
 
       await waitFor(() => {
-        expect(global.alert).toHaveBeenCalledWith('¡Registro exitoso! Bienvenido a INAKAT');
+        expect(screen.getByText(/¡Registro exitoso! Bienvenido a INAKAT/)).toBeInTheDocument();
       });
     });
 

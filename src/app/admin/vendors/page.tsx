@@ -114,6 +114,9 @@ export default function AdminVendorsPage() {
   // Tab activa
   const [activeTab, setActiveTab] = useState<'vendors' | 'pending' | 'history'>('vendors');
 
+  // Notificación
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
   // Cargar datos al montar
   useEffect(() => {
     fetchVendors();
@@ -194,12 +197,13 @@ export default function AdminVendorsPage() {
         setPaymentProofUrl('');
         fetchCommissions();
         fetchVendors(); // Actualizar stats
+        setNotification({ type: 'success', message: 'Pago registrado exitosamente' });
       } else {
-        alert(data.error || 'Error al procesar pago');
+        setNotification({ type: 'error', message: data.error || 'Error al procesar pago' });
       }
     } catch (error) {
       console.error('Error marking as paid:', error);
-      alert('Error de conexión');
+      setNotification({ type: 'error', message: 'Error de conexión' });
     } finally {
       setProcessingPayment(false);
     }
@@ -254,6 +258,25 @@ export default function AdminVendorsPage() {
             Códigos de descuento y comisiones
           </p>
         </div>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Stats Globales - Responsive */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">

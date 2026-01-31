@@ -77,6 +77,7 @@ export default function CompanyDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   // Modal state
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -160,19 +161,19 @@ export default function CompanyDashboard() {
 
       if (response.status === 402) {
         // Créditos insuficientes
-        alert(`Créditos insuficientes. Necesitas ${result.required} créditos, tienes ${result.available}.`);
+        setNotification({ type: 'error', message: `Créditos insuficientes. Necesitas ${result.required} créditos, tienes ${result.available}.` });
         router.push('/credits/purchase');
         return;
       }
 
       if (response.ok && result.success) {
-        alert(`¡Vacante publicada! Se descontaron ${result.creditCost} créditos.`);
+        setNotification({ type: 'success', message: `¡Vacante publicada! Se descontaron ${result.creditCost} créditos.` });
         fetchDashboardData();
       } else {
-        alert(result.error || 'Error al publicar la vacante');
+        setNotification({ type: 'error', message: result.error || 'Error al publicar la vacante' });
       }
     } catch {
-      alert('Error al publicar la vacante');
+      setNotification({ type: 'error', message: 'Error al publicar la vacante' });
     }
   };
 
@@ -189,13 +190,14 @@ export default function CompanyDashboard() {
       });
 
       if (response.ok) {
+        setNotification({ type: 'success', message: 'Vacante pausada exitosamente' });
         fetchDashboardData();
       } else {
         const result = await response.json();
-        alert(result.error || 'Error al pausar la vacante');
+        setNotification({ type: 'error', message: result.error || 'Error al pausar la vacante' });
       }
     } catch {
-      alert('Error al pausar la vacante');
+      setNotification({ type: 'error', message: 'Error al pausar la vacante' });
     }
   };
 
@@ -208,13 +210,14 @@ export default function CompanyDashboard() {
       });
 
       if (response.ok) {
+        setNotification({ type: 'success', message: 'Vacante reanudada exitosamente' });
         fetchDashboardData();
       } else {
         const result = await response.json();
-        alert(result.error || 'Error al reanudar la vacante');
+        setNotification({ type: 'error', message: result.error || 'Error al reanudar la vacante' });
       }
     } catch {
-      alert('Error al reanudar la vacante');
+      setNotification({ type: 'error', message: 'Error al reanudar la vacante' });
     }
   };
 
@@ -241,14 +244,14 @@ export default function CompanyDashboard() {
           success: '¡Felicidades! La vacante ha sido cerrada exitosamente.',
           cancelled: 'La vacante ha sido cancelada.'
         };
-        alert(successMessages[reason]);
+        setNotification({ type: 'success', message: successMessages[reason] });
         fetchDashboardData();
       } else {
         const result = await response.json();
-        alert(result.error || 'Error al cerrar la vacante');
+        setNotification({ type: 'error', message: result.error || 'Error al cerrar la vacante' });
       }
     } catch {
-      alert('Error al cerrar la vacante');
+      setNotification({ type: 'error', message: 'Error al cerrar la vacante' });
     }
   };
 
@@ -315,6 +318,25 @@ export default function CompanyDashboard() {
             </button>
           </div>
         </div>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Tabla de Vacantes */}
         <div>

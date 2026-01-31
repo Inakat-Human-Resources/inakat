@@ -64,6 +64,7 @@ export default function AdminCandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   // Modal
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -189,12 +190,13 @@ export default function AdminCandidatesPage() {
 
       if (response.ok) {
         fetchCandidates();
+        setNotification({ type: 'success', message: 'Candidato eliminado exitosamente' });
       } else {
         const data = await response.json();
-        alert(data.error || 'Error al eliminar');
+        setNotification({ type: 'error', message: data.error || 'Error al eliminar' });
       }
     } catch (error) {
-      alert('Error de conexión');
+      setNotification({ type: 'error', message: 'Error de conexión' });
     }
   };
 
@@ -245,7 +247,7 @@ export default function AdminCandidatesPage() {
       const uploadData = await uploadRes.json();
 
       if (!uploadData.success) {
-        alert(uploadData.error || 'Error al subir archivo');
+        setNotification({ type: 'error', message: uploadData.error || 'Error al subir archivo' });
         return;
       }
 
@@ -265,12 +267,13 @@ export default function AdminCandidatesPage() {
         setDocuments([docData.data, ...documents]);
         setNewDocName('');
         setShowAddDoc(false);
+        setNotification({ type: 'success', message: 'Documento agregado exitosamente' });
       } else {
-        alert(docData.error || 'Error al guardar documento');
+        setNotification({ type: 'error', message: docData.error || 'Error al guardar documento' });
       }
     } catch (error) {
       console.error('Error adding document:', error);
-      alert('Error al agregar documento');
+      setNotification({ type: 'error', message: 'Error al agregar documento' });
     } finally {
       setIsUploadingDoc(false);
     }
@@ -290,12 +293,13 @@ export default function AdminCandidatesPage() {
 
       if (data.success) {
         setDocuments(documents.filter(d => d.id !== docId));
+        setNotification({ type: 'success', message: 'Documento eliminado' });
       } else {
-        alert(data.error || 'Error al eliminar');
+        setNotification({ type: 'error', message: data.error || 'Error al eliminar' });
       }
     } catch (error) {
       console.error('Error deleting document:', error);
-      alert('Error al eliminar documento');
+      setNotification({ type: 'error', message: 'Error al eliminar documento' });
     }
   };
 
@@ -378,6 +382,25 @@ export default function AdminCandidatesPage() {
             <span className="sm:inline">Nuevo Candidato</span>
           </button>
         </div>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Stats - Responsive grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">

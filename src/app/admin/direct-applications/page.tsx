@@ -50,6 +50,7 @@ export default function DirectApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   useEffect(() => {
     fetchApplications();
@@ -113,13 +114,13 @@ export default function DirectApplicationsPage() {
       if (result.success) {
         // Remover la aplicación de la lista
         setApplications((prev) => prev.filter((app) => app.id !== applicationId));
-        alert(result.message);
+        setNotification({ type: 'success', message: result.message });
       } else {
-        alert(result.error || 'Error al actualizar');
+        setNotification({ type: 'error', message: result.error || 'Error al actualizar' });
       }
     } catch (err) {
       console.error('Error:', err);
-      alert('Error al procesar la solicitud');
+      setNotification({ type: 'error', message: 'Error al procesar la solicitud' });
     } finally {
       setProcessingId(null);
     }
@@ -180,6 +181,25 @@ export default function DirectApplicationsPage() {
             pendientes de revisión
           </p>
         </div>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Contador */}
         <div className="mb-6 bg-white rounded-lg shadow-sm p-4 inline-block">

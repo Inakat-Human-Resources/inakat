@@ -247,9 +247,20 @@ const FormRegisterForQuotationSection = () => {
         break;
 
       case 'password':
+        // Validar fortaleza de contraseña
+        if (value.length > 0 && value.length < 8) {
+          newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
+        } else if (value.length >= 8 && !/[A-Z]/.test(value)) {
+          newErrors.password = 'Debe contener al menos una mayúscula';
+        } else if (value.length >= 8 && !/[0-9]/.test(value)) {
+          newErrors.password = 'Debe contener al menos un número';
+        } else {
+          delete newErrors.password;
+        }
+        // Validar coincidencia si ya hay confirmPassword
         if (formData.confirmPassword && value !== formData.confirmPassword) {
           newErrors.confirmPassword = 'Las contraseñas no coinciden';
-        } else {
+        } else if (formData.confirmPassword && value === formData.confirmPassword) {
           delete newErrors.confirmPassword;
         }
         break;
@@ -277,6 +288,17 @@ const FormRegisterForQuotationSection = () => {
       const newErrors = { ...errors };
       delete newErrors[fileType];
       setErrors(newErrors);
+    }
+  };
+
+  const handleFileRemove = (fileType: 'identificacion' | 'documentosConstitucion') => {
+    setFormData((prev) => ({ ...prev, [fileType]: null }));
+
+    // Reset the file input so the same file can be selected again
+    if (fileType === 'identificacion' && fileInputIdRef.current) {
+      fileInputIdRef.current.value = '';
+    } else if (fileType === 'documentosConstitucion' && fileInputDocRef.current) {
+      fileInputDocRef.current.value = '';
     }
   };
 
@@ -534,9 +556,21 @@ const FormRegisterForQuotationSection = () => {
                         CARGAR DOCUMENTO <span className="ml-2">↑</span>
                       </button>
                       {formData.identificacion && (
-                        <span className="text-sm text-gray-700 mt-2 block font-semibold">
-                          ✓ {formData.identificacion.name}
-                        </span>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-sm text-gray-700 font-semibold">
+                            ✓ {formData.identificacion.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleFileRemove('identificacion')}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full p-1 transition-colors"
+                            title="Eliminar archivo"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
                       )}
                       {errors.identificacion && (
                         <span className="text-red-600 text-sm font-semibold block mt-1">
@@ -559,10 +593,20 @@ const FormRegisterForQuotationSection = () => {
                         value={formData.password}
                         onChange={handleInputChange}
                         placeholder="Genera tu contraseña *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        className={`w-full p-3 rounded-lg border text-gray-700 ${
+                          errors.password ? 'border-red-500' : 'border-gray-300'
+                        }`}
                         required
-                        minLength={6}
+                        minLength={8}
                       />
+                      {errors.password && (
+                        <span className="text-red-600 text-sm font-semibold block mt-1">
+                          {errors.password}
+                        </span>
+                      )}
+                      <p className="text-xs text-gray-600 mt-1">
+                        Mínimo 8 caracteres, una mayúscula y un número
+                      </p>
                     </div>
 
                     <div>
@@ -794,9 +838,21 @@ const FormRegisterForQuotationSection = () => {
                       CARGAR DOCUMENTO <span className="ml-2">↑</span>
                     </button>
                     {formData.documentosConstitucion && (
-                      <span className="text-sm text-gray-700 mt-2 block font-semibold">
-                        ✓ {formData.documentosConstitucion.name}
-                      </span>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-sm text-gray-700 font-semibold">
+                          ✓ {formData.documentosConstitucion.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleFileRemove('documentosConstitucion')}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full p-1 transition-colors"
+                          title="Eliminar archivo"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
                     {errors.documentosConstitucion && (
                       <span className="text-red-600 text-sm font-semibold block mt-1">

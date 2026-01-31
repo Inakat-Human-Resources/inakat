@@ -122,6 +122,9 @@ export default function JobCandidatesPage() {
   const [showCandidateProfile, setShowCandidateProfile] = useState(false);
   const [candidateIndex, setCandidateIndex] = useState(0);
 
+  // Notificación
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
   useEffect(() => {
     if (jobId) {
       fetchData();
@@ -236,17 +239,17 @@ export default function JobCandidatesPage() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        alert(result.message);
+        setNotification({ type: 'success', message: result.message });
         fetchData();
         if (result.jobClosed) {
           router.push('/company/dashboard');
         }
       } else {
-        alert(result.error || 'Error al actualizar candidato');
+        setNotification({ type: 'error', message: result.error || 'Error al actualizar candidato' });
       }
     } catch (error) {
       console.error('Error updating candidate:', error);
-      alert('Error al actualizar candidato');
+      setNotification({ type: 'error', message: 'Error al actualizar candidato' });
     }
   };
 
@@ -319,6 +322,25 @@ export default function JobCandidatesPage() {
           <ChevronRight className="w-4 h-4" />
           <span className="text-gray-900 font-medium">Candidatos</span>
         </nav>
+
+        {/* Notificación */}
+        {notification.type && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+              notification.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}
+          >
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification({ type: null, message: '' })}
+              className="ml-4 hover:opacity-70 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Header con info de la vacante - Responsive */}
         <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6">
