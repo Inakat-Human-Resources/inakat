@@ -2,7 +2,7 @@
 
 'use client';
 
-import { X, MapPin, DollarSign, Briefcase, Calendar, Users, Building } from 'lucide-react';
+import { X, MapPin, DollarSign, Briefcase, Calendar, Users, Building, GraduationCap, Target, CheckCircle, Star, Info } from 'lucide-react';
 
 interface Job {
   id: number;
@@ -16,11 +16,19 @@ interface Job {
   requirements?: string;
   status: string;
   profile?: string;
+  subcategory?: string;
   seniority?: string;
+  educationLevel?: string;
+  habilidades?: string;
+  responsabilidades?: string;
+  resultadosEsperados?: string;
+  valoresActitudes?: string;
+  informacionAdicional?: string;
   createdAt: string;
   _count?: {
     applications: number;
   };
+  applicationCount?: number;
 }
 
 interface JobDetailModalProps {
@@ -129,28 +137,58 @@ export default function JobDetailModal({ job, isOpen, onClose }: JobDetailModalP
             </div>
           </div>
 
-          {/* Additional Info */}
-          <div className="flex flex-wrap gap-4 mb-6 text-sm text-gray-600">
+          {/* Additional Info Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {job.profile && (
-              <div className="flex items-center gap-1">
-                <span className="font-medium">Perfil:</span>
-                <span>{job.profile}</span>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Briefcase className="w-4 h-4" />
+                  <span className="text-xs font-medium">Área</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{job.profile}</p>
+                {job.subcategory && (
+                  <p className="text-xs text-gray-600 mt-1">{job.subcategory}</p>
+                )}
               </div>
             )}
+
             {job.seniority && (
-              <div className="flex items-center gap-1">
-                <span className="font-medium">Seniority:</span>
-                <span>{job.seniority}</span>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Target className="w-4 h-4" />
+                  <span className="text-xs font-medium">Nivel</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{job.seniority}</p>
               </div>
             )}
-            <div className="flex items-center gap-1">
-              <Calendar className="w-4 h-4" />
-              <span>Publicada el {formatDate(job.createdAt)}</span>
+
+            {job.educationLevel && (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <GraduationCap className="w-4 h-4" />
+                  <span className="text-xs font-medium">Nivel de Estudios</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{job.educationLevel}</p>
+              </div>
+            )}
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-gray-500 mb-1">
+                <Calendar className="w-4 h-4" />
+                <span className="text-xs font-medium">Publicada</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-900">{formatDate(job.createdAt)}</p>
             </div>
-            {job._count && (
-              <div className="flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                <span>{job._count.applications} aplicaciones</span>
+
+            {(job._count?.applications !== undefined || job.applicationCount !== undefined) && (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Users className="w-4 h-4" />
+                  <span className="text-xs font-medium">Aplicaciones</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {job._count?.applications ?? job.applicationCount ?? 0}
+                </p>
               </div>
             )}
           </div>
@@ -169,6 +207,93 @@ export default function JobDetailModal({ job, isOpen, onClose }: JobDetailModalP
               <h3 className="text-lg font-bold text-gray-900 mb-3">Requisitos</h3>
               <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
                 {job.requirements}
+              </div>
+            </div>
+          )}
+
+          {/* Habilidades */}
+          {job.habilidades && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-[#2b5d62]" />
+                Habilidades Requeridas
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  try {
+                    const skills = JSON.parse(job.habilidades);
+                    if (Array.isArray(skills)) {
+                      return skills.map((skill: string, index: number) => (
+                        <span
+                          key={index}
+                          className="px-3 py-1 bg-[#e8f4f4] text-[#2b5d62] text-sm font-medium rounded-full"
+                        >
+                          {skill}
+                        </span>
+                      ));
+                    }
+                  } catch {
+                    // Si no es JSON válido, mostrar como texto
+                    return (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {job.habilidades}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Responsabilidades */}
+          {job.responsabilidades && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-[#2b5d62]" />
+                Responsabilidades
+              </h3>
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.responsabilidades}
+              </div>
+            </div>
+          )}
+
+          {/* Resultados Esperados */}
+          {job.resultadosEsperados && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Target className="w-5 h-5 text-[#2b5d62]" />
+                Resultados Esperados
+              </h3>
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.resultadosEsperados}
+              </div>
+            </div>
+          )}
+
+          {/* Valores y Actitudes */}
+          {job.valoresActitudes && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Star className="w-5 h-5 text-[#2b5d62]" />
+                Valores y Actitudes
+              </h3>
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.valoresActitudes}
+              </div>
+            </div>
+          )}
+
+          {/* Información Adicional */}
+          {job.informacionAdicional && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Info className="w-5 h-5 text-[#2b5d62]" />
+                Información Adicional
+              </h3>
+              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.informacionAdicional}
               </div>
             </div>
           )}

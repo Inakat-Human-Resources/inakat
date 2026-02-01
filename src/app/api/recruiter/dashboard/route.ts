@@ -167,8 +167,25 @@ export async function GET(request: Request) {
     // Estadísticas basadas en applications
     let pendingCount = 0;
     let reviewingCount = 0;
-    let sentCount = 0;
+    let sentToSpecialistCount = 0;
+    let evaluatingCount = 0;
+    let sentToCompanyCount = 0;
+    let hiredCount = 0;
+    let rejectedCount = 0;
     let discardedCount = 0;
+
+    // Recolectar aplicaciones enviadas (para el tab "Enviados")
+    const sentApplications: Array<{
+      id: number;
+      candidateName: string;
+      candidateEmail: string;
+      status: string;
+      jobId: number;
+      jobTitle: string;
+      company: string;
+      updatedAt: Date;
+      candidateProfile: unknown;
+    }> = [];
 
     for (const assignment of enrichedAssignments) {
       for (const app of assignment.job.applications) {
@@ -177,19 +194,91 @@ export async function GET(request: Request) {
         } else if (app.status === 'reviewing') {
           reviewingCount++;
         } else if (app.status === 'sent_to_specialist') {
-          sentCount++;
+          sentToSpecialistCount++;
+          sentApplications.push({
+            id: app.id,
+            candidateName: app.candidateName,
+            candidateEmail: app.candidateEmail,
+            status: app.status,
+            jobId: assignment.job.id,
+            jobTitle: assignment.job.title,
+            company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
+            updatedAt: app.updatedAt,
+            candidateProfile: app.candidateProfile
+          });
+        } else if (app.status === 'evaluating') {
+          evaluatingCount++;
+          sentApplications.push({
+            id: app.id,
+            candidateName: app.candidateName,
+            candidateEmail: app.candidateEmail,
+            status: app.status,
+            jobId: assignment.job.id,
+            jobTitle: assignment.job.title,
+            company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
+            updatedAt: app.updatedAt,
+            candidateProfile: app.candidateProfile
+          });
+        } else if (app.status === 'sent_to_company') {
+          sentToCompanyCount++;
+          sentApplications.push({
+            id: app.id,
+            candidateName: app.candidateName,
+            candidateEmail: app.candidateEmail,
+            status: app.status,
+            jobId: assignment.job.id,
+            jobTitle: assignment.job.title,
+            company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
+            updatedAt: app.updatedAt,
+            candidateProfile: app.candidateProfile
+          });
+        } else if (app.status === 'hired' || app.status === 'accepted') {
+          hiredCount++;
+          sentApplications.push({
+            id: app.id,
+            candidateName: app.candidateName,
+            candidateEmail: app.candidateEmail,
+            status: 'hired',
+            jobId: assignment.job.id,
+            jobTitle: assignment.job.title,
+            company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
+            updatedAt: app.updatedAt,
+            candidateProfile: app.candidateProfile
+          });
+        } else if (app.status === 'rejected' || app.status === 'company_rejected') {
+          rejectedCount++;
+          sentApplications.push({
+            id: app.id,
+            candidateName: app.candidateName,
+            candidateEmail: app.candidateEmail,
+            status: 'rejected',
+            jobId: assignment.job.id,
+            jobTitle: assignment.job.title,
+            company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
+            updatedAt: app.updatedAt,
+            candidateProfile: app.candidateProfile
+          });
         } else if (app.status === 'discarded') {
           discardedCount++;
         }
       }
     }
 
+    // Ordenar aplicaciones enviadas por fecha de actualización (más recientes primero)
+    sentApplications.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
     const stats = {
       total: enrichedAssignments.length,
       pending: pendingCount,
       reviewing: reviewingCount,
-      sentToSpecialist: sentCount,
-      discarded: discardedCount
+      sentToSpecialist: sentToSpecialistCount,
+      evaluating: evaluatingCount,
+      sentToCompany: sentToCompanyCount,
+      hired: hiredCount,
+      rejected: rejectedCount,
+      discarded: discardedCount,
+      // Total de candidatos en seguimiento (enviados al especialista o más adelante)
+      totalSent: sentToSpecialistCount + evaluatingCount + sentToCompanyCount + hiredCount + rejectedCount
     };
 
     const duration = Date.now() - startTime;
@@ -199,6 +288,7 @@ export async function GET(request: Request) {
       success: true,
       data: {
         assignments: enrichedAssignments,
+        sentApplications,
         stats,
         recruiter: {
           id: user.id,

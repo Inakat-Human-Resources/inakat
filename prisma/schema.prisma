@@ -343,10 +343,14 @@ model Candidate {
   sexo            String?   // "M", "F", "Otro"
   fechaNacimiento DateTime?
   
-  // Educación
+  // Educación (campos legacy para compatibilidad)
   universidad     String?
   carrera         String?
   nivelEstudios   String?   // "Licenciatura", "Maestría", "Doctorado", "Técnico"
+
+  // Educación múltiple (JSON array de entradas educativas)
+  // Formato: [{nivel, institucion, carrera, añoInicio, añoFin, estatus}]
+  educacion       String?   @db.Text
   
   // Experiencia (años totales - se calcula automáticamente)
   añosExperiencia Int       @default(0)

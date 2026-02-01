@@ -85,6 +85,29 @@ export async function GET() {
 
     // Datos de candidato si existe
     if (user.candidate) {
+      // Parsear educación JSON si existe
+      let educacionArray = [];
+      if (user.candidate.educacion) {
+        try {
+          educacionArray = JSON.parse(user.candidate.educacion);
+        } catch {
+          educacionArray = [];
+        }
+      }
+
+      // Si no hay entradas de educación pero sí hay datos legacy, crear entrada inicial
+      if (educacionArray.length === 0 && (user.candidate.universidad || user.candidate.carrera)) {
+        educacionArray = [{
+          id: 1,
+          nivel: user.candidate.nivelEstudios || 'Licenciatura',
+          institucion: user.candidate.universidad || '',
+          carrera: user.candidate.carrera || '',
+          añoInicio: null,
+          añoFin: null,
+          estatus: 'Completa'
+        }];
+      }
+
       profileData.candidate = {
         id: user.candidate.id,
         nombre: user.candidate.nombre,
@@ -102,7 +125,8 @@ export async function GET() {
         linkedinUrl: user.candidate.linkedinUrl,
         portafolioUrl: user.candidate.portafolioUrl,
         cvUrl: user.candidate.cvUrl,
-        experiences: user.candidate.experiences || []
+        experiences: user.candidate.experiences || [],
+        educacion: educacionArray
       };
     }
 
@@ -208,7 +232,8 @@ export async function PUT(request: Request) {
         seniority,
         linkedinUrl,
         portafolioUrl,
-        cvUrl
+        cvUrl,
+        educacion
       } = candidateData;
 
       const updateCandidateData: any = {};
@@ -229,6 +254,18 @@ export async function PUT(request: Request) {
       if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = linkedinUrl;
       if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = portafolioUrl;
       if (cvUrl !== undefined) updateCandidateData.cvUrl = cvUrl;
+
+      // Guardar educación como JSON string
+      if (educacion !== undefined) {
+        updateCandidateData.educacion = JSON.stringify(educacion);
+        // Actualizar campos legacy con la primera entrada (para compatibilidad)
+        if (Array.isArray(educacion) && educacion.length > 0) {
+          const primeraEducacion = educacion[0];
+          updateCandidateData.universidad = primeraEducacion.institucion || null;
+          updateCandidateData.carrera = primeraEducacion.carrera || null;
+          updateCandidateData.nivelEstudios = primeraEducacion.nivel || null;
+        }
+      }
 
       if (Object.keys(updateCandidateData).length > 0) {
         await prisma.candidate.update({

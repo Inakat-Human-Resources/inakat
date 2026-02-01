@@ -300,23 +300,15 @@ export default function CompanyDashboard() {
             </h1>
             <p className="text-gray-600">Bienvenido, {data.company.userName}</p>
           </div>
-          {/* Acciones - Stack en móvil, flex en desktop */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Saldo de créditos */}
-            <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center sm:justify-start gap-2">
-              <Coins className="text-yellow-500" size={20} />
-              <span className="font-semibold text-gray-700">
-                {data.company.credits} créditos
-              </span>
-            </div>
-            <button
-              onClick={() => router.push('/create-job')}
-              className="px-6 py-3 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Briefcase size={20} />
-              CREAR VACANTE
-            </button>
+          {/* Saldo de créditos */}
+          <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center sm:justify-start gap-2 w-fit">
+            <Coins className="text-yellow-500" size={20} />
+            <span className="font-semibold text-gray-700">
+              {data.company.credits} créditos
+            </span>
           </div>
+          {/* Nota: El botón "CREAR VACANTE" se eliminó de aquí para evitar duplicación.
+              El botón flotante en la esquina inferior derecha cumple esta función. */}
         </div>
 
         {/* Notificación */}

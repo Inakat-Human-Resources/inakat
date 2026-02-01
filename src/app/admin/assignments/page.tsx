@@ -16,8 +16,11 @@ import {
   CheckCircle,
   Clock,
   Send,
-  Building2
+  Building2,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface Job {
   id: number;
@@ -27,6 +30,7 @@ interface Job {
   profile: string;
   seniority: string;
   status: string;
+  createdAt: string;
   user: {
     nombre: string;
     companyRequest?: {
@@ -34,6 +38,9 @@ interface Job {
     };
   };
   assignment?: Assignment;
+  _count?: {
+    applications: number;
+  };
 }
 
 interface Assignment {
@@ -182,10 +189,25 @@ export default function AssignmentsPage() {
     }
   };
 
-  const getStatusBadge = (job: Job) => {
+  const getJobStatusBadge = (status: string) => {
+    const configs: Record<string, { bg: string; text: string; label: string }> = {
+      active: { bg: 'bg-green-100', text: 'text-green-700', label: 'Activa' },
+      paused: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Pausada' },
+      draft: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Borrador' },
+      closed: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Cerrada' }
+    };
+    const config = configs[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+    return (
+      <span className={`px-2 py-0.5 ${config.bg} ${config.text} text-xs rounded-full`}>
+        {config.label}
+      </span>
+    );
+  };
+
+  const getAssignmentStatusBadge = (job: Job) => {
     if (!job.assignment) {
       return (
-        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+        <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full font-medium">
           Sin asignar
         </span>
       );
@@ -244,9 +266,9 @@ export default function AssignmentsPage() {
       <div className="max-w-7xl mx-auto px-4">
         {/* Header - Responsive */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Asignaciones</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Vacantes</h1>
           <p className="text-gray-600 mt-1 text-sm md:text-base">
-            Asigna reclutadores y especialistas a vacantes
+            Asigna equipo y gestiona candidatos desde una sola vista
           </p>
         </div>
 
@@ -402,14 +424,25 @@ export default function AssignmentsPage() {
                       </p>
                       <p className="text-xs text-gray-400">{job.location}</p>
                     </div>
-                    {getStatusBadge(job)}
+                    <div className="flex flex-col gap-1 items-end">
+                      {getJobStatusBadge(job.status)}
+                      {getAssignmentStatusBadge(job)}
+                    </div>
                   </div>
 
-                  {job.profile && (
-                    <span className="inline-block text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded mb-3">
-                      {job.profile}
-                    </span>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {job.profile && (
+                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
+                        {job.profile}
+                      </span>
+                    )}
+                    {job._count && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1">
+                        <Users size={12} />
+                        {job._count.applications} candidatos
+                      </span>
+                    )}
+                  </div>
 
                   <div className="space-y-3">
                     <div>
@@ -464,20 +497,28 @@ export default function AssignmentsPage() {
                       </select>
                     </div>
 
-                    <button
-                      onClick={() => handleSaveAssignment(job.id)}
-                      disabled={savingJobId === job.id}
-                      className="w-full py-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {savingJobId === job.id ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <>
-                          <Save size={18} />
-                          Guardar
-                        </>
-                      )}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveAssignment(job.id)}
+                        disabled={savingJobId === job.id}
+                        className="flex-1 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {savingJobId === job.id ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <>
+                            <Save size={18} />
+                            Guardar
+                          </>
+                        )}
+                      </button>
+                      <Link
+                        href={`/admin/assign-candidates?jobId=${job.id}`}
+                        className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+                      >
+                        <Users size={18} />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -495,6 +536,9 @@ export default function AssignmentsPage() {
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                         Empresa
                       </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
+                        Candidatos
+                      </th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                         Reclutador
                       </th>
@@ -505,7 +549,7 @@ export default function AssignmentsPage() {
                         Estado
                       </th>
                       <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                        Acción
+                        Acciones
                       </th>
                     </tr>
                   </thead>
@@ -514,10 +558,13 @@ export default function AssignmentsPage() {
                       <tr key={job.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div>
-                            <p className="font-medium text-gray-900">{job.title}</p>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-gray-900">{job.title}</p>
+                              {getJobStatusBadge(job.status)}
+                            </div>
                             <p className="text-sm text-gray-500">{job.location}</p>
                             {job.profile && (
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
                                 {job.profile}
                               </span>
                             )}
@@ -530,6 +577,11 @@ export default function AssignmentsPage() {
                               {job.user?.companyRequest?.nombreEmpresa || job.company}
                             </span>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full font-semibold text-sm">
+                            {job._count?.applications || 0}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <select
@@ -576,21 +628,30 @@ export default function AssignmentsPage() {
                           </select>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {getStatusBadge(job)}
+                          {getAssignmentStatusBadge(job)}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => handleSaveAssignment(job.id)}
-                            disabled={savingJobId === job.id}
-                            className="p-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                            title="Guardar asignación"
-                          >
-                            {savingJobId === job.id ? (
-                              <Loader2 size={18} className="animate-spin" />
-                            ) : (
-                              <Save size={18} />
-                            )}
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleSaveAssignment(job.id)}
+                              disabled={savingJobId === job.id}
+                              className="p-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                              title="Guardar asignación"
+                            >
+                              {savingJobId === job.id ? (
+                                <Loader2 size={18} className="animate-spin" />
+                              ) : (
+                                <Save size={18} />
+                              )}
+                            </button>
+                            <Link
+                              href={`/admin/assign-candidates?jobId=${job.id}`}
+                              className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                              title="Gestionar candidatos"
+                            >
+                              <Users size={18} />
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}

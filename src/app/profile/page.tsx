@@ -22,7 +22,8 @@ import {
   Calendar,
   Building,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  GraduationCap
 } from 'lucide-react';
 
 interface Experience {
@@ -34,6 +35,16 @@ interface Experience {
   fechaFin?: string;
   esActual: boolean;
   descripcion?: string;
+}
+
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
 }
 
 interface CandidateDocument {
@@ -68,6 +79,7 @@ interface ProfileData {
     portafolioUrl?: string;
     cvUrl?: string;
     experiences?: Experience[];
+    educacion?: Education[];
   };
 }
 
@@ -96,9 +108,6 @@ export default function ProfilePage() {
   const [sexo, setSexo] = useState('');
 
   // Candidate data - Datos profesionales
-  const [universidad, setUniversidad] = useState('');
-  const [carrera, setCarrera] = useState('');
-  const [nivelEstudios, setNivelEstudios] = useState('');
   const [añosExperiencia, setAñosExperiencia] = useState<number | ''>('');
   const [profileField, setProfileField] = useState('');
   const [seniority, setSeniority] = useState('');
@@ -119,6 +128,19 @@ export default function ProfilePage() {
     descripcion: ''
   });
   const [savingExp, setSavingExp] = useState(false);
+
+  // Educación
+  const [educacion, setEducacion] = useState<Education[]>([]);
+  const [showEduModal, setShowEduModal] = useState(false);
+  const [editingEdu, setEditingEdu] = useState<Education | null>(null);
+  const [eduForm, setEduForm] = useState({
+    nivel: '',
+    institucion: '',
+    carrera: '',
+    añoInicio: '' as string | number,
+    añoFin: '' as string | number,
+    estatus: 'Completa'
+  });
 
   // CV
   const [cvUrl, setCvUrl] = useState<string | null>(null);
@@ -176,9 +198,6 @@ export default function ProfilePage() {
           setTelefono(c.telefono || '');
           setFechaNacimiento(c.fechaNacimiento ? c.fechaNacimiento.split('T')[0] : '');
           setSexo(c.sexo || '');
-          setUniversidad(c.universidad || '');
-          setCarrera(c.carrera || '');
-          setNivelEstudios(c.nivelEstudios || '');
           setAñosExperiencia(c.añosExperiencia ?? '');
           setProfileField(c.profile || '');
           setSeniority(c.seniority || '');
@@ -186,6 +205,7 @@ export default function ProfilePage() {
           setPortafolioUrl(c.portafolioUrl || '');
           setCvUrl(c.cvUrl || null);
           setExperiences(c.experiences || []);
+          setEducacion(c.educacion || []);
         }
       } else {
         setError(data.error || 'Error al cargar perfil');
@@ -237,14 +257,12 @@ export default function ProfilePage() {
           telefono,
           fechaNacimiento: fechaNacimiento || null,
           sexo: sexo || null,
-          universidad,
-          carrera,
-          nivelEstudios,
           añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,
           profile: profileField,
           seniority,
           linkedinUrl,
-          portafolioUrl
+          portafolioUrl,
+          educacion: educacion
         };
       }
 
@@ -359,6 +377,66 @@ export default function ProfilePage() {
     } catch (err) {
       setError('Error de conexión');
     }
+  };
+
+  // Educación - CRUD (local, se guarda con el perfil)
+  const openEduModal = (edu?: Education) => {
+    if (edu) {
+      setEditingEdu(edu);
+      setEduForm({
+        nivel: edu.nivel,
+        institucion: edu.institucion,
+        carrera: edu.carrera,
+        añoInicio: edu.añoInicio || '',
+        añoFin: edu.añoFin || '',
+        estatus: edu.estatus
+      });
+    } else {
+      setEditingEdu(null);
+      setEduForm({
+        nivel: '',
+        institucion: '',
+        carrera: '',
+        añoInicio: '',
+        añoFin: '',
+        estatus: 'Completa'
+      });
+    }
+    setShowEduModal(true);
+  };
+
+  const saveEducation = () => {
+    if (!eduForm.nivel || !eduForm.institucion) {
+      setError('Nivel de estudios e institución son requeridos');
+      return;
+    }
+
+    const newEdu: Education = {
+      id: editingEdu ? editingEdu.id : Date.now(),
+      nivel: eduForm.nivel,
+      institucion: eduForm.institucion,
+      carrera: eduForm.carrera,
+      añoInicio: eduForm.añoInicio ? Number(eduForm.añoInicio) : null,
+      añoFin: eduForm.añoFin ? Number(eduForm.añoFin) : null,
+      estatus: eduForm.estatus
+    };
+
+    if (editingEdu) {
+      setEducacion(prev => prev.map(e => e.id === editingEdu.id ? newEdu : e));
+      setSuccess('Educación actualizada. Guarda tu perfil para aplicar los cambios.');
+    } else {
+      setEducacion(prev => [...prev, newEdu]);
+      setSuccess('Educación agregada. Guarda tu perfil para aplicar los cambios.');
+    }
+
+    setShowEduModal(false);
+    setEditingEdu(null);
+  };
+
+  const deleteEducation = (eduId: number) => {
+    if (!confirm('¿Estás seguro de eliminar esta entrada de educación?')) return;
+    setEducacion(prev => prev.filter(e => e.id !== eduId));
+    setSuccess('Educación eliminada. Guarda tu perfil para aplicar los cambios.');
   };
 
   // CV Upload
@@ -745,6 +823,80 @@ export default function ProfilePage() {
             </div>
           )}
 
+          {/* Educación del Candidato */}
+          {profile.candidate && (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5" />
+                  Educación
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => openEduModal()}
+                  className="flex items-center gap-1 px-3 py-2 bg-button-orange text-white text-sm rounded-lg hover:bg-opacity-90"
+                >
+                  <Plus size={16} />
+                  Agregar
+                </button>
+              </div>
+
+              {educacion.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <GraduationCap className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p>No has agregado información de educación</p>
+                  <p className="text-sm">Agrega tu formación académica para mejorar tu perfil</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {educacion.map((edu) => (
+                    <div key={edu.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-gray-900">{edu.carrera || edu.nivel}</h4>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              edu.estatus === 'Completa' ? 'bg-green-100 text-green-700' :
+                              edu.estatus === 'En curso' ? 'bg-blue-100 text-blue-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {edu.estatus}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 mt-1">{edu.institucion}</p>
+                          <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                            <span className="px-2 py-0.5 bg-gray-100 rounded">{edu.nivel}</span>
+                            {(edu.añoInicio || edu.añoFin) && (
+                              <span>
+                                {edu.añoInicio || '?'} - {edu.añoFin || 'Presente'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEduModal(edu)}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteEducation(edu.id)}
+                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Datos Profesionales de Candidato */}
           {profile.candidate && (
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -753,49 +905,6 @@ export default function ProfilePage() {
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Universidad
-                  </label>
-                  <input
-                    type="text"
-                    value={universidad}
-                    onChange={(e) => setUniversidad(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
-                    placeholder="Nombre de la universidad"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Carrera
-                  </label>
-                  <input
-                    type="text"
-                    value={carrera}
-                    onChange={(e) => setCarrera(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
-                    placeholder="Ingeniería en Sistemas"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nivel de Estudios
-                  </label>
-                  <select
-                    value={nivelEstudios}
-                    onChange={(e) => setNivelEstudios(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
-                  >
-                    <option value="">Seleccionar...</option>
-                    <option value="Técnico">Técnico</option>
-                    <option value="Licenciatura">Licenciatura</option>
-                    <option value="Maestría">Maestría</option>
-                    <option value="Doctorado">Doctorado</option>
-                  </select>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Años de Experiencia
@@ -1302,6 +1411,141 @@ export default function ProfilePage() {
                     Guardar
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Educación */}
+      {showEduModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="text-lg font-bold">
+                {editingEdu ? 'Editar Educación' : 'Nueva Educación'}
+              </h3>
+              <button onClick={() => setShowEduModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nivel de Estudios *
+                </label>
+                <select
+                  value={eduForm.nivel}
+                  onChange={(e) => setEduForm({ ...eduForm, nivel: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="Preparatoria">Preparatoria</option>
+                  <option value="Técnico">Técnico</option>
+                  <option value="Licenciatura">Licenciatura</option>
+                  <option value="Maestría">Maestría</option>
+                  <option value="Doctorado">Doctorado</option>
+                  <option value="Diplomado">Diplomado</option>
+                  <option value="Certificación">Certificación</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Institución / Universidad *
+                </label>
+                <input
+                  type="text"
+                  value={eduForm.institucion}
+                  onChange={(e) => setEduForm({ ...eduForm, institucion: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                  placeholder="Nombre de la institución"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Carrera / Programa
+                </label>
+                <input
+                  type="text"
+                  value={eduForm.carrera}
+                  onChange={(e) => setEduForm({ ...eduForm, carrera: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                  placeholder="Ej: Ingeniería en Sistemas, MBA"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Año de Inicio
+                  </label>
+                  <input
+                    type="number"
+                    min="1950"
+                    max="2030"
+                    value={eduForm.añoInicio}
+                    onChange={(e) => setEduForm({ ...eduForm, añoInicio: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Ej: 2018"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Año de Fin
+                  </label>
+                  <input
+                    type="number"
+                    min="1950"
+                    max="2030"
+                    value={eduForm.añoFin}
+                    onChange={(e) => setEduForm({ ...eduForm, añoFin: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Ej: 2022"
+                    disabled={eduForm.estatus === 'En curso'}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estatus
+                </label>
+                <select
+                  value={eduForm.estatus}
+                  onChange={(e) => setEduForm({
+                    ...eduForm,
+                    estatus: e.target.value,
+                    añoFin: e.target.value === 'En curso' ? '' : eduForm.añoFin
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                >
+                  <option value="Completa">Completa</option>
+                  <option value="En curso">En curso</option>
+                  <option value="Trunca">Trunca</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                type="button"
+                onClick={() => setShowEduModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveEducation}
+                className="flex items-center gap-2 px-4 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90"
+              >
+                <Save size={16} />
+                Guardar
               </button>
             </div>
           </div>

@@ -430,15 +430,15 @@ export default function AdminDashboardPage() {
           </Link>
 
           <Link
-            href="/admin/assign-candidates"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
+            href="/admin/assignments"
+            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3 ring-2 ring-blue-200"
           >
             <div className="p-2 md:p-3 bg-blue-100 rounded-lg flex-shrink-0">
-              <TrendingUp className="text-blue-600" size={20} />
+              <Briefcase className="text-blue-600" size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Asignar</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Candidatos</p>
+              <p className="font-semibold text-sm md:text-base truncate">Gestión Vacantes</p>
+              <p className="text-xs md:text-sm text-gray-500 truncate">Equipo y candidatos</p>
             </div>
             <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
@@ -499,19 +499,7 @@ export default function AdminDashboardPage() {
             <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
           </Link>
 
-          <Link
-            href="/admin/assignments"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-pink-100 rounded-lg flex-shrink-0">
-              <Briefcase className="text-pink-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Asignaciones</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Vacantes</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
+          {/* Link "Asignaciones Vacantes" consolidado en "Gestión Vacantes" arriba */}
         </div>
 
         {/* Sección de vacantes */}

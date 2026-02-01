@@ -371,7 +371,7 @@ const Navbar = () => {
                           Solicitudes Empresas
                         </Link>
 
-                        {/* Aplicaciones Directas */}
+                        {/* Aplicaciones Directas - OCULTO: No se usa actualmente (MEJ-006)
                         <Link
                           href="/admin/direct-applications"
                           onClick={() => setDropdownOpen(false)}
@@ -392,6 +392,7 @@ const Navbar = () => {
                           </svg>
                           Aplicaciones Directas
                         </Link>
+                        */}
 
                         {/* Vacantes */}
                         <Link

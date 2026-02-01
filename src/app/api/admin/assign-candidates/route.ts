@@ -146,7 +146,7 @@ export async function POST(request: Request) {
   }
 }
 
-// GET - Obtener candidatos ya asignados a una vacante
+// GET - Obtener candidatos ya asignados a una vacante con datos del pipeline
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -159,19 +159,130 @@ export async function GET(request: Request) {
       );
     }
 
+    // Obtener todas las aplicaciones de la vacante (no solo injected_by_admin)
     const applications = await prisma.application.findMany({
       where: {
-        jobId: parseInt(jobId),
-        status: 'injected_by_admin'
+        jobId: parseInt(jobId)
       },
       orderBy: {
-        createdAt: 'desc'
+        updatedAt: 'desc'
       }
     });
 
+    // Obtener la asignación del job (contiene recruiter, specialist y sus notas)
+    const jobAssignment = await prisma.jobAssignment.findUnique({
+      where: {
+        jobId: parseInt(jobId)
+      },
+      include: {
+        recruiter: {
+          select: {
+            id: true,
+            nombre: true,
+            apellidoPaterno: true,
+            email: true
+          }
+        },
+        specialist: {
+          select: {
+            id: true,
+            nombre: true,
+            apellidoPaterno: true,
+            email: true,
+            specialty: true
+          }
+        }
+      }
+    });
+
+    // Obtener datos enriquecidos de los candidatos
+    const candidateEmails = applications.map(app => app.candidateEmail.toLowerCase());
+    const candidatesFromBank = await prisma.candidate.findMany({
+      where: {
+        email: { in: candidateEmails, mode: 'insensitive' }
+      },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        apellidoPaterno: true,
+        telefono: true,
+        profile: true,
+        seniority: true,
+        universidad: true,
+        añosExperiencia: true,
+        cvUrl: true,
+        linkedinUrl: true
+      }
+    });
+
+    // Crear mapa de candidatos para acceso O(1)
+    const candidateMap = new Map(
+      candidatesFromBank.map(c => [c.email.toLowerCase(), c])
+    );
+
+    // Enriquecer aplicaciones con datos del pipeline
+    const enrichedApplications = applications.map(app => {
+      const candidateProfile = candidateMap.get(app.candidateEmail.toLowerCase());
+
+      return {
+        id: app.id,
+        candidateName: app.candidateName,
+        candidateEmail: app.candidateEmail,
+        candidatePhone: app.candidatePhone,
+        cvUrl: app.cvUrl,
+        coverLetter: app.coverLetter,
+        status: app.status,
+        notes: app.notes,
+        createdAt: app.createdAt,
+        updatedAt: app.updatedAt,
+        // Datos del candidato del banco
+        candidateProfile,
+        // Datos del equipo asignado
+        assignedRecruiter: jobAssignment?.recruiter ? {
+          id: jobAssignment.recruiter.id,
+          name: `${jobAssignment.recruiter.nombre} ${jobAssignment.recruiter.apellidoPaterno || ''}`.trim()
+        } : null,
+        assignedSpecialist: jobAssignment?.specialist ? {
+          id: jobAssignment.specialist.id,
+          name: `${jobAssignment.specialist.nombre} ${jobAssignment.specialist.apellidoPaterno || ''}`.trim(),
+          specialty: jobAssignment.specialist.specialty
+        } : null,
+        // Notas del equipo (a nivel de vacante, no de candidato individual)
+        recruiterNotes: jobAssignment?.recruiterNotes || null,
+        specialistNotes: jobAssignment?.specialistNotes || null,
+        // Estados del proceso
+        recruiterStatus: jobAssignment?.recruiterStatus || null,
+        specialistStatus: jobAssignment?.specialistStatus || null
+      };
+    });
+
+    // Estadísticas del pipeline
+    const pipelineStats = {
+      total: applications.length,
+      pending: applications.filter(a => a.status === 'pending').length,
+      injected: applications.filter(a => a.status === 'injected_by_admin').length,
+      reviewing: applications.filter(a => a.status === 'reviewing').length,
+      sentToSpecialist: applications.filter(a => a.status === 'sent_to_specialist').length,
+      evaluating: applications.filter(a => a.status === 'evaluating').length,
+      sentToCompany: applications.filter(a => a.status === 'sent_to_company').length,
+      hired: applications.filter(a => a.status === 'hired' || a.status === 'accepted').length,
+      rejected: applications.filter(a => a.status === 'rejected' || a.status === 'discarded' || a.status === 'company_rejected').length
+    };
+
     return NextResponse.json({
       success: true,
-      data: applications,
+      data: enrichedApplications,
+      jobAssignment: jobAssignment ? {
+        id: jobAssignment.id,
+        recruiter: jobAssignment.recruiter,
+        specialist: jobAssignment.specialist,
+        recruiterNotes: jobAssignment.recruiterNotes,
+        specialistNotes: jobAssignment.specialistNotes,
+        recruiterStatus: jobAssignment.recruiterStatus,
+        specialistStatus: jobAssignment.specialistStatus
+      } : null,
+      pipelineStats,
       count: applications.length
     });
 

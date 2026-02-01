@@ -55,6 +55,7 @@ interface CandidateProfile {
   nivelEstudios?: string;
   añosExperiencia?: number;
   profile?: string;
+  subcategory?: string;
   seniority?: string;
   linkedinUrl?: string;
   portafolioUrl?: string;
@@ -94,6 +95,7 @@ interface BankCandidate {
   nivelEstudios?: string | null;
   añosExperiencia: number;
   profile?: string | null;
+  subcategory?: string | null;
   seniority?: string | null;
   linkedinUrl?: string | null;
   portafolioUrl?: string | null;
@@ -170,6 +172,7 @@ export default function CandidateProfileModal({
         nivelEstudios: application.candidateProfile?.nivelEstudios,
         añosExperiencia: application.candidateProfile?.añosExperiencia,
         profile: application.candidateProfile?.profile,
+        subcategory: application.candidateProfile?.subcategory,
         seniority: application.candidateProfile?.seniority,
         linkedinUrl: application.candidateProfile?.linkedinUrl,
         portafolioUrl: application.candidateProfile?.portafolioUrl,
@@ -195,6 +198,7 @@ export default function CandidateProfileModal({
         nivelEstudios: candidate!.nivelEstudios,
         añosExperiencia: candidate!.añosExperiencia,
         profile: candidate!.profile,
+        subcategory: candidate!.subcategory,
         seniority: candidate!.seniority,
         linkedinUrl: candidate!.linkedinUrl,
         portafolioUrl: candidate!.portafolioUrl,
@@ -275,6 +279,40 @@ export default function CandidateProfileModal({
       Director: 'Director'
     };
     return labels[seniority || ''] || seniority || '';
+  };
+
+  const getSexoLabel = (sexo?: string) => {
+    const labels: Record<string, string> = {
+      M: 'Masculino',
+      F: 'Femenino',
+      Otro: 'Otro'
+    };
+    return labels[sexo || ''] || sexo || 'No especificado';
+  };
+
+  const calculateAge = (fechaNacimiento?: string | null) => {
+    if (!fechaNacimiento) return null;
+    const birthDate = new Date(fechaNacimiento);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Obtener ubicación del candidato (de la experiencia más reciente)
+  const getLocation = () => {
+    const experiences = data.experiences || [];
+    if (experiences.length > 0) {
+      // Buscar trabajo actual primero
+      const currentJob = experiences.find(exp => exp.esActual);
+      if (currentJob?.ubicacion) return currentJob.ubicacion;
+      // Si no, usar la experiencia más reciente
+      if (experiences[0]?.ubicacion) return experiences[0].ubicacion;
+    }
+    return null;
   };
 
   // Agregar documento
@@ -412,6 +450,36 @@ export default function CandidateProfileModal({
                 </div>
               </div>
             )}
+
+            {data.sexo && (
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+                <User className="w-5 h-5 text-[#2b5d62]" />
+                <div>
+                  <p className="text-xs text-gray-500">Sexo</p>
+                  <p className="text-sm font-medium text-gray-900">{getSexoLabel(data.sexo)}</p>
+                </div>
+              </div>
+            )}
+
+            {calculateAge(data.fechaNacimiento) && (
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+                <Calendar className="w-5 h-5 text-[#2b5d62]" />
+                <div>
+                  <p className="text-xs text-gray-500">Edad</p>
+                  <p className="text-sm font-medium text-gray-900">{calculateAge(data.fechaNacimiento)} años</p>
+                </div>
+              </div>
+            )}
+
+            {getLocation() && (
+              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+                <MapPin className="w-5 h-5 text-[#2b5d62]" />
+                <div>
+                  <p className="text-xs text-gray-500">Ubicación</p>
+                  <p className="text-sm font-medium text-gray-900">{getLocation()}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Education & Experience Overview */}
@@ -443,11 +511,41 @@ export default function CandidateProfileModal({
               <div className="p-4 border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <Briefcase className="w-4 h-4" />
-                  <span className="text-xs font-medium">Experiencia</span>
+                  <span className="text-xs font-medium">Años de Experiencia</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900">
                   {data.añosExperiencia} {data.añosExperiencia === 1 ? 'año' : 'años'}
                 </p>
+              </div>
+            )}
+
+            {data.seniority && (
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Briefcase className="w-4 h-4" />
+                  <span className="text-xs font-medium">Nivel de Experiencia</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{getSeniorityLabel(data.seniority)}</p>
+              </div>
+            )}
+
+            {data.profile && (
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Briefcase className="w-4 h-4" />
+                  <span className="text-xs font-medium">Área de Especialidad</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{data.profile}</p>
+              </div>
+            )}
+
+            {data.subcategory && (
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <Briefcase className="w-4 h-4" />
+                  <span className="text-xs font-medium">Subespecialidad</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{data.subcategory}</p>
               </div>
             )}
 

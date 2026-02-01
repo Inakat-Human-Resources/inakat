@@ -15,7 +15,14 @@ import {
   ChevronDown,
   ArrowRight,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Clock,
+  UserCheck,
+  UserCog,
+  Send,
+  XCircle,
+  MessageSquare,
+  Calendar
 } from 'lucide-react';
 
 interface Job {
@@ -46,6 +53,47 @@ interface Candidate {
   source: string;
 }
 
+interface PipelineCandidate {
+  id: number;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string | null;
+  cvUrl: string | null;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedRecruiter: { id: number; name: string } | null;
+  assignedSpecialist: { id: number; name: string; specialty: string | null } | null;
+  recruiterNotes: string | null;
+  specialistNotes: string | null;
+  candidateProfile: {
+    profile: string | null;
+    seniority: string | null;
+    universidad: string | null;
+    añosExperiencia: number;
+  } | null;
+}
+
+interface PipelineStats {
+  total: number;
+  pending: number;
+  injected: number;
+  reviewing: number;
+  sentToSpecialist: number;
+  evaluating: number;
+  sentToCompany: number;
+  hired: number;
+  rejected: number;
+}
+
+interface JobAssignmentInfo {
+  recruiter: { id: number; nombre: string; apellidoPaterno: string } | null;
+  specialist: { id: number; nombre: string; apellidoPaterno: string; specialty: string | null } | null;
+  recruiterNotes: string | null;
+  specialistNotes: string | null;
+}
+
 function AssignCandidatesContent() {
   // URL params para persistir vacante seleccionada
   const searchParams = useSearchParams();
@@ -64,6 +112,13 @@ function AssignCandidatesContent() {
     subcategories: string[];
   }[]>([]);
 
+  // Estado del pipeline
+  const [activeTab, setActiveTab] = useState<'assign' | 'pipeline'>('pipeline');
+  const [pipelineCandidates, setPipelineCandidates] = useState<PipelineCandidate[]>([]);
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
+  const [jobAssignment, setJobAssignment] = useState<JobAssignmentInfo | null>(null);
+  const [isLoadingPipeline, setIsLoadingPipeline] = useState(false);
+
   // Loading states
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
@@ -81,6 +136,68 @@ function AssignCandidatesContent() {
   const [showFilters, setShowFilters] = useState(false);
 
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
+
+  // Función para obtener badge de status del pipeline
+  const getPipelineStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      pending: 'bg-gray-100 text-gray-700',
+      injected_by_admin: 'bg-gray-200 text-gray-800',
+      reviewing: 'bg-yellow-100 text-yellow-800',
+      sent_to_specialist: 'bg-sky-100 text-sky-700',
+      evaluating: 'bg-blue-100 text-blue-800',
+      sent_to_company: 'bg-purple-100 text-purple-800',
+      hired: 'bg-green-100 text-green-800',
+      accepted: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      discarded: 'bg-red-100 text-red-700',
+      company_rejected: 'bg-red-100 text-red-700'
+    };
+    const labels: Record<string, string> = {
+      pending: 'Pendiente',
+      injected_by_admin: 'Inyectado',
+      reviewing: 'En Revisión',
+      sent_to_specialist: 'Con Especialista',
+      evaluating: 'En Evaluación',
+      sent_to_company: 'Enviado a Empresa',
+      hired: 'Contratado',
+      accepted: 'Contratado',
+      rejected: 'Rechazado',
+      discarded: 'Descartado',
+      company_rejected: 'Rechazado por Empresa'
+    };
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
+        {labels[status] || status}
+      </span>
+    );
+  };
+
+  // Cargar candidatos del pipeline para la vacante seleccionada
+  const fetchPipelineCandidates = async (jobId: number) => {
+    setIsLoadingPipeline(true);
+    try {
+      const response = await fetch(`/api/admin/assign-candidates?jobId=${jobId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setPipelineCandidates(data.data || []);
+        setPipelineStats(data.pipelineStats || null);
+        setJobAssignment(data.jobAssignment || null);
+      } else {
+        console.error('Error fetching pipeline:', data.error);
+        setPipelineCandidates([]);
+        setPipelineStats(null);
+        setJobAssignment(null);
+      }
+    } catch (err) {
+      console.error('Error fetching pipeline:', err);
+      setPipelineCandidates([]);
+      setPipelineStats(null);
+      setJobAssignment(null);
+    } finally {
+      setIsLoadingPipeline(false);
+    }
+  };
 
   // Cargar especialidades desde el catálogo
   const fetchSpecialties = async () => {
@@ -114,10 +231,14 @@ function AssignCandidatesContent() {
     if (selectedJob) {
       fetchCandidates();
       fetchAlreadyAssigned(selectedJob.id);
+      fetchPipelineCandidates(selectedJob.id);
     } else {
       setCandidates([]);
       setSelectedCandidates(new Set());
       setAlreadyAssigned(new Set());
+      setPipelineCandidates([]);
+      setPipelineStats(null);
+      setJobAssignment(null);
     }
   }, [selectedJob]);
 
@@ -274,9 +395,12 @@ function AssignCandidatesContent() {
       if (data.success) {
         setSuccess(data.message);
         setSelectedCandidates(new Set());
-        // Recargar candidatos y asignados
+        // Recargar candidatos, asignados y pipeline
         fetchCandidates();
         fetchAlreadyAssigned(selectedJob.id);
+        fetchPipelineCandidates(selectedJob.id);
+        // Cambiar al tab del pipeline para mostrar los nuevos candidatos
+        setActiveTab('pipeline');
       } else {
         setError(data.error || 'Error al asignar candidatos');
       }
@@ -392,22 +516,130 @@ function AssignCandidatesContent() {
           {/* Panel derecho: Lista de candidatos */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow">
+              {/* Tabs de navegación */}
+              {selectedJob && (
+                <div className="border-b">
+                  <nav className="flex">
+                    <button
+                      onClick={() => setActiveTab('pipeline')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'pipeline'
+                          ? 'border-blue-500 text-blue-600 bg-blue-50'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Clock size={18} />
+                        Pipeline de Candidatos
+                        {pipelineStats && (
+                          <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">
+                            {pipelineStats.total}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('assign')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'assign'
+                          ? 'border-green-500 text-green-600 bg-green-50'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Users size={18} />
+                        Asignar Nuevos
+                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs">
+                          {availableCandidatesCount}
+                        </span>
+                      </div>
+                    </button>
+                  </nav>
+                </div>
+              )}
+
               {/* Header del panel */}
               <div className="p-4 md:p-6 border-b">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="text-green-600" size={20} />
-                    <h2 className="text-lg md:text-xl font-bold">Candidatos Disponibles</h2>
-                  </div>
-
-                  {selectedJob && (
-                    <div className="text-sm text-gray-600">
-                      <span className="font-semibold">{selectedCandidates.size}</span> seleccionados
+                {activeTab === 'assign' && (
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Users className="text-green-600" size={20} />
+                      <h2 className="text-lg md:text-xl font-bold">Candidatos Disponibles</h2>
                     </div>
-                  )}
-                </div>
 
-                {selectedJob ? (
+                    {selectedJob && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold">{selectedCandidates.size}</span> seleccionados
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'pipeline' && selectedJob && (
+                  <>
+                    {/* Stats del pipeline */}
+                    {pipelineStats && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
+                        <div className="bg-gray-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-gray-700">{pipelineStats.pending + pipelineStats.injected}</p>
+                          <p className="text-xs text-gray-500">Pendientes</p>
+                        </div>
+                        <div className="bg-yellow-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-yellow-700">{pipelineStats.reviewing}</p>
+                          <p className="text-xs text-yellow-600">En Revisión</p>
+                        </div>
+                        <div className="bg-blue-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-blue-700">{pipelineStats.sentToSpecialist + pipelineStats.evaluating}</p>
+                          <p className="text-xs text-blue-600">Evaluación</p>
+                        </div>
+                        <div className="bg-purple-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-purple-700">{pipelineStats.sentToCompany}</p>
+                          <p className="text-xs text-purple-600">Enviados</p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-green-700">{pipelineStats.hired}</p>
+                          <p className="text-xs text-green-600">Contratados</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Info del equipo asignado */}
+                    {jobAssignment && (
+                      <div className="flex flex-wrap gap-4 p-3 bg-gray-50 rounded-lg">
+                        {jobAssignment.recruiter && (
+                          <div className="flex items-center gap-2">
+                            <UserCheck className="text-blue-600" size={16} />
+                            <span className="text-sm">
+                              <span className="text-gray-500">Reclutador:</span>{' '}
+                              <span className="font-medium">
+                                {jobAssignment.recruiter.nombre} {jobAssignment.recruiter.apellidoPaterno}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                        {jobAssignment.specialist && (
+                          <div className="flex items-center gap-2">
+                            <UserCog className="text-purple-600" size={16} />
+                            <span className="text-sm">
+                              <span className="text-gray-500">Especialista:</span>{' '}
+                              <span className="font-medium">
+                                {jobAssignment.specialist.nombre} {jobAssignment.specialist.apellidoPaterno}
+                              </span>
+                              {jobAssignment.specialist.specialty && (
+                                <span className="text-gray-400 text-xs ml-1">({jobAssignment.specialist.specialty})</span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                        {!jobAssignment.recruiter && !jobAssignment.specialist && (
+                          <span className="text-sm text-gray-500">Sin equipo asignado</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === 'assign' && selectedJob ? (
                   <>
                     {/* Barra de búsqueda y filtros */}
                     <div className="flex flex-col md:flex-row gap-3">
@@ -492,15 +724,159 @@ function AssignCandidatesContent() {
                       </div>
                     )}
                   </>
-                ) : (
+                ) : !selectedJob && (
                   <p className="text-gray-500">
                     Selecciona una vacante para ver los candidatos disponibles
                   </p>
                 )}
               </div>
 
-              {/* Lista de candidatos */}
-              {selectedJob && (
+              {/* Lista de candidatos del pipeline */}
+              {selectedJob && activeTab === 'pipeline' && (
+                <div className="p-4 md:p-6">
+                  {isLoadingPipeline ? (
+                    <div className="flex items-center justify-center py-12">
+                      <RefreshCw className="animate-spin text-gray-400" size={32} />
+                    </div>
+                  ) : pipelineCandidates.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <Users className="mx-auto mb-2 text-gray-400" size={40} />
+                      <p>No hay candidatos en el pipeline</p>
+                      <button
+                        onClick={() => setActiveTab('assign')}
+                        className="mt-4 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Asignar candidatos →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                      {pipelineCandidates.map(candidate => (
+                        <div
+                          key={candidate.id}
+                          className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 bg-white"
+                        >
+                          {/* Header del candidato */}
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-gray-900">
+                                  {candidate.candidateName}
+                                </p>
+                                {getPipelineStatusBadge(candidate.status)}
+                              </div>
+                              <p className="text-sm text-gray-600">{candidate.candidateEmail}</p>
+                            </div>
+                            {candidate.cvUrl && (
+                              <a
+                                href={candidate.cvUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-xs font-medium shrink-0"
+                              >
+                                Ver CV
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Info del candidato */}
+                          {candidate.candidateProfile && (
+                            <div className="flex items-center gap-2 mb-3 flex-wrap">
+                              {candidate.candidateProfile.profile && (
+                                <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                  {candidate.candidateProfile.profile}
+                                </span>
+                              )}
+                              {candidate.candidateProfile.seniority && (
+                                <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                  {candidate.candidateProfile.seniority}
+                                </span>
+                              )}
+                              {candidate.candidateProfile.añosExperiencia > 0 && (
+                                <span className="text-xs text-gray-500">
+                                  {candidate.candidateProfile.añosExperiencia} años exp.
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Equipo y notas */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {/* Columna izquierda: Reclutador */}
+                            <div className="space-y-2">
+                              {candidate.assignedRecruiter && (
+                                <div className="flex items-center gap-2">
+                                  <UserCheck className="text-blue-500 shrink-0" size={14} />
+                                  <span className="text-gray-600">
+                                    <span className="font-medium">{candidate.assignedRecruiter.name}</span>
+                                  </span>
+                                </div>
+                              )}
+                              {candidate.recruiterNotes && (
+                                <div className="flex items-start gap-2 pl-5">
+                                  <MessageSquare className="text-gray-400 shrink-0 mt-0.5" size={12} />
+                                  <p className="text-xs text-gray-500 italic line-clamp-2">
+                                    {candidate.recruiterNotes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Columna derecha: Especialista */}
+                            <div className="space-y-2">
+                              {candidate.assignedSpecialist && (
+                                <div className="flex items-center gap-2">
+                                  <UserCog className="text-purple-500 shrink-0" size={14} />
+                                  <span className="text-gray-600">
+                                    <span className="font-medium">{candidate.assignedSpecialist.name}</span>
+                                    {candidate.assignedSpecialist.specialty && (
+                                      <span className="text-gray-400 text-xs ml-1">
+                                        ({candidate.assignedSpecialist.specialty})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {candidate.specialistNotes && (
+                                <div className="flex items-start gap-2 pl-5">
+                                  <MessageSquare className="text-gray-400 shrink-0 mt-0.5" size={12} />
+                                  <p className="text-xs text-gray-500 italic line-clamp-2">
+                                    {candidate.specialistNotes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Notas del candidato */}
+                          {candidate.notes && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-gray-500">
+                                <span className="font-medium">Notas:</span> {candidate.notes}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Fechas */}
+                          <div className="flex items-center gap-4 mt-3 pt-3 border-t text-xs text-gray-400">
+                            <div className="flex items-center gap-1">
+                              <Calendar size={12} />
+                              <span>Ingreso: {new Date(candidate.createdAt).toLocaleDateString('es-MX')}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock size={12} />
+                              <span>Actualizado: {new Date(candidate.updatedAt).toLocaleDateString('es-MX')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Lista de candidatos para asignar */}
+              {selectedJob && activeTab === 'assign' && (
                 <div className="p-4 md:p-6">
                   {isLoadingCandidates ? (
                     <div className="flex items-center justify-center py-12">
