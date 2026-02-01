@@ -216,8 +216,8 @@ export default function LoginPage() {
                 </button>
               </Link>
 
-              {/* Registro Empresa */}
-              <Link href="/companies" className="w-full flex justify-center">
+              {/* Registro Empresa - BUG-012 FIX: Ancla al formulario */}
+              <Link href="/companies#formulario-registro" className="w-full flex justify-center">
                 <button
                   type="button"
                   className="w-full bg-button-orange text-white font-bold py-3 rounded-full hover:bg-orange-700 transition"

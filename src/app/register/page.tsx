@@ -299,6 +299,13 @@ export default function RegisterPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // BUG-008 FIX: Solo permitir submit desde el último paso (6 - Documentos)
+    // Evita que Enter en pasos anteriores envíe el formulario prematuramente
+    if (currentStep < 6) {
+      handleNext();
+      return;
+    }
+
     if (!validateStep(1)) {
       setCurrentStep(1);
       return;

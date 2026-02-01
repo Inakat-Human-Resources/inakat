@@ -1,7 +1,7 @@
 // RUTA: src/components/sections/companies/FormRegisterForQuotationSection.tsx
 'use client';
 
-import React, { useState, useRef, FormEvent, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 
 const libraries: ("places")[] = ["places"];
@@ -79,6 +79,18 @@ const FormRegisterForQuotationSection = () => {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries,
   });
+
+  // BUG-012 FIX: Scroll automático cuando se navega con anchor #formulario-registro
+  useEffect(() => {
+    if (window.location.hash === '#formulario-registro') {
+      const element = document.getElementById('formulario-registro');
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+      }
+    }
+  }, []);
 
   // Validaciones mejoradas
   const validateName = (value: string) =>
@@ -447,7 +459,7 @@ const FormRegisterForQuotationSection = () => {
 
   return (
     <section
-      id="register"
+      id="formulario-registro"
       className="bg-title-dark text-white bg-center py-20"
       suppressHydrationWarning
     >
