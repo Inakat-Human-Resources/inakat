@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   MapPin,
@@ -13,6 +13,7 @@ import {
   ChevronDown  // FIX-05: Para dropdown de ordenamiento
 } from 'lucide-react';
 import ApplyJobModal from './ApplyJobModal';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface Job {
   id: number;
@@ -28,6 +29,7 @@ interface Job {
   status: string;
   createdAt: string;
   profile?: string;  // FIX-06: Campo de especialidad para filtro
+  logoUrl?: string | null; // FEAT-1: Logo de empresa
 }
 
 interface User {
@@ -62,6 +64,19 @@ const SearchPositionsSection = () => {
   // Modal de aplicación
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applicationSuccess, setApplicationSuccess] = useState(false);
+
+  // Ref para cerrar dropdown al hacer click fuera
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
+        setShowSortDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Cargar usuario actual
   useEffect(() => {
@@ -362,8 +377,8 @@ const SearchPositionsSection = () => {
 
         {/* Filtros de estado y ordenamiento */}
         <div className="flex justify-between items-center mb-6">
-          {/* FIX-04: Solo mostrar estos botones si hay sesión */}
-          {user && (
+          {/* FIX-04: Solo mostrar estos botones si es candidato logueado */}
+          {user && user.role === 'candidate' && (
             <div className="flex gap-2">
               <button className="text-black font-bold border-2 border-button-green px-6 py-2 rounded-full bg-button-green text-white">
                 Guardados
@@ -376,19 +391,19 @@ const SearchPositionsSection = () => {
               </button>
             </div>
           )}
-          {!user && <div />} {/* Spacer cuando no hay user */}
+          {(!user || user.role !== 'candidate') && <div />} {/* Spacer cuando no es candidato */}
 
-          {/* FIX-05: Dropdown funcional de ordenamiento */}
-          <div className="relative">
+          {/* FIX-05: Dropdown funcional de ordenamiento con click-outside */}
+          <div className="relative" ref={sortDropdownRef}>
             <button
               onClick={() => setShowSortDropdown(!showSortDropdown)}
               className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green flex items-center gap-2"
             >
-              Ordenar por
+              {{ newest: 'Más reciente', oldest: 'Menos reciente', az: 'A → Z', za: 'Z → A' }[sortOrder] || 'Ordenar por'}
               <ChevronDown size={16} />
             </button>
             {showSortDropdown && (
-              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border z-10 min-w-[200px]">
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border z-50 min-w-[200px]">
                 {[
                   { value: 'newest', label: 'Más reciente' },
                   { value: 'oldest', label: 'Menos reciente' },
@@ -441,24 +456,35 @@ const SearchPositionsSection = () => {
                   }`}
                   onClick={() => setSelectedJob(job)}
                 >
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
-                    <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
-                  </div>
+                  {/* Solo mostrar iconos de guardar/menú para candidatos */}
+                  {user && user.role === 'candidate' && (
+                    <div className="absolute top-4 right-4 flex gap-2">
+                      <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
+                      <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
+                    </div>
+                  )}
 
                   <p className="text-gray-500 text-sm">
                     {getTimeSincePosted(job.createdAt)}
                   </p>
 
-                  <h3 className="text-xl font-bold text-black mt-2">
-                    {job.title}
-                  </h3>
-
-                  <p className="text-gray-600">
-                    {job.company}{' '}
-                    {job.companyRating && `★ ${job.companyRating}`}
-                  </p>
-                  <p className="text-gray-600">{job.location}</p>
+                  <div className="flex items-start gap-3 mt-2">
+                    <CompanyLogo
+                      logoUrl={job.logoUrl}
+                      companyName={job.company}
+                      size="md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-black">
+                        {job.title}
+                      </h3>
+                      <p className="text-gray-600">
+                        {job.company}{' '}
+                        {job.companyRating && `★ ${job.companyRating}`}
+                      </p>
+                      <p className="text-gray-600">{job.location}</p>
+                    </div>
+                  </div>
 
                   <p className="font-bold text-black mt-2">Salario:</p>
                   <p className="font-bold text-black">{job.salary}</p>
@@ -476,26 +502,37 @@ const SearchPositionsSection = () => {
             {/* Columna Derecha: Detalle */}
             <div className="w-full md:w-1/2">
               {selectedJob && (
-                <div className="bg-white p-6 rounded-lg shadow-lg sticky top-4">
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
-                    <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
-                  </div>
+                <div className="bg-white p-6 rounded-lg shadow-lg sticky top-4 relative">
+                  {/* Solo mostrar iconos de guardar/menú para candidatos */}
+                  {user && user.role === 'candidate' && (
+                    <div className="absolute top-4 right-4 flex gap-2">
+                      <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
+                      <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
+                    </div>
+                  )}
 
                   <p className="text-gray-500 text-sm">
                     {getTimeSincePosted(selectedJob.createdAt)}
                   </p>
 
-                  <h2 className="text-2xl font-bold text-black mt-2">
-                    {selectedJob.title}
-                  </h2>
-
-                  <p className="text-gray-600 mt-2">
-                    {selectedJob.company}{' '}
-                    {selectedJob.companyRating &&
-                      `★ ${selectedJob.companyRating}`}
-                  </p>
-                  <p className="text-gray-600">{selectedJob.location}</p>
+                  <div className="flex items-start gap-4 mt-2">
+                    <CompanyLogo
+                      logoUrl={selectedJob.logoUrl}
+                      companyName={selectedJob.company}
+                      size="lg"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl font-bold text-black">
+                        {selectedJob.title}
+                      </h2>
+                      <p className="text-gray-600 mt-1">
+                        {selectedJob.company}{' '}
+                        {selectedJob.companyRating &&
+                          `★ ${selectedJob.companyRating}`}
+                      </p>
+                      <p className="text-gray-600">{selectedJob.location}</p>
+                    </div>
+                  </div>
 
                   <p className="font-bold text-black mt-4">Salario:</p>
                   <p className="font-bold text-black">{selectedJob.salary}</p>
@@ -527,8 +564,17 @@ const SearchPositionsSection = () => {
                     </>
                   )}
 
-                  {/* BOTÓN POSTULARME - Solo para candidatos */}
-                  {canApply ? (
+                  {/* BOTÓN POSTULARME - Tres estados: no logueado, candidato, otros roles */}
+                  {!user ? (
+                    // No logueado → botón que lleva a login
+                    <button
+                      onClick={() => window.location.href = '/login?redirect=/talents'}
+                      className="w-full bg-button-orange text-white font-bold py-3 rounded-lg mt-6 hover:bg-orange-600 transition-colors"
+                    >
+                      INICIA SESIÓN PARA POSTULARTE
+                    </button>
+                  ) : canApply ? (
+                    // Candidato logueado → aplicar normal
                     <button
                       onClick={handleApplyClick}
                       className="w-full bg-button-green text-white font-bold py-3 rounded-lg mt-6 hover:bg-green-700 transition-colors"
@@ -536,6 +582,7 @@ const SearchPositionsSection = () => {
                       POSTULARME
                     </button>
                   ) : (
+                    // Otros roles → mensaje informativo
                     <div className="mt-6 p-4 bg-gray-100 rounded-lg text-center text-gray-600">
                       {user?.role === 'company' && '🏢 Las empresas no pueden aplicar a vacantes'}
                       {user?.role === 'admin' && '⚙️ Los administradores no pueden aplicar a vacantes'}

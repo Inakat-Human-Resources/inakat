@@ -34,6 +34,10 @@ interface Application {
     company: string;
     location: string;
     status: string;
+    assignment: {
+      id: number;
+      recruiter: { id: number; nombre: string; apellidoPaterno: string } | null;
+    } | null;
     user: {
       nombre: string;
       email: string;
@@ -114,7 +118,11 @@ export default function DirectApplicationsPage() {
       if (result.success) {
         // Remover la aplicación de la lista
         setApplications((prev) => prev.filter((app) => app.id !== applicationId));
-        setNotification({ type: 'success', message: result.message });
+        // Mostrar warning si la vacante no tiene reclutador asignado
+        setNotification({
+          type: result.needsAssignment ? 'error' : 'success',
+          message: result.message
+        });
       } else {
         setNotification({ type: 'error', message: result.error || 'Error al actualizar' });
       }
@@ -298,6 +306,24 @@ export default function DirectApplicationsPage() {
                       • {app.job.location}
                     </p>
                   </div>
+
+                  {/* Indicador de asignación de reclutador */}
+                  {!app.job.assignment ? (
+                    <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-4 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                      <span className="text-sm text-yellow-800">
+                        ⚠️ Esta vacante no tiene reclutador asignado.{' '}
+                        <a href="/admin/assign-candidates" className="underline font-semibold hover:text-yellow-900">
+                          Asignar ahora →
+                        </a>
+                      </span>
+                    </div>
+                  ) : app.job.assignment.recruiter ? (
+                    <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      <span>Reclutador asignado: <span className="font-medium text-gray-700">{app.job.assignment.recruiter.nombre} {app.job.assignment.recruiter.apellidoPaterno}</span></span>
+                    </div>
+                  ) : null}
 
                   {/* Carta de presentación */}
                   {app.coverLetter && (

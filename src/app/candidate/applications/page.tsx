@@ -7,7 +7,6 @@ import Link from 'next/link';
 import {
   Briefcase,
   MapPin,
-  Building2,
   Clock,
   CheckCircle,
   XCircle,
@@ -17,6 +16,7 @@ import {
   DollarSign,
   ExternalLink
 } from 'lucide-react';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface Application {
   id: number;
@@ -39,6 +39,7 @@ interface Application {
     status: string;
     profile: string | null;
     seniority: string | null;
+    logoUrl?: string | null; // FEAT-1: Logo de empresa
   };
 }
 
@@ -229,15 +230,19 @@ export default function CandidateApplicationsPage() {
                     {/* Info de la vacante */}
                     <div className="flex-1">
                       <div className="flex items-start gap-3">
-                        {getStatusIcon(app.status)}
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {app.job.title}
-                          </h3>
-                          <div className="flex items-center gap-2 text-gray-600 mt-1">
-                            <Building2 size={16} />
-                            <span>{app.job.company}</span>
+                        <CompanyLogo
+                          logoUrl={app.job.logoUrl}
+                          companyName={app.job.company}
+                          size="md"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {app.job.title}
+                            </h3>
+                            {getStatusIcon(app.status)}
                           </div>
+                          <p className="text-gray-600 mt-1">{app.job.company}</p>
                         </div>
                       </div>
 

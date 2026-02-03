@@ -216,7 +216,8 @@ export async function POST(request: Request) {
       notas,
       experiences, // Array de experiencias
       documents, // Array de documentos
-      password // Opcional: para crear cuenta de candidato
+      password, // Opcional: para crear cuenta de candidato
+      fotoUrl // FEAT-2: Foto de perfil del candidato
     } = body;
 
     // Validaciones básicas
@@ -332,6 +333,7 @@ export async function POST(request: Request) {
         status: 'available', // Explícitamente establecer status para evitar problemas
         notas: notas || null,
         añosExperiencia,
+        fotoUrl: fotoUrl || null, // FEAT-2: Foto de perfil
         userId, // Vincular con usuario si se creó cuenta
         experiences:
           experiences && experiences.length > 0

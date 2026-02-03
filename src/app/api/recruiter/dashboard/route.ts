@@ -134,6 +134,7 @@ export async function GET(request: Request) {
             source: true,
             notas: true,
             educacion: true, // FEATURE: Educación múltiple
+            fotoUrl: true, // FEAT-2: Foto de perfil
             experiences: {
               orderBy: { fechaInicio: 'desc' }
             },

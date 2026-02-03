@@ -6,6 +6,21 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { calculateJobCreditCost } from '@/lib/pricing';
 
+// Función para sanitizar vacantes confidenciales en vistas públicas
+function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
+  if (!job.isConfidential || isOwnerOrAdmin) {
+    return job;
+  }
+
+  // Ocultar datos sensibles para vacantes confidenciales
+  return {
+    ...job,
+    company: 'Empresa Confidencial',
+    location: job.location ? job.location.split(',')[1]?.trim() || 'México' : 'México', // Solo estado/país
+    logoUrl: null, // Ocultar logo en vacantes confidenciales
+  };
+}
+
 // GET - Listar todas las vacantes activas
 export async function GET(request: Request) {
   try {
@@ -18,6 +33,9 @@ export async function GET(request: Request) {
     const profile = searchParams.get('profile') || '';
     const userId = searchParams.get('userId') || '';
     const includeDrafts = searchParams.get('includeDrafts') === 'true';
+
+    // Determinar si es vista de propietario (para no sanitizar)
+    const isOwnerView = !!userId;
 
     const where: any = {};
 
@@ -72,14 +90,28 @@ export async function GET(request: Request) {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { applications: true } }
+        _count: { select: { applications: true } },
+        user: {
+          select: {
+            companyRequest: {
+              select: { logoUrl: true }
+            }
+          }
+        }
       }
+    });
+
+    // Transformar para incluir logoUrl directamente y sanitizar
+    const sanitizedJobs = jobs.map(job => {
+      const logoUrl = job.user?.companyRequest?.logoUrl || null;
+      const { user, ...jobWithoutUser } = job;
+      return sanitizeConfidentialJob({ ...jobWithoutUser, logoUrl }, isOwnerView);
     });
 
     return NextResponse.json({
       success: true,
-      data: jobs,
-      count: jobs.length
+      data: sanitizedJobs,
+      count: sanitizedJobs.length
     });
   } catch {
     return NextResponse.json(
@@ -135,7 +167,9 @@ export async function POST(request: Request) {
       responsabilidades,
       resultadosEsperados,
       valoresActitudes,
-      informacionAdicional
+      informacionAdicional,
+      // Vacante confidencial
+      isConfidential
     } = body;
 
     if (
@@ -313,7 +347,9 @@ export async function POST(request: Request) {
         responsabilidades: responsabilidades || null,
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
-        informacionAdicional: informacionAdicional || null
+        informacionAdicional: informacionAdicional || null,
+        // Vacante confidencial
+        isConfidential: isConfidential || false
       }
     });
 

@@ -33,7 +33,15 @@ export async function GET(request: NextRequest) {
             salary: true,
             jobType: true,
             workMode: true,
-            status: true
+            status: true,
+            isConfidential: true,
+            user: {
+              select: {
+                companyRequest: {
+                  select: { logoUrl: true }
+                }
+              }
+            }
           }
         }
       },
@@ -42,22 +50,55 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Sanitizar vacantes confidenciales y agregar logoUrl
+    const sanitizedApplications = applications.map(app => {
+      const logoUrl = app.job?.user?.companyRequest?.logoUrl || null;
+      // Remover user anidado del job
+      const jobWithoutUser = app.job ? {
+        id: app.job.id,
+        title: app.job.title,
+        company: app.job.company,
+        location: app.job.location,
+        salary: app.job.salary,
+        jobType: app.job.jobType,
+        workMode: app.job.workMode,
+        status: app.job.status,
+        isConfidential: app.job.isConfidential,
+        logoUrl: app.job.isConfidential ? null : logoUrl, // Ocultar logo si es confidencial
+      } : null;
+
+      if (app.job?.isConfidential) {
+        return {
+          ...app,
+          job: {
+            ...jobWithoutUser,
+            company: 'Empresa Confidencial',
+            location: app.job.location?.includes(',')
+              ? app.job.location.split(',').pop()?.trim() || app.job.location
+              : app.job.location,
+            logoUrl: null, // Asegurar que el logo esté oculto
+          }
+        };
+      }
+      return { ...app, job: jobWithoutUser };
+    });
+
     // Calcular estadísticas
     const stats = {
-      total: applications.length,
-      pending: applications.filter((app) => app.status === 'pending').length,
-      reviewing: applications.filter((app) => app.status === 'reviewing')
+      total: sanitizedApplications.length,
+      pending: sanitizedApplications.filter((app) => app.status === 'pending').length,
+      reviewing: sanitizedApplications.filter((app) => app.status === 'reviewing')
         .length,
-      interviewed: applications.filter((app) => app.status === 'interviewed')
+      interviewed: sanitizedApplications.filter((app) => app.status === 'interviewed')
         .length,
-      accepted: applications.filter((app) => app.status === 'accepted').length,
-      rejected: applications.filter((app) => app.status === 'rejected').length
+      accepted: sanitizedApplications.filter((app) => app.status === 'accepted').length,
+      rejected: sanitizedApplications.filter((app) => app.status === 'rejected').length
     };
 
     return NextResponse.json({
       success: true,
       data: {
-        applications,
+        applications: sanitizedApplications,
         stats
       }
     });

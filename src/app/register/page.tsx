@@ -73,7 +73,7 @@ const STEPS = [
 ];
 
 const SENIORITIES = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
-const NIVELES_ESTUDIO = ['Preparatoria', 'Técnico', 'Licenciatura', 'Maestría', 'Doctorado'];
+const NIVELES_ESTUDIO = ['Preparatoria', 'Técnico', 'Licenciatura', 'Posgrado'];
 
 export default function RegisterPage() {
   // Estado de navegación
@@ -96,6 +96,10 @@ export default function RegisterPage() {
   const [telefono, setTelefono] = useState('');
   const [sexo, setSexo] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
+  // FEAT-2: Foto de perfil
+  const [fotoUrl, setFotoUrl] = useState('');
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoUploading, setFotoUploading] = useState(false);
 
   // Paso 2: Educación (FEATURE: Educación múltiple)
   const [educations, setEducations] = useState<Education[]>([]);
@@ -156,6 +160,32 @@ export default function RegisterPage() {
       setErrors(prev => ({ ...prev, cvUrl: 'Error al subir el archivo' }));
     } finally {
       setCvUploading(false);
+    }
+  };
+
+  // FEAT-2: Manejar upload de foto de perfil
+  const handleFotoUpload = async (file: File) => {
+    // Validar tamaño (máximo 2MB para fotos)
+    if (file.size > 2 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, fotoUrl: 'La foto no debe exceder 2MB' }));
+      return;
+    }
+    // Validar tipo de archivo
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setErrors(prev => ({ ...prev, fotoUrl: 'Solo se permiten imágenes JPG, PNG o WebP' }));
+      return;
+    }
+    setFotoUploading(true);
+    setErrors(prev => { const { fotoUrl: _, ...rest } = prev; return rest; });
+    try {
+      const url = await uploadFile(file);
+      setFotoUrl(url);
+      setFotoFile(file);
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      setErrors(prev => ({ ...prev, fotoUrl: 'Error al subir la foto' }));
+    } finally {
+      setFotoUploading(false);
     }
   };
 
@@ -375,6 +405,7 @@ export default function RegisterPage() {
           telefono: telefono || undefined,
           sexo: sexo || undefined,
           fechaNacimiento: fechaNacimiento || undefined,
+          fotoUrl: fotoUrl || undefined, // FEAT-2: Foto de perfil
           // Educación (FEATURE: Educación múltiple)
           educacion: educations.filter(e => e.institucion || e.carrera || e.nivel),
           // Profesional
@@ -551,6 +582,41 @@ export default function RegisterPage() {
               {/* Paso 1: Datos Personales */}
               {currentStep === 1 && (
                 <div className="space-y-4">
+                  {/* FEAT-2: Foto de perfil */}
+                  <div className="flex flex-col items-center mb-4">
+                    <label className="block text-white text-sm mb-2">Foto de perfil (opcional)</label>
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full overflow-hidden bg-white/20 border-2 border-white/40 flex items-center justify-center">
+                        {fotoUrl ? (
+                          <img src={fotoUrl} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-10 h-10 text-white/50" />
+                        )}
+                      </div>
+                      <label className="absolute bottom-0 right-0 w-8 h-8 bg-button-green rounded-full flex items-center justify-center cursor-pointer hover:bg-green-700 shadow-lg">
+                        {fotoUploading ? (
+                          <Loader2 className="w-4 h-4 text-white animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4 text-white" />
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFotoUpload(file);
+                          }}
+                          disabled={fotoUploading}
+                        />
+                      </label>
+                    </div>
+                    {errors.fotoUrl && (
+                      <p className="text-red-300 text-xs mt-1">{errors.fotoUrl}</p>
+                    )}
+                    <p className="text-white/60 text-xs mt-1">JPG, PNG o WebP (máx 2MB)</p>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-white text-sm mb-1">Nombre *</label>

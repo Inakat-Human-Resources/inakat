@@ -33,6 +33,14 @@ export async function GET(request: Request) {
             company: true,
             location: true,
             status: true,
+            assignment: {
+              select: {
+                id: true,
+                recruiter: {
+                  select: { id: true, nombre: true, apellidoPaterno: true }
+                }
+              }
+            },
             user: {
               select: {
                 nombre: true,
@@ -131,6 +139,22 @@ export async function PUT(request: Request) {
         }
       }
     });
+
+    // Verificar si la vacante tiene reclutador asignado cuando se mueve a reviewing
+    if (newStatus === 'reviewing') {
+      const jobAssignment = await prisma.jobAssignment.findUnique({
+        where: { jobId: existingApplication.jobId }
+      });
+
+      if (!jobAssignment) {
+        return NextResponse.json({
+          success: true,
+          message: 'Aplicación movida al proceso de revisión. ⚠️ Esta vacante no tiene reclutador asignado aún. Asigna uno desde Gestión de Asignaciones.',
+          data: updatedApplication,
+          needsAssignment: true
+        });
+      }
+    }
 
     const statusMessages: Record<string, string> = {
       reviewing: 'Aplicación movida al proceso de revisión',

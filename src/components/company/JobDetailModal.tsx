@@ -2,7 +2,8 @@
 
 'use client';
 
-import { X, MapPin, DollarSign, Briefcase, Calendar, Users, Building, GraduationCap, Target, CheckCircle, Star, Info } from 'lucide-react';
+import { X, MapPin, DollarSign, Briefcase, Calendar, Users, GraduationCap, Target, CheckCircle, Star, Info } from 'lucide-react';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface Job {
   id: number;
@@ -25,6 +26,7 @@ interface Job {
   valoresActitudes?: string;
   informacionAdicional?: string;
   createdAt: string;
+  logoUrl?: string | null; // FEAT-1: Logo de empresa
   _count?: {
     applications: number;
   };
@@ -82,14 +84,18 @@ export default function JobDetailModal({ job, isOpen, onClose }: JobDetailModalP
       <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-2xl font-bold text-gray-900">{job.title}</h2>
-              {getStatusBadge(job.status)}
-            </div>
-            <div className="flex items-center gap-2 text-gray-600">
-              <Building className="w-4 h-4" />
-              <span>{job.company}</span>
+          <div className="flex items-start gap-4 flex-1">
+            <CompanyLogo
+              logoUrl={job.logoUrl}
+              companyName={job.company}
+              size="xl"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-2xl font-bold text-gray-900">{job.title}</h2>
+                {getStatusBadge(job.status)}
+              </div>
+              <p className="text-gray-600">{job.company}</p>
             </div>
           </div>
           <button

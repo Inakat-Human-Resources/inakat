@@ -10,20 +10,15 @@ import {
   Users,
   Building2,
   FileText,
-  TrendingUp,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Eye,
-  ArrowRight,
   Clock,
   CheckCircle,
   XCircle,
   AlertCircle,
   ArrowUpDown,
-  DollarSign,
-  Settings,
-  Layers,
   X,
   MapPin,
   Calendar,
@@ -399,109 +394,6 @@ export default function AdminDashboardPage() {
               <Building2 className="text-orange-500" size={40} />
             </div>
           </div>
-        </div>
-
-        {/* Accesos rápidos - Grid de 2 columnas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          <Link
-            href="/admin/requests"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-orange-100 rounded-lg flex-shrink-0">
-              <Building2 className="text-orange-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Solicitudes</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Empresas</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/candidates"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-green-100 rounded-lg flex-shrink-0">
-              <Users className="text-green-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Candidatos</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Banco talentos</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/assignments"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3 ring-2 ring-blue-200"
-          >
-            <div className="p-2 md:p-3 bg-blue-100 rounded-lg flex-shrink-0">
-              <Briefcase className="text-blue-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Gestión Vacantes</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Equipo y candidatos</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/users"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-purple-100 rounded-lg flex-shrink-0">
-              <Users className="text-purple-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Usuarios</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Internos</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/pricing"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-emerald-100 rounded-lg flex-shrink-0">
-              <DollarSign className="text-emerald-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Precios</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Matriz créditos</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/credit-packages"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-cyan-100 rounded-lg flex-shrink-0">
-              <Layers className="text-cyan-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Paquetes</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Créditos</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          <Link
-            href="/admin/specialties"
-            className="bg-white rounded-lg shadow p-3 md:p-4 hover:shadow-md transition-shadow flex items-center gap-2 md:gap-3"
-          >
-            <div className="p-2 md:p-3 bg-indigo-100 rounded-lg flex-shrink-0">
-              <Settings className="text-indigo-600" size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-sm md:text-base truncate">Perfiles</p>
-              <p className="text-xs md:text-sm text-gray-500 truncate">Especialidades</p>
-            </div>
-            <ArrowRight className="hidden sm:block ml-auto text-gray-400 flex-shrink-0" size={18} />
-          </Link>
-
-          {/* Link "Asignaciones Vacantes" consolidado en "Gestión Vacantes" arriba */}
         </div>
 
         {/* Sección de vacantes */}

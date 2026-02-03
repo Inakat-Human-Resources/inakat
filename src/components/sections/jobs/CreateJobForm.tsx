@@ -16,7 +16,8 @@ import {
   X,
   Plus,
   CheckCircle,
-  Clock
+  Clock,
+  EyeOff
 } from 'lucide-react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 
@@ -84,7 +85,9 @@ const CreateJobForm = () => {
     responsabilidades: '',
     resultadosEsperados: '',
     valoresActitudes: '',
-    informacionAdicional: ''
+    informacionAdicional: '',
+    // Vacante confidencial
+    isConfidential: false
   });
 
   // Opciones de nivel de estudios
@@ -94,8 +97,7 @@ const CreateJobForm = () => {
     'Secundaria',
     'Preparatoria/Bachillerato',
     'Licenciatura',
-    'Maestría',
-    'Doctorado'
+    'Posgrado'
   ];
 
   // Estado para error de salario
@@ -321,7 +323,8 @@ const CreateJobForm = () => {
           responsabilidades: job.responsabilidades || '',
           resultadosEsperados: job.resultadosEsperados || '',
           valoresActitudes: job.valoresActitudes || '',
-          informacionAdicional: job.informacionAdicional || ''
+          informacionAdicional: job.informacionAdicional || '',
+          isConfidential: job.isConfidential || false
         });
       } else {
         setLoadError('Error al cargar los datos de la vacante.');
@@ -657,7 +660,8 @@ const CreateJobForm = () => {
       responsabilidades: '',
       resultadosEsperados: '',
       valoresActitudes: '',
-      informacionAdicional: ''
+      informacionAdicional: '',
+      isConfidential: false
     });
     setCalculatedCost(0);
     setMinSalaryRequired(null);
@@ -1454,6 +1458,41 @@ const CreateJobForm = () => {
             placeholder="Aspectos técnicos, contextuales o estratégicos adicionales..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
           />
+        </div>
+
+        {/* Vacante Confidencial */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.isConfidential}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  isConfidential: e.target.checked
+                }))
+              }
+              className="mt-1 h-5 w-5 rounded border-gray-300 text-button-orange focus:ring-button-orange"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <EyeOff className="text-amber-600" size={20} />
+                <span className="font-semibold text-gray-900">
+                  Vacante Confidencial
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Oculta el nombre de la empresa y la dirección exacta en la publicación pública.
+                Los candidatos verán &quot;Empresa Confidencial&quot; y solo la ciudad/estado.
+              </p>
+              {formData.isConfidential && (
+                <div className="mt-2 p-2 bg-amber-100 rounded text-sm text-amber-800">
+                  <strong>Vista pública:</strong> Los candidatos verán &quot;Empresa Confidencial&quot;
+                  en lugar de &quot;{formData.company || 'tu empresa'}&quot;
+                </div>
+              )}
+            </div>
+          </label>
         </div>
 
         {/* Botones de acción - Stack en móvil, row en desktop */}

@@ -3,6 +3,7 @@
 
 import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
+import { Building2 } from 'lucide-react';
 
 const libraries: ("places")[] = ["places"];
 const mapContainerStyle = {
@@ -66,9 +67,14 @@ const FormRegisterForQuotationSection = () => {
     type: 'success' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const fileInputIdRef = useRef<HTMLInputElement>(null);
   const fileInputDocRef = useRef<HTMLInputElement>(null);
+
+  // FEAT-1b: Estados para logo de empresa
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // Estados para Google Maps
   const [mapCenter, setMapCenter] = useState(defaultCenter);
@@ -385,6 +391,20 @@ const FormRegisterForQuotationSection = () => {
       }
       const docData = await docUploadRes.json();
 
+      // FEAT-1b: Subir logo si existe
+      let logoUrl = null;
+      if (logoFile) {
+        const logoFormData = new FormData();
+        logoFormData.append('file', logoFile);
+        const logoRes = await fetch('/api/upload', { method: 'POST', body: logoFormData });
+        if (logoRes.ok) {
+          const logoData = await logoRes.json();
+          if (logoData.url) {
+            logoUrl = logoData.url;
+          }
+        }
+      }
+
       // Concatenar dirección para enviar al backend
       const direccionCompleta = `${formData.calle}, ${formData.colonia}, ${formData.ciudad}, CP ${formData.codigoPostal}`;
 
@@ -404,6 +424,7 @@ const FormRegisterForQuotationSection = () => {
           direccionEmpresa: direccionCompleta,
           identificacionUrl: idData.url,
           documentosConstitucionUrl: docData.url,
+          logoUrl, // FEAT-1b: Logo de empresa
           password: formData.password
         })
       });
@@ -411,11 +432,7 @@ const FormRegisterForQuotationSection = () => {
       const data = await response.json();
 
       if (data.success) {
-        setSubmitStatus({
-          type: 'success',
-          message: '¡Solicitud enviada exitosamente!'
-        });
-
+        // Limpiar el formulario
         setFormData({
           nombre: '',
           apellidoPaterno: '',
@@ -435,9 +452,14 @@ const FormRegisterForQuotationSection = () => {
           codigoPostal: '',
           documentosConstitucion: null
         });
-
         setErrors({});
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setSubmitStatus({ type: null, message: '' });
+        // FEAT-1b: Limpiar logo
+        setLogoFile(null);
+        setLogoPreview(null);
+
+        // Mostrar modal de éxito
+        setShowSuccessModal(true);
       } else {
         throw new Error(data.error || 'Error al enviar solicitud');
       }
@@ -469,14 +491,8 @@ const FormRegisterForQuotationSection = () => {
             ÚNETE HOY Y DESCUBRE CÓMO PODEMOS TRANSFORMAR TU EQUIPO
           </h2>
 
-          {submitStatus.type && (
-            <div
-              className={`mb-6 p-4 rounded-lg ${
-                submitStatus.type === 'success'
-                  ? 'bg-green-100 text-green-800 border-2 border-green-500'
-                  : 'bg-red-100 text-red-800 border-2 border-red-500'
-              }`}
-            >
+          {submitStatus.type === 'error' && (
+            <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500">
               <p className="font-semibold">{submitStatus.message}</p>
             </div>
           )}
@@ -644,6 +660,44 @@ const FormRegisterForQuotationSection = () => {
               <div>
                 <h3 className="font-bold text-lg mb-4">DATOS DE LA EMPRESA</h3>
                 <div className="space-y-4">
+                  {/* FEAT-1b: Logo de la empresa */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Logo de la empresa <span className="text-gray-500 font-normal">(opcional)</span>
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
+                        {logoPreview ? (
+                          <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <Building2 className="w-8 h-8 text-gray-400" />
+                        )}
+                      </div>
+                      <div>
+                        <label className="cursor-pointer bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 inline-block">
+                          {logoFile ? 'Cambiar logo' : 'Subir logo'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 2 * 1024 * 1024) {
+                                  alert('El logo no debe pesar más de 2MB');
+                                  return;
+                                }
+                                setLogoFile(file);
+                                setLogoPreview(URL.createObjectURL(file));
+                              }
+                            }}
+                          />
+                        </label>
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG o WebP. Máx 2MB.</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <input
                       type="text"
@@ -891,6 +945,49 @@ const FormRegisterForQuotationSection = () => {
           </form>
         </div>
       </div>
+
+      {/* Modal de éxito */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center transform animate-in fade-in zoom-in duration-300">
+            {/* Ícono de check verde */}
+            <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+              <svg
+                className="w-12 h-12 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+
+            {/* Título */}
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+              ¡Solicitud enviada exitosamente!
+            </h3>
+
+            {/* Mensaje */}
+            <p className="text-gray-600 mb-8 text-lg">
+              Tu solicitud ha sido recibida. Nuestro equipo la revisará y te contactaremos pronto.
+            </p>
+
+            {/* Botón */}
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-button-green text-white font-bold py-4 px-8 rounded-xl hover:bg-green-700 transition-colors text-lg"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

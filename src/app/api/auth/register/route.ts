@@ -77,7 +77,10 @@ const registerSchema = z.object({
         fileUrl: z.string()
       })
     )
-    .optional()
+    .optional(),
+
+  // FEAT-2: Foto de perfil del candidato
+  fotoUrl: z.string().optional()
 });
 
 // Función para calcular años de experiencia
@@ -139,7 +142,8 @@ export async function POST(request: Request) {
       linkedinUrl,
       portafolioUrl,
       experiences,
-      documents
+      documents,
+      fotoUrl // FEAT-2: Foto de perfil
     } = validation.data;
 
     // Verificar si el email ya existe en User
@@ -219,6 +223,7 @@ export async function POST(request: Request) {
           source: 'registro',
           añosExperiencia,
           status: 'available',
+          fotoUrl: fotoUrl || null, // FEAT-2: Foto de perfil
           // Crear experiencias anidadas
           experiences:
             experiences && experiences.length > 0

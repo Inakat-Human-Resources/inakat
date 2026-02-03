@@ -78,6 +78,7 @@ interface ProfileData {
     linkedinUrl?: string;
     portafolioUrl?: string;
     cvUrl?: string;
+    fotoUrl?: string; // FEAT-2: Foto de perfil
     experiences?: Experience[];
     educacion?: Education[];
   };
@@ -106,6 +107,10 @@ export default function ProfilePage() {
   const [telefono, setTelefono] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [sexo, setSexo] = useState('');
+  // FEAT-2: Foto de perfil
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   // Candidate data - Datos profesionales
   const [añosExperiencia, setAñosExperiencia] = useState<number | ''>('');
@@ -204,6 +209,7 @@ export default function ProfilePage() {
           setLinkedinUrl(c.linkedinUrl || '');
           setPortafolioUrl(c.portafolioUrl || '');
           setCvUrl(c.cvUrl || null);
+          setFotoUrl(c.fotoUrl || null); // FEAT-2: Foto de perfil
           setExperiences(c.experiences || []);
           setEducacion(c.educacion || []);
         }
@@ -502,6 +508,67 @@ export default function ProfilePage() {
     }
   };
 
+  // FEAT-2: Subir foto de perfil
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamaño (máximo 2MB para fotos)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('La foto no debe exceder 2MB');
+      return;
+    }
+    // Validar tipo de archivo
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Solo se permiten imágenes JPG, PNG o WebP');
+      return;
+    }
+
+    try {
+      setUploadingFoto(true);
+      setError('');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const uploadData = await uploadRes.json();
+
+      if (!uploadData.success) {
+        setError(uploadData.error || 'Error al subir foto');
+        return;
+      }
+
+      // Guardar URL de foto en el perfil
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          candidateData: { fotoUrl: uploadData.url }
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setFotoUrl(uploadData.url);
+        setSuccess('Foto actualizada exitosamente');
+      } else {
+        setError(data.error || 'Error al guardar foto');
+      }
+    } catch (err) {
+      setError('Error al subir foto');
+    } finally {
+      setUploadingFoto(false);
+      if (fotoInputRef.current) fotoInputRef.current.value = '';
+    }
+  };
+
   // Documentos adicionales - CRUD
   const handleAddDocument = async () => {
     if (!newDocName.trim()) {
@@ -643,8 +710,34 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
-            <div className="w-14 h-14 md:w-16 md:h-16 bg-button-orange text-white rounded-full flex items-center justify-center text-xl md:text-2xl font-bold flex-shrink-0">
-              {candidateNombre || nombre ? (candidateNombre || nombre).substring(0, 2).toUpperCase() : profile.email.substring(0, 2).toUpperCase()}
+            {/* FEAT-2: Foto de perfil con upload */}
+            <div className="relative">
+              <div className="w-14 h-14 md:w-16 md:h-16 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border-2 border-gray-200 flex-shrink-0">
+                {fotoUrl ? (
+                  <img src={fotoUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xl md:text-2xl font-bold text-button-orange">
+                    {candidateNombre || nombre ? (candidateNombre || nombre).substring(0, 2).toUpperCase() : profile.email.substring(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {profile.candidate && (
+                <label className="absolute bottom-0 right-0 w-6 h-6 bg-button-orange rounded-full flex items-center justify-center cursor-pointer hover:bg-orange-600 shadow-lg">
+                  {uploadingFoto ? (
+                    <Loader2 className="w-3 h-3 text-white animate-spin" />
+                  ) : (
+                    <Upload className="w-3 h-3 text-white" />
+                  )}
+                  <input
+                    type="file"
+                    ref={fotoInputRef}
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleFotoUpload}
+                    disabled={uploadingFoto}
+                  />
+                </label>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate">
@@ -1444,8 +1537,7 @@ export default function ProfilePage() {
                   <option value="Preparatoria">Preparatoria</option>
                   <option value="Técnico">Técnico</option>
                   <option value="Licenciatura">Licenciatura</option>
-                  <option value="Maestría">Maestría</option>
-                  <option value="Doctorado">Doctorado</option>
+                  <option value="Posgrado">Posgrado</option>
                   <option value="Diplomado">Diplomado</option>
                   <option value="Certificación">Certificación</option>
                   <option value="Otro">Otro</option>

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
 import JobDetailModal from '@/components/company/JobDetailModal';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface Job {
   id: number;
@@ -46,6 +47,7 @@ interface DashboardData {
       sitioWeb?: string;
       rfc: string;
       direccionEmpresa: string;
+      logoUrl?: string | null; // FEAT-1b: Logo de empresa
     };
   };
   stats: {
@@ -289,28 +291,44 @@ export default function CompanyDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-custom-beige py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header - Responsive */}
-        <div className="mb-8">
-          {/* Título y bienvenida */}
-          <div className="mb-4">
-            <h1 className="text-2xl md:text-3xl font-bold text-title-dark mb-2">
-              Dashboard de {data.company.companyInfo.nombreEmpresa}
-            </h1>
-            <p className="text-gray-600">Bienvenido, {data.company.userName}</p>
+    <div className="min-h-screen bg-custom-beige">
+      {/* Barra sticky */}
+      <div className="sticky top-0 z-30 bg-custom-beige border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          {/* Fila: izq = logo + título + créditos, der = botón */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CompanyLogo
+                logoUrl={data.company.companyInfo.logoUrl}
+                companyName={data.company.companyInfo.nombreEmpresa}
+                size="lg"
+              />
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-title-dark">
+                  Dashboard de {data.company.companyInfo.nombreEmpresa}
+                </h1>
+                <div className="flex items-center gap-3 mt-1">
+                  <p className="text-gray-600 text-sm">Bienvenido, {data.company.userName}</p>
+                  <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-gray-200">
+                    <Coins className="text-yellow-500" size={16} />
+                    <span className="font-semibold text-gray-700 text-sm">{data.company.credits} créditos</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push('/create-job')}
+              className="px-5 py-2.5 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 shadow-sm"
+            >
+              <Plus size={20} />
+              <span className="hidden sm:inline">Crear Vacante</span>
+            </button>
           </div>
-          {/* Saldo de créditos */}
-          <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 flex items-center justify-center sm:justify-start gap-2 w-fit">
-            <Coins className="text-yellow-500" size={20} />
-            <span className="font-semibold text-gray-700">
-              {data.company.credits} créditos
-            </span>
-          </div>
-          {/* Nota: El botón "CREAR VACANTE" se eliminó de aquí para evitar duplicación.
-              El botón flotante en la esquina inferior derecha cumple esta función. */}
         </div>
+      </div>
 
+      {/* Contenido del dashboard */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Notificación */}
         {notification.type && (
           <div

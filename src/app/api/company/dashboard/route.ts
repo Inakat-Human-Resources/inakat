@@ -48,7 +48,8 @@ export async function GET(request: Request) {
             correoEmpresa: true,
             sitioWeb: true,
             rfc: true,
-            direccionEmpresa: true
+            direccionEmpresa: true,
+            logoUrl: true // FEAT-1b: Logo de empresa
           }
         }
       }

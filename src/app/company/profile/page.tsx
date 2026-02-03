@@ -15,9 +15,11 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  ArrowLeft
+  ArrowLeft,
+  Camera
 } from 'lucide-react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 // Configuración de Google Maps
 const libraries: ("places")[] = ["places"];
@@ -49,6 +51,7 @@ interface CompanyProfile {
   direccionEmpresa: string;
   latitud: number | null;
   longitud: number | null;
+  logoUrl: string | null; // FEAT-1b: Logo de empresa
   status: string;
   createdAt: string;
   approvedAt: string | null;
@@ -76,6 +79,7 @@ export default function CompanyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false); // FEAT-1b
 
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
@@ -150,6 +154,56 @@ export default function CompanyProfilePage() {
           }));
         }
       });
+    }
+  };
+
+  // FEAT-1b: Manejar cambio de logo
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError('El logo no debe pesar más de 2MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+
+      if (!uploadRes.ok) {
+        throw new Error('Error al subir el logo');
+      }
+
+      const uploadData = await uploadRes.json();
+
+      if (uploadData.url) {
+        // Actualizar perfil con nuevo logo
+        const updateRes = await fetch('/api/company/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ logoUrl: uploadData.url }),
+        });
+
+        if (updateRes.ok) {
+          setSuccess('Logo actualizado exitosamente');
+          // Actualizar el perfil local
+          if (profile) {
+            setProfile({ ...profile, logoUrl: uploadData.url });
+          }
+          setTimeout(() => setSuccess(null), 3000);
+        } else {
+          throw new Error('Error al actualizar el perfil');
+        }
+      }
+    } catch (err) {
+      setError('Error al cambiar el logo');
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -384,6 +438,35 @@ export default function CompanyProfilePage() {
               Datos de la Empresa
             </h2>
             <div className="space-y-4">
+              {/* FEAT-1b: Logo de empresa */}
+              <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
+                <div className="relative">
+                  <CompanyLogo
+                    logoUrl={profile?.logoUrl}
+                    companyName={profile?.nombreEmpresa || 'Empresa'}
+                    size="xl"
+                  />
+                  {uploadingLogo && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
+                      <Loader2 className="animate-spin text-white" size={24} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="cursor-pointer bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm hover:bg-gray-50 inline-flex items-center gap-2">
+                    <Camera size={16} />
+                    {profile?.logoUrl ? 'Cambiar logo' : 'Subir logo'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleLogoChange}
+                      disabled={uploadingLogo}
+                    />
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG o WebP. Máx 2MB.</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -53,6 +53,7 @@ export async function GET(request: Request) {
             direccionEmpresa: true,
             latitud: true,
             longitud: true,
+            logoUrl: true, // FEAT-1b: Logo de empresa
             status: true,
             createdAt: true,
             approvedAt: true
@@ -97,6 +98,7 @@ export async function GET(request: Request) {
         direccionEmpresa: user.companyRequest.direccionEmpresa,
         latitud: user.companyRequest.latitud,
         longitud: user.companyRequest.longitud,
+        logoUrl: user.companyRequest.logoUrl, // FEAT-1b: Logo de empresa
         status: user.companyRequest.status,
         createdAt: user.companyRequest.createdAt,
         approvedAt: user.companyRequest.approvedAt
@@ -206,6 +208,11 @@ export async function PUT(request: Request) {
     if (latitud !== undefined) updateData.latitud = latitud;
     if (longitud !== undefined) updateData.longitud = longitud;
 
+    // FEAT-1b: Permitir actualizar logoUrl
+    if (body.logoUrl !== undefined) {
+      updateData.logoUrl = body.logoUrl;
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { success: false, error: 'No hay datos para actualizar' },
@@ -235,7 +242,8 @@ export async function PUT(request: Request) {
         rfc: updated.rfc,
         direccionEmpresa: updated.direccionEmpresa,
         latitud: updated.latitud,
-        longitud: updated.longitud
+        longitud: updated.longitud,
+        logoUrl: updated.logoUrl // FEAT-1b: Logo de empresa
       }
     });
   } catch (error) {

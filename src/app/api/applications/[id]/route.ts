@@ -22,9 +22,17 @@ interface ApplicationWithRelations {
     userId: number | null;
     title: string;
     company: string;
+    location?: string;
+    isConfidential?: boolean;
+    logoUrl?: string | null;
     assignment?: {
       recruiterId: number | null;
       specialistId: number | null;
+    } | null;
+    user?: {
+      companyRequest?: {
+        logoUrl?: string | null;
+      } | null;
     } | null;
   };
   user?: {
@@ -153,10 +161,19 @@ export async function GET(
             userId: true,
             title: true,
             company: true,
+            location: true,
+            isConfidential: true,
             assignment: {
               select: {
                 recruiterId: true,
                 specialistId: true
+              }
+            },
+            user: {
+              select: {
+                companyRequest: {
+                  select: { logoUrl: true }
+                }
               }
             }
           }
@@ -198,7 +215,74 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: application });
+    // Buscar datos del candidato por email para enriquecer la respuesta
+    const candidateProfile = await prisma.candidate.findFirst({
+      where: { email: { equals: application.candidateEmail, mode: 'insensitive' } },
+      select: {
+        id: true,
+        nombre: true,
+        apellidoPaterno: true,
+        apellidoMaterno: true,
+        email: true,
+        telefono: true,
+        sexo: true,
+        fechaNacimiento: true,
+        universidad: true,
+        carrera: true,
+        nivelEstudios: true,
+        añosExperiencia: true,
+        profile: true,
+        seniority: true,
+        cvUrl: true,
+        linkedinUrl: true,
+        portafolioUrl: true,
+        notas: true,
+        educacion: true,
+        fotoUrl: true, // FEAT-2: Foto de perfil
+        experiences: {
+          orderBy: { fechaInicio: 'desc' },
+          take: 5
+        },
+        documents: true
+      }
+    });
+
+    // Agregar logoUrl al job y sanitizar vacantes confidenciales para candidatos/usuarios
+    const logoUrl = application.job?.user?.companyRequest?.logoUrl || null;
+    const isCandidateOrUser = ['candidate', 'user'].includes(currentUser?.role || '');
+    const isConfidential = application.job?.isConfidential;
+
+    // Construir job con logoUrl (sin user anidado)
+    let jobForResponse = application.job ? {
+      id: application.job.id,
+      userId: application.job.userId,
+      title: application.job.title,
+      company: application.job.company,
+      location: application.job.location,
+      isConfidential: application.job.isConfidential,
+      assignment: application.job.assignment,
+      logoUrl: (isCandidateOrUser && isConfidential) ? null : logoUrl,
+    } : null;
+
+    // Sanitizar datos adicionales si es confidencial y es candidato/usuario
+    if (isCandidateOrUser && isConfidential && jobForResponse) {
+      jobForResponse = {
+        ...jobForResponse,
+        company: 'Empresa Confidencial',
+        location: application.job?.location?.includes(',')
+          ? application.job.location.split(',').pop()?.trim() || application.job.location
+          : application.job?.location,
+        logoUrl: null,
+      };
+    }
+
+    const responseData = {
+      ...application,
+      job: jobForResponse,
+      candidateProfile // FEAT-2: Incluir perfil del candidato con fotoUrl
+    };
+
+    return NextResponse.json({ success: true, data: responseData });
 
   } catch (error) {
     console.error('Error fetching application:', error);
@@ -241,6 +325,8 @@ export async function PATCH(
             userId: true,
             title: true,
             company: true,
+            location: true,
+            isConfidential: true,
             assignment: {
               select: {
                 recruiterId: true,
@@ -333,7 +419,9 @@ export async function PATCH(
         job: {
           select: {
             title: true,
-            company: true
+            company: true,
+            location: true,
+            isConfidential: true
           }
         }
       }

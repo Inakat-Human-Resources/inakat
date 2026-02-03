@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, FileText, Image as ImageIcon, ExternalLink, Pencil, Save, XCircle } from 'lucide-react';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface CompanyRequest {
   id: number;
@@ -16,6 +17,7 @@ interface CompanyRequest {
   direccionEmpresa: string;
   identificacionUrl: string | null;
   documentosConstitucionUrl: string | null;
+  logoUrl?: string | null; // FEAT-1b: Logo de empresa
   status: string;
   rejectionReason: string | null;
   createdAt: string;
@@ -222,10 +224,17 @@ const RequestDetailModal = ({
 
           {/* DATOS DE LA EMPRESA */}
           <div className="bg-blue-50 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              🏢 Datos de la Empresa
-              {isEditing && <span className="text-sm font-normal text-blue-600">(Editando)</span>}
-            </h3>
+            <div className="flex items-center gap-3 mb-3">
+              <CompanyLogo
+                logoUrl={request.logoUrl}
+                companyName={request.nombreEmpresa}
+                size="lg"
+              />
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                🏢 Datos de la Empresa
+                {isEditing && <span className="text-sm font-normal text-blue-600">(Editando)</span>}
+              </h3>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-gray-500 uppercase mb-1">Nombre Comercial</p>

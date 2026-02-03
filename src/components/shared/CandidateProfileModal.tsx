@@ -5,7 +5,8 @@
 // FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
 const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 import {
   X,
   Mail,
@@ -28,7 +29,8 @@ import {
   Plus,
   Upload,
   Loader2,
-  Save
+  Save,
+  ClipboardList
 } from 'lucide-react';
 
 // Tipos para el candidato (compatible con Application y Candidate)
@@ -62,6 +64,19 @@ interface Education {
   estatus: string;
 }
 
+// FEAT-5: Notas de evaluación
+interface EvaluationNote {
+  id: number;
+  authorId: number;
+  authorRole: string;
+  applicationId: number;
+  content: string;
+  documentUrl?: string | null;
+  documentName?: string | null;
+  createdAt: string;
+  authorName?: string;
+}
+
 interface CandidateProfile {
   id?: number;
   universidad?: string;
@@ -80,6 +95,7 @@ interface CandidateProfile {
   fechaNacimiento?: string;
   source?: string;
   notas?: string;
+  fotoUrl?: string; // FEAT-2: Foto de perfil
   experiences?: Experience[];
   documents?: CandidateDocument[];
 }
@@ -120,6 +136,7 @@ interface BankCandidate {
   fechaNacimiento?: string | null;
   source?: string | null;
   notas?: string | null;
+  fotoUrl?: string | null; // FEAT-2: Foto de perfil
   status: string;
   experiences?: Experience[];
   documents?: CandidateDocument[];
@@ -142,6 +159,8 @@ interface CandidateProfileModalProps {
   // Agregar documentos (para reclutador/admin)
   canAddDocuments?: boolean;
   onDocumentsUpdated?: () => void;
+  // FEAT-5: Notas de evaluación
+  userRole?: string; // Para saber si puede agregar notas
 }
 
 export default function CandidateProfileModal({
@@ -156,7 +175,8 @@ export default function CandidateProfileModal({
   currentIndex,
   totalCount,
   canAddDocuments = false,
-  onDocumentsUpdated
+  onDocumentsUpdated,
+  userRole
 }: CandidateProfileModalProps) {
   // Estados para agregar documento
   const [showAddDocModal, setShowAddDocModal] = useState(false);
@@ -165,6 +185,93 @@ export default function CandidateProfileModal({
   const [savingDoc, setSavingDoc] = useState(false);
   const [docError, setDocError] = useState('');
   const docInputRef = useRef<HTMLInputElement>(null);
+
+  // FEAT-5: Estados para notas de evaluación
+  const [evaluationNotes, setEvaluationNotes] = useState<EvaluationNote[]>([]);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [noteDocument, setNoteDocument] = useState<File | null>(null);
+  const [savingNote, setSavingNote] = useState(false);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const noteFileRef = useRef<HTMLInputElement>(null);
+
+  // Determinar si el usuario puede agregar notas de evaluación
+  const canAddEvaluationNotes = ['recruiter', 'specialist'].includes(userRole || '');
+  const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin'].includes(userRole || '');
+
+  // FEAT-5: Cargar notas de evaluación cuando se abre el modal
+  useEffect(() => {
+    if (isOpen && application?.id && canViewEvaluationNotes) {
+      fetchEvaluationNotes(application.id);
+    }
+    // Limpiar notas cuando se cierra
+    if (!isOpen) {
+      setEvaluationNotes([]);
+      setNewNoteContent('');
+      setNoteDocument(null);
+    }
+  }, [isOpen, application?.id, canViewEvaluationNotes]);
+
+  // FEAT-5: Función para cargar notas de evaluación
+  const fetchEvaluationNotes = async (applicationId: number) => {
+    setLoadingNotes(true);
+    try {
+      const res = await fetch(`/api/evaluations/notes?applicationId=${applicationId}`);
+      const data = await res.json();
+      if (data.success) {
+        setEvaluationNotes(data.data);
+      }
+    } catch (error) {
+      console.error('Error cargando notas:', error);
+    } finally {
+      setLoadingNotes(false);
+    }
+  };
+
+  // FEAT-5: Función para guardar nota de evaluación
+  const handleSaveNote = async () => {
+    if (!newNoteContent.trim() || !application?.id) return;
+    setSavingNote(true);
+
+    try {
+      let documentUrl = null;
+      let documentName = null;
+
+      // Si hay documento, subirlo primero
+      if (noteDocument) {
+        const formData = new FormData();
+        formData.append('file', noteDocument);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (uploadData.url) {
+          documentUrl = uploadData.url;
+          documentName = noteDocument.name;
+        }
+      }
+
+      const res = await fetch('/api/evaluations/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicationId: application.id,
+          content: newNoteContent.trim(),
+          documentUrl,
+          documentName,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEvaluationNotes(prev => [data.data, ...prev]);
+        setNewNoteContent('');
+        setNoteDocument(null);
+        if (noteFileRef.current) noteFileRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Error guardando nota:', error);
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   if (!isOpen || (!application && !candidate)) return null;
 
@@ -197,6 +304,7 @@ export default function CandidateProfileModal({
         fechaNacimiento: application.candidateProfile?.fechaNacimiento,
         source: application.candidateProfile?.source,
         adminNotas: application.candidateProfile?.notas,
+        fotoUrl: application.candidateProfile?.fotoUrl, // FEAT-2: Foto de perfil
         experiences: application.candidateProfile?.experiences || [],
         documents: application.candidateProfile?.documents || []
       }
@@ -224,6 +332,7 @@ export default function CandidateProfileModal({
         fechaNacimiento: candidate!.fechaNacimiento,
         source: candidate!.source,
         adminNotas: candidate!.notas,
+        fotoUrl: candidate!.fotoUrl, // FEAT-2: Foto de perfil
         experiences: candidate!.experiences || [],
         documents: candidate!.documents || []
       };
@@ -433,9 +542,12 @@ export default function CandidateProfileModal({
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 md:p-6 flex justify-between items-start gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 md:gap-3 mb-2">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-base md:text-lg font-bold flex-shrink-0">
-                {data.name.charAt(0).toUpperCase()}
-              </div>
+              {/* FEAT-2: Foto de perfil del candidato */}
+              <CandidatePhoto
+                fotoUrl={data.fotoUrl}
+                candidateName={data.name}
+                size="lg"
+              />
               <div className="min-w-0">
                 <h2 className="text-lg md:text-2xl font-bold text-gray-900 truncate">{data.name}</h2>
                 <div className="flex items-center gap-1 md:gap-2 mt-1 flex-wrap">
@@ -775,16 +887,130 @@ export default function CandidateProfileModal({
             </div>
           ) : null}
 
-          {/* Recruiter Notes (only for specialist) */}
+          {/* Recruiter Notes (only for specialist) - Legacy JobAssignment notes */}
           {showRecruiterNotes && recruiterNotes && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-purple-600" />
-                Notas del Reclutador
+                Notas del Reclutador (Vacante)
               </h3>
               <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{recruiterNotes}</p>
               </div>
+            </div>
+          )}
+
+          {/* FEAT-5: Sección de Notas de Evaluación */}
+          {canViewEvaluationNotes && application?.id && (
+            <div className="mb-6 border-t pt-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-[#2b5d62]" />
+                Notas de Evaluación
+              </h3>
+
+              {/* Notas existentes */}
+              {loadingNotes ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                  <span className="ml-2 text-sm text-gray-500">Cargando notas...</span>
+                </div>
+              ) : evaluationNotes.length > 0 ? (
+                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                  {evaluationNotes.map((note) => (
+                    <div key={note.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className={`font-medium px-2 py-0.5 rounded text-xs ${
+                          note.authorRole === 'recruiter'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {note.authorRole === 'recruiter' ? '🧠 Reclutador' : '🔧 Especialista'}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(note.createdAt).toLocaleDateString('es-MX', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                      {note.documentUrl && (
+                        <a
+                          href={note.documentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2b5d62] text-xs underline mt-2 inline-flex items-center gap-1 hover:text-[#1e4347]"
+                        >
+                          <FileText size={12} />
+                          {note.documentName || 'Documento adjunto'}
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm mb-4">No hay notas de evaluación aún.</p>
+              )}
+
+              {/* Formulario para nueva nota (solo recruiter/specialist) */}
+              {canAddEvaluationNotes && (
+                <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <textarea
+                    value={newNoteContent}
+                    onChange={(e) => setNewNoteContent(e.target.value)}
+                    placeholder="Escribe tus observaciones sobre este candidato..."
+                    className="w-full border border-gray-300 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-[#2b5d62] focus:border-transparent"
+                    rows={3}
+                  />
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-700 flex-1">
+                      <Upload className="w-4 h-4" />
+                      <span className="truncate">
+                        {noteDocument ? noteDocument.name : 'Adjuntar documento (opcional)'}
+                      </span>
+                      <input
+                        type="file"
+                        ref={noteFileRef}
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                        onChange={(e) => setNoteDocument(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                    {noteDocument && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteDocument(null);
+                          if (noteFileRef.current) noteFileRef.current.value = '';
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Quitar archivo
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSaveNote}
+                      disabled={!newNoteContent.trim() || savingNote}
+                      className="bg-[#2b5d62] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1e4347] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 justify-center"
+                    >
+                      {savingNote ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save size={16} />
+                          Guardar nota
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

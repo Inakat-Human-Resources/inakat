@@ -74,6 +74,9 @@ model CompanyRequest {
   latitud                   Float?
   longitud                  Float?
 
+  // Logo de la empresa
+  logoUrl                   String?
+
   // Documentos
   identificacionUrl         String?
   documentosConstitucionUrl String?
@@ -146,6 +149,9 @@ model Job {
   resultadosEsperados   String?   @db.Text
   valoresActitudes      String?   @db.Text
   informacionAdicional  String?   @db.Text
+
+  // Vacante confidencial (oculta nombre, dirección y logo de empresa en vista pública)
+  isConfidential  Boolean   @default(false)
 
   // Relación con la empresa que publicó
   userId          Int?
@@ -364,7 +370,10 @@ model Candidate {
   cvUrl           String?
   portafolioUrl   String?
   linkedinUrl     String?
-  
+
+  // Foto de perfil
+  fotoUrl         String?
+
   // Fuente del candidato
   source          String    @default("manual") // "manual", "linkedin", "occ", "referido"
   
@@ -566,6 +575,35 @@ model JobAssignment {
 // Agregar este campo al modelo Job existente:
 //
 // assignment        JobAssignment?
+
+// =============================================
+// NOTAS DE EVALUACIÓN (Reclutadores y Especialistas)
+// =============================================
+model EvaluationNote {
+  id            Int       @id @default(autoincrement())
+
+  // Autor de la nota
+  authorId      Int
+  authorRole    String    // "recruiter", "specialist"
+
+  // Aplicación asociada
+  applicationId Int
+
+  // Contenido
+  content       String    @db.Text
+
+  // Documento adjunto opcional
+  documentUrl   String?
+  documentName  String?
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([applicationId])
+  @@index([authorId])
+  @@index([createdAt])
+}
 
 // =============================================
 // CÓDIGOS DE DESCUENTO (Sistema de Vendors)

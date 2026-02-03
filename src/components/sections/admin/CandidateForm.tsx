@@ -75,6 +75,9 @@ const CandidateForm = ({
   const [telefono, setTelefono] = useState('');
   const [sexo, setSexo] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
+  // FEAT-2: Foto de perfil
+  const [fotoUrl, setFotoUrl] = useState('');
+  const [fotoUploading, setFotoUploading] = useState(false);
 
   // Educación múltiple
   const [educations, setEducations] = useState<Education[]>([]);
@@ -122,8 +125,7 @@ const CandidateForm = ({
     'Preparatoria',
     'Técnico',
     'Licenciatura',
-    'Maestría',
-    'Doctorado'
+    'Posgrado'
   ];
 
   // Cargar datos si es edición
@@ -173,6 +175,7 @@ const CandidateForm = ({
       setLinkedinUrl(candidateToEdit.linkedinUrl || '');
       setSource(candidateToEdit.source || 'manual');
       setNotas(candidateToEdit.notas || '');
+      setFotoUrl(candidateToEdit.fotoUrl || ''); // FEAT-2: Foto de perfil
 
       if (candidateToEdit.experiences) {
         setExperiences(
@@ -210,6 +213,7 @@ const CandidateForm = ({
     setTelefono('');
     setSexo('');
     setFechaNacimiento('');
+    setFotoUrl(''); // FEAT-2: Foto de perfil
     setEducations([]);
     setProfile('');
     setSeniority('');
@@ -335,6 +339,40 @@ const CandidateForm = ({
     }
   };
 
+  // FEAT-2: Subir foto de perfil
+  const handleFotoUpload = async (file: File) => {
+    // Validar tamaño (máximo 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('La foto no debe exceder 2MB');
+      return;
+    }
+    // Validar tipo de archivo
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Solo se permiten imágenes JPG, PNG o WebP');
+      return;
+    }
+    setFotoUploading(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      if (data.success) {
+        setFotoUrl(data.url);
+      } else {
+        setError(data.error || 'Error al subir foto');
+      }
+    } catch (err) {
+      setError('Error al subir foto');
+    } finally {
+      setFotoUploading(false);
+    }
+  };
+
   // Enviar formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -350,6 +388,7 @@ const CandidateForm = ({
         telefono: telefono || null,
         sexo: sexo || null,
         fechaNacimiento: fechaNacimiento || null,
+        fotoUrl: fotoUrl || null, // FEAT-2: Foto de perfil
         // Educación múltiple
         educacion: educations.filter(e => e.institucion || e.carrera || e.nivel),
         profile: profile || null,
@@ -543,6 +582,49 @@ const CandidateForm = ({
           {/* Tab: Personal */}
           {activeTab === 'personal' && (
             <div className="space-y-4">
+              {/* FEAT-2: Foto de perfil */}
+              <div className="flex items-center gap-4 mb-4 pb-4 border-b">
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+                    {fotoUrl ? (
+                      <img src={fotoUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-8 h-8 text-gray-400" />
+                    )}
+                  </div>
+                  <label className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-700 shadow-lg">
+                    {fotoUploading ? (
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-white" />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFotoUpload(file);
+                      }}
+                      disabled={fotoUploading}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Foto de perfil</p>
+                  <p className="text-xs text-gray-500">JPG, PNG o WebP (máx 2MB)</p>
+                  {fotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFotoUrl('')}
+                      className="text-xs text-red-500 hover:text-red-700 mt-1"
+                    >
+                      Eliminar foto
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1">

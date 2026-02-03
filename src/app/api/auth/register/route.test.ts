@@ -429,7 +429,7 @@ describe('Candidate Registration Tests', () => {
 
   describe('Niveles de estudio válidos', () => {
     it('debería aceptar todos los niveles de estudio', () => {
-      const validNiveles = ['Preparatoria', 'Técnico', 'Licenciatura', 'Maestría', 'Doctorado'];
+      const validNiveles = ['Preparatoria', 'Técnico', 'Licenciatura', 'Posgrado'];
 
       for (const nivel of validNiveles) {
         expect(validNiveles.includes(nivel)).toBe(true);

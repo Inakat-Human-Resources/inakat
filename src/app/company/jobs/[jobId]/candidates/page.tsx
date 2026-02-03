@@ -22,6 +22,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
+import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 
 // Tipos
 interface Job {
@@ -55,6 +56,7 @@ interface Application {
     linkedinUrl?: string;
     portafolioUrl?: string;
     cvUrl?: string;
+    fotoUrl?: string; // FEAT-2: Foto de perfil
     experiences?: any[];
     documents?: any[];
   };
@@ -124,6 +126,9 @@ export default function JobCandidatesPage() {
 
   // Notificación
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+  // Hover tooltip para candidatos
+  const [hoveredAppId, setHoveredAppId] = useState<number | null>(null);
 
   useEffect(() => {
     if (jobId) {
@@ -434,8 +439,39 @@ export default function JobCandidatesPage() {
                 {filteredCandidates.map((app, index) => (
                   <div
                     key={app.id}
-                    className="border border-gray-200 rounded-lg p-3 md:p-4 hover:border-blue-300 hover:shadow-md transition-all bg-white"
+                    className="border border-gray-200 rounded-lg p-3 md:p-4 hover:border-blue-300 hover:shadow-md transition-all bg-white relative"
+                    onMouseEnter={() => setHoveredAppId(app.id)}
+                    onMouseLeave={() => setHoveredAppId(null)}
                   >
+                    {/* Tooltip de información rápida */}
+                    {hoveredAppId === app.id && app.candidateProfile && (
+                      <div className="absolute left-4 top-0 -translate-y-full z-20 pointer-events-none mb-2">
+                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg max-w-xs">
+                          <p className="font-semibold mb-2 text-sm">{app.candidateName}</p>
+                          <div className="space-y-1">
+                            {app.candidateProfile.universidad && (
+                              <p><span className="text-gray-400">Universidad:</span> {app.candidateProfile.universidad}</p>
+                            )}
+                            {app.candidateProfile.carrera && (
+                              <p><span className="text-gray-400">Carrera:</span> {app.candidateProfile.carrera}</p>
+                            )}
+                            {app.candidateProfile.nivelEstudios && (
+                              <p><span className="text-gray-400">Nivel:</span> {app.candidateProfile.nivelEstudios}</p>
+                            )}
+                            {app.candidateProfile.profile && (
+                              <p><span className="text-gray-400">Área:</span> {app.candidateProfile.profile}</p>
+                            )}
+                            {app.candidateProfile.seniority && (
+                              <p><span className="text-gray-400">Seniority:</span> {app.candidateProfile.seniority}</p>
+                            )}
+                          </div>
+                          <div className="absolute left-4 bottom-0 translate-y-full">
+                            <div className="border-8 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Layout responsive del candidato */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       {/* Info del candidato */}
@@ -443,9 +479,12 @@ export default function JobCandidatesPage() {
                         className="flex items-center gap-3 md:gap-4 flex-1 cursor-pointer min-w-0"
                         onClick={() => handleViewCandidateProfile(app, index)}
                       >
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-[#2b5d62] text-white rounded-full flex items-center justify-center text-base md:text-lg font-bold flex-shrink-0">
-                          {app.candidateName?.charAt(0)?.toUpperCase() || '?'}
-                        </div>
+                        {/* FEAT-2: Foto de perfil del candidato */}
+                        <CandidatePhoto
+                          fotoUrl={app.candidateProfile?.fotoUrl}
+                          candidateName={app.candidateName}
+                          size="md"
+                        />
                         <div className="min-w-0 flex-1">
                           <h3 className="font-semibold text-gray-900 truncate text-sm md:text-base">{app.candidateName}</h3>
                           <p className="text-xs md:text-sm text-gray-500 truncate">{app.candidateEmail}</p>

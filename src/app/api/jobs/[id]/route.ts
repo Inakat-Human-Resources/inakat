@@ -3,6 +3,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateJobCreditCost } from '@/lib/pricing';
+import { cookies } from 'next/headers';
+import { verifyToken } from '@/lib/auth';
+
+// Función para sanitizar vacantes confidenciales
+function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
+  if (!job.isConfidential || isOwnerOrAdmin) {
+    return job;
+  }
+
+  // Ocultar datos sensibles para vacantes confidenciales
+  return {
+    ...job,
+    company: 'Empresa Confidencial',
+    location: job.location ? job.location.split(',')[1]?.trim() || 'México' : 'México',
+    logoUrl: null, // Ocultar logo en vacantes confidenciales
+  };
+}
 
 // GET - Obtener vacante por ID
 export async function GET(
@@ -21,7 +38,16 @@ export async function GET(
     }
 
     const job = await prisma.job.findUnique({
-      where: { id: jobId }
+      where: { id: jobId },
+      include: {
+        user: {
+          select: {
+            companyRequest: {
+              select: { logoUrl: true }
+            }
+          }
+        }
+      }
     });
 
     if (!job) {
@@ -31,7 +57,28 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: job });
+    // Verificar si el usuario es propietario o admin
+    let isOwnerOrAdmin = false;
+    const cookieStore = await cookies();
+    const token = cookieStore.get('auth-token')?.value;
+
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload?.userId) {
+        // Es admin o es el propietario de la vacante
+        isOwnerOrAdmin = payload.role === 'admin' || job.userId === payload.userId;
+      }
+    }
+
+    // Transformar para incluir logoUrl directamente
+    const logoUrl = job.user?.companyRequest?.logoUrl || null;
+    const { user, ...jobWithoutUser } = job;
+    const jobWithLogo = { ...jobWithoutUser, logoUrl };
+
+    // Sanitizar si es confidencial y no es propietario/admin
+    const sanitizedJob = sanitizeConfidentialJob(jobWithLogo, isOwnerOrAdmin);
+
+    return NextResponse.json({ success: true, data: sanitizedJob });
   } catch (error) {
     console.error('Error fetching job:', error);
     return NextResponse.json(
@@ -278,7 +325,8 @@ export async function PUT(
       responsabilidades,
       resultadosEsperados,
       valoresActitudes,
-      informacionAdicional
+      informacionAdicional,
+      isConfidential
     } = body;
 
     // Validar rango de salario si se proporcionan min/max
@@ -441,6 +489,8 @@ export async function PUT(
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
         informacionAdicional: informacionAdicional || null,
+        // Vacante confidencial
+        ...(isConfidential !== undefined && { isConfidential }),
         // Actualizar creditCost si cambió
         ...(newCreditCost !== undefined && { creditCost: newCreditCost })
       }

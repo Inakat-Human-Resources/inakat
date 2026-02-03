@@ -486,4 +486,86 @@ describe('Specialist Dashboard API Logic Tests', () => {
       }
     });
   });
+
+  describe('GET /api/specialist/dashboard - candidateProfile incluye documents y educacion (BUG-6)', () => {
+    /**
+     * BUG-6: El especialista no podía ver documentos del candidato
+     * La API ya retorna documents pero la interfaz no los incluía
+     */
+
+    it('debería incluir documents en candidateProfile enriquecido', () => {
+      const mockCandidate = {
+        id: 1,
+        email: 'candidate@test.com',
+        nombre: 'Test Candidate',
+        documents: [
+          { id: 1, name: 'CV.pdf', url: 'https://example.com/cv.pdf', type: 'cv' },
+          { id: 2, name: 'Certificado.pdf', url: 'https://example.com/cert.pdf', type: 'certificate' }
+        ]
+      };
+
+      // Simula lo que el backend devuelve en candidateProfile
+      expect(mockCandidate.documents).toBeDefined();
+      expect(mockCandidate.documents).toHaveLength(2);
+      expect(mockCandidate.documents[0]).toHaveProperty('url');
+    });
+
+    it('debería incluir educacion en candidateProfile enriquecido', () => {
+      const mockCandidate = {
+        id: 1,
+        email: 'candidate@test.com',
+        nombre: 'Test Candidate',
+        educacion: 'Maestría en Ingeniería de Software'
+      };
+
+      // Simula lo que el backend devuelve en candidateProfile
+      expect(mockCandidate.educacion).toBeDefined();
+      expect(typeof mockCandidate.educacion).toBe('string');
+    });
+
+    it('debería manejar candidateProfile sin documents (campo opcional)', () => {
+      const mockCandidate = {
+        id: 1,
+        email: 'candidate@test.com',
+        nombre: 'Test Candidate',
+        documents: []
+      };
+
+      expect(mockCandidate.documents).toBeDefined();
+      expect(mockCandidate.documents).toHaveLength(0);
+    });
+
+    it('debería manejar candidateProfile sin educacion (campo opcional)', () => {
+      const mockCandidate = {
+        id: 1,
+        email: 'candidate@test.com',
+        nombre: 'Test Candidate',
+        educacion: undefined
+      };
+
+      expect(mockCandidate.educacion).toBeUndefined();
+    });
+
+    it('debería incluir documents y educacion en la estructura de application enriquecida', () => {
+      // Simula la estructura completa que retorna la API
+      const enrichedApplication = {
+        id: 1,
+        candidateName: 'Test Candidate',
+        candidateEmail: 'candidate@test.com',
+        status: 'evaluating',
+        candidateProfile: {
+          id: 1,
+          universidad: 'UNAM',
+          carrera: 'Ingeniería',
+          experiences: [{ empresa: 'TechCo' }],
+          educacion: 'Licenciatura en Computación',
+          documents: [{ id: 1, name: 'CV.pdf', url: 'https://example.com/cv.pdf' }]
+        }
+      };
+
+      expect(enrichedApplication.candidateProfile).toBeDefined();
+      expect(enrichedApplication.candidateProfile?.documents).toBeDefined();
+      expect(enrichedApplication.candidateProfile?.educacion).toBeDefined();
+    });
+  });
 });

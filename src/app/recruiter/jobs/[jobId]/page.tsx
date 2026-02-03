@@ -26,6 +26,8 @@ import {
   Briefcase
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
+import CompanyLogo from '@/components/shared/CompanyLogo';
+import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_recruiter';
@@ -48,7 +50,11 @@ interface CandidateProfile {
   fechaNacimiento?: string;
   source?: string;
   notas?: string;
+  fotoUrl?: string; // FEAT-2: Foto de perfil
   experiences?: any[];
+  educacion?: string;
+  subcategory?: string;
+  documents?: any[];
 }
 
 interface Application {
@@ -78,6 +84,7 @@ interface JobData {
     nombre: string;
     companyRequest?: {
       nombreEmpresa: string;
+      logoUrl?: string | null; // FEAT-1b: Logo de empresa
     };
   };
 }
@@ -121,6 +128,9 @@ export default function RecruiterJobCandidates() {
 
   // IDs de candidatos vistos (localStorage)
   const [viewedIds, setViewedIds] = useState<number[]>([]);
+
+  // Hover tooltip para candidatos
+  const [hoveredAppId, setHoveredAppId] = useState<number | null>(null);
 
   // Pestañas configuración - "Sin Revisar" → "Por revisar"
   const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
@@ -352,9 +362,18 @@ export default function RecruiterJobCandidates() {
           </button>
 
           <div className="bg-white rounded-lg shadow-sm border p-4">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
-              {job.title}
-            </h1>
+            <div className="flex items-start gap-3 mb-2">
+              <CompanyLogo
+                logoUrl={job.user?.companyRequest?.logoUrl}
+                companyName={job.user?.companyRequest?.nombreEmpresa || job.company}
+                size="md"
+              />
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                  {job.title}
+                </h1>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500">
               <span className="flex items-center gap-1">
                 <Building2 size={16} />
@@ -463,10 +482,54 @@ export default function RecruiterJobCandidates() {
                 return (
                   <div
                     key={app.id}
-                    className={`p-4 hover:bg-gray-50 transition-colors ${isUnseen ? 'bg-blue-50/30' : ''}`}
+                    className={`p-4 hover:bg-gray-50 transition-colors relative ${isUnseen ? 'bg-blue-50/30' : ''}`}
+                    onMouseEnter={() => setHoveredAppId(app.id)}
+                    onMouseLeave={() => setHoveredAppId(null)}
                   >
+                    {/* Tooltip de información rápida */}
+                    {hoveredAppId === app.id && app.candidateProfile && (
+                      <div className="absolute left-4 top-0 -translate-y-full z-20 pointer-events-none mb-2">
+                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg max-w-xs">
+                          <p className="font-semibold mb-2 text-sm">{app.candidateName}</p>
+                          <div className="space-y-1">
+                            {app.candidateProfile.universidad && (
+                              <p><span className="text-gray-400">Universidad:</span> {app.candidateProfile.universidad}</p>
+                            )}
+                            {app.candidateProfile.carrera && (
+                              <p><span className="text-gray-400">Carrera:</span> {app.candidateProfile.carrera}</p>
+                            )}
+                            {app.candidateProfile.nivelEstudios && (
+                              <p><span className="text-gray-400">Nivel:</span> {app.candidateProfile.nivelEstudios}</p>
+                            )}
+                            {app.candidateProfile.añosExperiencia !== undefined && app.candidateProfile.añosExperiencia > 0 && (
+                              <p><span className="text-gray-400">Experiencia:</span> {app.candidateProfile.añosExperiencia} {app.candidateProfile.añosExperiencia === 1 ? 'año' : 'años'}</p>
+                            )}
+                            {app.candidateProfile.profile && (
+                              <p><span className="text-gray-400">Área:</span> {app.candidateProfile.profile}</p>
+                            )}
+                            {app.candidateProfile.seniority && (
+                              <p><span className="text-gray-400">Seniority:</span> {app.candidateProfile.seniority}</p>
+                            )}
+                            {app.candidateProfile.source && (
+                              <p><span className="text-gray-400">Fuente:</span> {app.candidateProfile.source}</p>
+                            )}
+                          </div>
+                          <div className="absolute left-4 bottom-0 translate-y-full">
+                            <div className="border-8 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {/* FEAT-2: Foto de perfil del candidato */}
+                        <CandidatePhoto
+                          fotoUrl={app.candidateProfile?.fotoUrl}
+                          candidateName={app.candidateName}
+                          size="sm"
+                        />
+                        <div className="flex-1 min-w-0">
                         {/* Nombre y badges */}
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-gray-900">
@@ -525,6 +588,7 @@ export default function RecruiterJobCandidates() {
                             )}
                           </div>
                         )}
+                        </div>
                       </div>
 
                       {/* Acciones */}
@@ -690,6 +754,7 @@ export default function RecruiterJobCandidates() {
         totalCount={currentCandidatesList.length}
         canAddDocuments={true}
         onDocumentsUpdated={fetchJobData}
+        userRole="recruiter"
       />
     </div>
   );

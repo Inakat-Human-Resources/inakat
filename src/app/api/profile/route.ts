@@ -31,7 +31,25 @@ async function getAuthenticatedUser() {
       credits: true,
       createdAt: true,
       candidate: {
-        include: {
+        select: {
+          id: true,
+          nombre: true,
+          apellidoPaterno: true,
+          apellidoMaterno: true,
+          telefono: true,
+          fechaNacimiento: true,
+          sexo: true,
+          universidad: true,
+          carrera: true,
+          nivelEstudios: true,
+          educacion: true,
+          añosExperiencia: true,
+          profile: true,
+          seniority: true,
+          linkedinUrl: true,
+          portafolioUrl: true,
+          cvUrl: true,
+          fotoUrl: true, // FEAT-2: Foto de perfil
           experiences: {
             orderBy: { fechaInicio: 'desc' }
           }
@@ -125,6 +143,7 @@ export async function GET() {
         linkedinUrl: user.candidate.linkedinUrl,
         portafolioUrl: user.candidate.portafolioUrl,
         cvUrl: user.candidate.cvUrl,
+        fotoUrl: user.candidate.fotoUrl, // FEAT-2: Foto de perfil
         experiences: user.candidate.experiences || [],
         educacion: educacionArray
       };
@@ -233,7 +252,8 @@ export async function PUT(request: Request) {
         linkedinUrl,
         portafolioUrl,
         cvUrl,
-        educacion
+        educacion,
+        fotoUrl // FEAT-2: Foto de perfil
       } = candidateData;
 
       const updateCandidateData: any = {};
@@ -254,6 +274,9 @@ export async function PUT(request: Request) {
       if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = linkedinUrl;
       if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = portafolioUrl;
       if (cvUrl !== undefined) updateCandidateData.cvUrl = cvUrl;
+
+      // FEAT-2: Actualizar foto de perfil
+      if (fotoUrl !== undefined) updateCandidateData.fotoUrl = fotoUrl;
 
       // Guardar educación como JSON string
       if (educacion !== undefined) {

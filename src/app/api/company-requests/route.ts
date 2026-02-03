@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       identificacionUrl,
       documentosConstitucionUrl,
       password,
+      logoUrl, // FEAT-1b: Logo de empresa
     } = body;
 
     // Validate required fields
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
           direccionEmpresa,
           identificacionUrl: identificacionUrl || null,
           documentosConstitucionUrl: documentosConstitucionUrl || null,
+          logoUrl: logoUrl || null, // FEAT-1b: Logo de empresa
           status: "pending",
         },
       });

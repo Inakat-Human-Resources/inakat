@@ -81,7 +81,15 @@ export async function GET() {
             workMode: true,
             status: true,
             profile: true,
-            seniority: true
+            seniority: true,
+            isConfidential: true,
+            user: {
+              select: {
+                companyRequest: {
+                  select: { logoUrl: true }
+                }
+              }
+            }
           }
         }
       },
@@ -90,8 +98,43 @@ export async function GET() {
       }
     });
 
+    // Sanitizar vacantes confidenciales y agregar logoUrl
+    const sanitizedApplications = applications.map(app => {
+      const logoUrl = app.job?.user?.companyRequest?.logoUrl || null;
+      // Remover user anidado del job
+      const jobWithoutUser = app.job ? {
+        id: app.job.id,
+        title: app.job.title,
+        company: app.job.company,
+        location: app.job.location,
+        salary: app.job.salary,
+        jobType: app.job.jobType,
+        workMode: app.job.workMode,
+        status: app.job.status,
+        profile: app.job.profile,
+        seniority: app.job.seniority,
+        isConfidential: app.job.isConfidential,
+        logoUrl: app.job.isConfidential ? null : logoUrl, // Ocultar logo si es confidencial
+      } : null;
+
+      if (app.job?.isConfidential) {
+        return {
+          ...app,
+          job: {
+            ...jobWithoutUser,
+            company: 'Empresa Confidencial',
+            location: app.job.location?.includes(',')
+              ? app.job.location.split(',').pop()?.trim() || app.job.location
+              : app.job.location,
+            logoUrl: null, // Asegurar que el logo esté oculto
+          }
+        };
+      }
+      return { ...app, job: jobWithoutUser };
+    });
+
     // Mapear los status a labels amigables para el candidato
-    const applicationsWithLabels = applications.map(app => {
+    const applicationsWithLabels = sanitizedApplications.map(app => {
       let statusLabel = '';
       let statusColor = '';
 

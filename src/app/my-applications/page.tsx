@@ -11,6 +11,7 @@ import {
   FileText,
   AlertCircle
 } from 'lucide-react';
+import CompanyLogo from '@/components/shared/CompanyLogo';
 
 interface Job {
   id: number;
@@ -21,6 +22,7 @@ interface Job {
   jobType: string;
   workMode: string;
   status: string;
+  logoUrl?: string | null; // FEAT-1b: Logo de empresa
 }
 
 interface Application {
@@ -363,13 +365,18 @@ export default function MyApplicationsPage() {
                   {/* Left Side - Job Info */}
                   <div className="flex-1">
                     <div className="flex items-start gap-3 mb-3">
-                      <div className="mt-1">
-                        {getStatusIcon(application.status)}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                          {application.job.title}
-                        </h3>
+                      <CompanyLogo
+                        logoUrl={application.job.logoUrl}
+                        companyName={application.job.company}
+                        size="md"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {application.job.title}
+                          </h3>
+                          {getStatusIcon(application.status)}
+                        </div>
                         <p className="text-gray-600 mb-2">
                           {application.job.company} • {application.job.location}
                         </p>
