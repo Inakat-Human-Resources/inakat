@@ -30,6 +30,17 @@ interface Experience {
   descripcion: string;
 }
 
+// FEATURE: Educación múltiple
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
+}
+
 interface Document {
   id?: number;
   name: string;
@@ -65,10 +76,8 @@ const CandidateForm = ({
   const [sexo, setSexo] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
 
-  // Educación
-  const [universidad, setUniversidad] = useState('');
-  const [carrera, setCarrera] = useState('');
-  const [nivelEstudios, setNivelEstudios] = useState('');
+  // Educación múltiple
+  const [educations, setEducations] = useState<Education[]>([]);
 
   // Profesional
   const [profile, setProfile] = useState('');
@@ -133,9 +142,30 @@ const CandidateForm = ({
               .split('T')[0]
           : ''
       );
-      setUniversidad(candidateToEdit.universidad || '');
-      setCarrera(candidateToEdit.carrera || '');
-      setNivelEstudios(candidateToEdit.nivelEstudios || '');
+      // Cargar educación múltiple
+      if (candidateToEdit.educacion) {
+        try {
+          const parsed = typeof candidateToEdit.educacion === 'string'
+            ? JSON.parse(candidateToEdit.educacion)
+            : candidateToEdit.educacion;
+          setEducations(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          setEducations([]);
+        }
+      } else if (candidateToEdit.universidad || candidateToEdit.carrera) {
+        // Migrar campos legacy a array
+        setEducations([{
+          id: Date.now(),
+          nivel: candidateToEdit.nivelEstudios || '',
+          institucion: candidateToEdit.universidad || '',
+          carrera: candidateToEdit.carrera || '',
+          añoInicio: null,
+          añoFin: null,
+          estatus: 'Completa'
+        }]);
+      } else {
+        setEducations([]);
+      }
       setProfile(candidateToEdit.profile || '');
       setSeniority(candidateToEdit.seniority || '');
       setCvUrl(candidateToEdit.cvUrl || '');
@@ -180,9 +210,7 @@ const CandidateForm = ({
     setTelefono('');
     setSexo('');
     setFechaNacimiento('');
-    setUniversidad('');
-    setCarrera('');
-    setNivelEstudios('');
+    setEducations([]);
     setProfile('');
     setSeniority('');
     setCvUrl('');
@@ -232,6 +260,29 @@ const CandidateForm = ({
   // Eliminar experiencia
   const removeExperience = (index: number) => {
     setExperiences(experiences.filter((_, i) => i !== index));
+  };
+
+  // CRUD para educación múltiple
+  const addEducation = () => {
+    setEducations([...educations, {
+      id: Date.now(),
+      nivel: '',
+      institucion: '',
+      carrera: '',
+      añoInicio: null,
+      añoFin: null,
+      estatus: 'Completa'
+    }]);
+  };
+
+  const updateEducation = (index: number, field: keyof Education, value: any) => {
+    const updated = [...educations];
+    (updated[index] as any)[field] = value;
+    setEducations(updated);
+  };
+
+  const removeEducation = (index: number) => {
+    setEducations(educations.filter((_, i) => i !== index));
   };
 
   // Agregar documento
@@ -299,9 +350,8 @@ const CandidateForm = ({
         telefono: telefono || null,
         sexo: sexo || null,
         fechaNacimiento: fechaNacimiento || null,
-        universidad: universidad || null,
-        carrera: carrera || null,
-        nivelEstudios: nivelEstudios || null,
+        // Educación múltiple
+        educacion: educations.filter(e => e.institucion || e.carrera || e.nivel),
         profile: profile || null,
         seniority: seniority || null,
         cvUrl: cvUrl || null,
@@ -411,6 +461,11 @@ const CandidateForm = ({
           >
             <GraduationCap size={18} />
             Educación
+            {educations.length > 0 && (
+              <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full">
+                {educations.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('experience')}
@@ -651,52 +706,116 @@ const CandidateForm = ({
             </div>
           )}
 
-          {/* Tab: Educación */}
+          {/* Tab: Educación - Cards dinámicas */}
           {activeTab === 'education' && (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Universidad
-                </label>
-                <input
-                  type="text"
-                  value={universidad}
-                  onChange={(e) => setUniversidad(e.target.value)}
-                  placeholder="Ej: UANL, Tec de Monterrey, UNAM..."
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Carrera
-                </label>
-                <input
-                  type="text"
-                  value={carrera}
-                  onChange={(e) => setCarrera(e.target.value)}
-                  placeholder="Ej: Ingeniería en Sistemas, Diseño Gráfico..."
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Nivel de Estudios
-                </label>
-                <select
-                  value={nivelEstudios}
-                  onChange={(e) => setNivelEstudios(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
-                >
-                  <option value="">Seleccionar</option>
-                  {nivelesEstudio.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
+              {educations.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <GraduationCap className="mx-auto text-gray-400 mb-2" size={40} />
+                  <p className="text-gray-500">No hay educación agregada</p>
+                  <button
+                    type="button"
+                    onClick={addEducation}
+                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 mx-auto"
+                  >
+                    <Plus size={18} />
+                    Agregar Educación
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {educations.map((edu, index) => (
+                    <div key={edu.id} className="border rounded-lg p-4 bg-gray-50 relative">
+                      <button
+                        type="button"
+                        onClick={() => removeEducation(index)}
+                        className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Nivel de Estudios</label>
+                          <select
+                            value={edu.nivel}
+                            onChange={(e) => updateEducation(index, 'nivel', e.target.value)}
+                            className="w-full p-3 border rounded-lg"
+                          >
+                            <option value="">Seleccionar</option>
+                            <option value="Preparatoria">Preparatoria</option>
+                            <option value="Técnico">Técnico</option>
+                            <option value="Licenciatura">Licenciatura</option>
+                            <option value="Posgrado">Posgrado</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Institución</label>
+                          <input
+                            type="text"
+                            value={edu.institucion}
+                            onChange={(e) => updateEducation(index, 'institucion', e.target.value)}
+                            placeholder="Ej: UANL, Tec de Monterrey..."
+                            className="w-full p-3 border rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Carrera</label>
+                          <input
+                            type="text"
+                            value={edu.carrera}
+                            onChange={(e) => updateEducation(index, 'carrera', e.target.value)}
+                            placeholder="Ej: Ingeniería en Sistemas..."
+                            className="w-full p-3 border rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Estatus</label>
+                          <select
+                            value={edu.estatus}
+                            onChange={(e) => updateEducation(index, 'estatus', e.target.value)}
+                            className="w-full p-3 border rounded-lg"
+                          >
+                            <option value="Completa">Completa</option>
+                            <option value="En curso">En curso</option>
+                            <option value="Trunca">Trunca</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Año Inicio</label>
+                          <input
+                            type="number"
+                            value={edu.añoInicio || ''}
+                            onChange={(e) => updateEducation(index, 'añoInicio', e.target.value ? parseInt(e.target.value) : null)}
+                            placeholder="Ej: 2018"
+                            className="w-full p-3 border rounded-lg"
+                            min="1970" max="2030"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Año Fin</label>
+                          <input
+                            type="number"
+                            value={edu.añoFin || ''}
+                            onChange={(e) => updateEducation(index, 'añoFin', e.target.value ? parseInt(e.target.value) : null)}
+                            placeholder="Ej: 2022"
+                            className="w-full p-3 border rounded-lg"
+                            min="1970" max="2030"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </select>
-              </div>
+                  <button
+                    type="button"
+                    onClick={addEducation}
+                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-blue-400 hover:text-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Agregar otra educación
+                  </button>
+                </>
+              )}
             </div>
           )}
 

@@ -1,3 +1,5 @@
+// RUTA: src/components/company/CompanyApplicationsTable.tsx
+
 'use client';
 
 import { useState } from 'react';
@@ -30,6 +32,17 @@ interface Experience {
   fechaFin: string | null;
 }
 
+// FEATURE: Educación múltiple
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
+}
+
 interface CandidateProfile {
   id: number;
   nombre: string;
@@ -42,6 +55,7 @@ interface CandidateProfile {
   universidad: string | null;
   carrera: string | null;
   nivelEstudios: string | null;
+  educacion: string | null; // FEATURE: Educación múltiple (JSON string)
   añosExperiencia: number;
   profile: string | null;
   seniority: string | null;
@@ -144,6 +158,34 @@ export default function CompanyApplicationsTable({
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  // FEATURE: Parsear educación múltiple
+  const parseEducacion = (profile: CandidateProfile | null | undefined): Education[] => {
+    if (!profile) return [];
+    if (profile.educacion) {
+      try {
+        const parsed = JSON.parse(profile.educacion);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Si falla el parse, continuamos con fallback
+      }
+    }
+    // Fallback: crear array con datos legacy si existen
+    if (profile.universidad || profile.carrera || profile.nivelEstudios) {
+      return [{
+        id: 1,
+        nivel: profile.nivelEstudios || '',
+        institucion: profile.universidad || '',
+        carrera: profile.carrera || '',
+        añoInicio: null,
+        añoFin: null,
+        estatus: ''
+      }];
+    }
+    return [];
   };
 
   const toggleExpand = (id: number) => {
@@ -432,14 +474,6 @@ export default function CompanyApplicationsTable({
                                 {application.candidateProfile.telefono}
                               </span>
                             )}
-                            {application.candidateProfile.universidad && (
-                              <span className="flex items-center gap-1 text-gray-600">
-                                <GraduationCap className="w-4 h-4" />
-                                {application.candidateProfile.universidad}
-                                {application.candidateProfile.carrera &&
-                                  ` - ${application.candidateProfile.carrera}`}
-                              </span>
-                            )}
                             {application.candidateProfile.añosExperiencia > 0 && (
                               <span className="flex items-center gap-1 text-gray-600">
                                 <Briefcase className="w-4 h-4" />
@@ -447,6 +481,41 @@ export default function CompanyApplicationsTable({
                               </span>
                             )}
                           </div>
+
+                          {/* FEATURE: Educación múltiple */}
+                          {parseEducacion(application.candidateProfile).length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 mb-2">
+                                Educación:
+                              </p>
+                              <div className="space-y-2">
+                                {parseEducacion(application.candidateProfile).map((edu) => (
+                                  <div key={edu.id} className="flex items-start gap-2 text-sm">
+                                    <GraduationCap className="w-4 h-4 text-gray-400 mt-0.5" />
+                                    <div>
+                                      <p className="font-medium text-gray-900">
+                                        {edu.carrera || 'Sin carrera'}
+                                        {edu.estatus && (
+                                          <span className={`ml-2 px-1.5 py-0.5 text-xs rounded ${
+                                            edu.estatus === 'Titulado' ? 'bg-green-100 text-green-700' :
+                                            edu.estatus === 'Terminado' ? 'bg-blue-100 text-blue-700' :
+                                            edu.estatus === 'Cursando' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-gray-100 text-gray-700'
+                                          }`}>
+                                            {edu.estatus}
+                                          </span>
+                                        )}
+                                      </p>
+                                      <p className="text-gray-600">
+                                        {edu.institucion || 'Sin institución'}
+                                        {edu.nivel && ` • ${edu.nivel}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Notas del admin sobre el candidato */}
                           {application.candidateProfile.notas && (

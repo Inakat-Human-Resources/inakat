@@ -182,6 +182,7 @@ export async function PUT(
       universidad,
       carrera,
       nivelEstudios,
+      educacion, // FEATURE: Educación múltiple (array)
       profile,
       subcategory,
       seniority,
@@ -235,6 +236,21 @@ export async function PUT(
     if (source !== undefined) updateData.source = source || 'manual';
     if (notas !== undefined) updateData.notas = notas || null;
     if (status !== undefined) updateData.status = status;
+
+    // FEATURE: Educación múltiple - guardar JSON y sincronizar campos legacy
+    if (educacion !== undefined) {
+      updateData.educacion = educacion && educacion.length > 0 ? JSON.stringify(educacion) : null;
+      // Sincronizar campos legacy con la primera educación
+      if (educacion && educacion.length > 0) {
+        updateData.universidad = educacion[0].institucion || null;
+        updateData.carrera = educacion[0].carrera || null;
+        updateData.nivelEstudios = educacion[0].nivel || null;
+      } else {
+        updateData.universidad = null;
+        updateData.carrera = null;
+        updateData.nivelEstudios = null;
+      }
+    }
 
     // Si vienen experiencias, eliminar las existentes y crear las nuevas
     if (experiences !== undefined) {

@@ -295,8 +295,14 @@ describe('RegisterPage', () => {
         expect(screen.getByText(/Paso 6 de 6/)).toBeInTheDocument();
       });
 
+      // Esperar a que el botón esté habilitado (protección anti double-click)
+      await waitFor(() => {
+        const button = screen.getByRole('button', { name: /CREAR CUENTA/i });
+        expect(button).not.toBeDisabled();
+      });
+
       // Enviar formulario
-      fireEvent.click(screen.getByText('CREAR CUENTA'));
+      fireEvent.click(screen.getByRole('button', { name: /CREAR CUENTA/i }));
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalledWith(
@@ -324,7 +330,13 @@ describe('RegisterPage', () => {
         expect(screen.getByText(/Paso 6 de 6/)).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText('CREAR CUENTA'));
+      // Esperar a que el botón esté habilitado (protección anti double-click)
+      await waitFor(() => {
+        const button = screen.getByRole('button', { name: /CREAR CUENTA/i });
+        expect(button).not.toBeDisabled();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /CREAR CUENTA/i }));
 
       await waitFor(() => {
         expect(screen.getByText(/¡Registro exitoso! Bienvenido a INAKAT/)).toBeInTheDocument();
@@ -366,7 +378,13 @@ describe('RegisterPage', () => {
         expect(screen.getByText(/Paso 6 de 6/)).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText('CREAR CUENTA'));
+      // Esperar a que el botón esté habilitado (protección anti double-click)
+      await waitFor(() => {
+        const button = screen.getByRole('button', { name: /CREAR CUENTA/i });
+        expect(button).not.toBeDisabled();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /CREAR CUENTA/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Este email ya está registrado')).toBeInTheDocument();

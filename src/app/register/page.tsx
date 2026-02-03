@@ -25,6 +25,16 @@ import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
 
 // Interfaces
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
+}
+
 interface Experience {
   empresa: string;
   puesto: string;
@@ -72,6 +82,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [stepTransitioning, setStepTransitioning] = useState(false); // FIX: Prevenir double-click en transición a paso 6
 
   // Paso 1: Datos personales
   const [email, setEmail] = useState('');
@@ -86,10 +97,8 @@ export default function RegisterPage() {
   const [sexo, setSexo] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
 
-  // Paso 2: Educación
-  const [universidad, setUniversidad] = useState('');
-  const [carrera, setCarrera] = useState('');
-  const [nivelEstudios, setNivelEstudios] = useState('');
+  // Paso 2: Educación (FEATURE: Educación múltiple)
+  const [educations, setEducations] = useState<Education[]>([]);
 
   // Paso 3: Profesional
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -177,6 +186,32 @@ export default function RegisterPage() {
 
   const removeExperience = (index: number) => {
     setExperiences(experiences.filter((_, i) => i !== index));
+  };
+
+  // Manejar educaciones (FEATURE: Educación múltiple)
+  const addEducation = () => {
+    setEducations([
+      ...educations,
+      {
+        id: Date.now(),
+        nivel: '',
+        institucion: '',
+        carrera: '',
+        añoInicio: null,
+        añoFin: null,
+        estatus: ''
+      }
+    ]);
+  };
+
+  const updateEducation = (index: number, field: keyof Education, value: any) => {
+    const updated = [...educations];
+    updated[index] = { ...updated[index], [field]: value };
+    setEducations(updated);
+  };
+
+  const removeEducation = (index: number) => {
+    setEducations(educations.filter((_, i) => i !== index));
   };
 
   // Manejar documentos
@@ -287,7 +322,15 @@ export default function RegisterPage() {
   // Navegación
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 6));
+      const nextStep = Math.min(currentStep + 1, 6);
+      // FIX: Protección contra double-click al llegar a paso 6
+      if (nextStep === 6) {
+        setStepTransitioning(true);
+        setCurrentStep(nextStep);
+        setTimeout(() => setStepTransitioning(false), 500);
+      } else {
+        setCurrentStep(nextStep);
+      }
     }
   };
 
@@ -298,6 +341,9 @@ export default function RegisterPage() {
   // Enviar formulario
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // FIX: Protección contra double-click en transición de paso
+    if (stepTransitioning) return;
 
     // BUG-008 FIX: Solo permitir submit desde el último paso (6 - Documentos)
     // Evita que Enter en pasos anteriores envíe el formulario prematuramente
@@ -329,10 +375,8 @@ export default function RegisterPage() {
           telefono: telefono || undefined,
           sexo: sexo || undefined,
           fechaNacimiento: fechaNacimiento || undefined,
-          // Educación
-          universidad: universidad || undefined,
-          carrera: carrera || undefined,
-          nivelEstudios: nivelEstudios || undefined,
+          // Educación (FEATURE: Educación múltiple)
+          educacion: educations.filter(e => e.institucion || e.carrera || e.nivel),
           // Profesional
           profile: profile || undefined,
           subcategory: subcategory || undefined,
@@ -649,50 +693,134 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {/* Paso 2: Educación */}
+              {/* Paso 2: Educación (FEATURE: Educación múltiple) */}
               {currentStep === 2 && (
                 <div className="space-y-4">
                   <p className="text-white/80 text-sm mb-4">
                     Cuéntanos sobre tu formación académica (opcional)
                   </p>
 
-                  <div>
-                    <label className="block text-white text-sm mb-1">Universidad / Institución</label>
-                    <input
-                      type="text"
-                      value={universidad}
-                      onChange={(e) => setUniversidad(e.target.value)}
-                      className={inputClass('universidad')}
-                      placeholder="Ej: UANL, Tec de Monterrey, UNAM..."
-                    />
-                  </div>
+                  {educations.length === 0 ? (
+                    <div className="text-center py-8 bg-white/10 rounded-lg">
+                      <GraduationCap className="mx-auto text-white/50 mb-2" size={40} />
+                      <p className="text-white/70 mb-4">No hay educación agregada</p>
+                      <button
+                        type="button"
+                        onClick={addEducation}
+                        className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 flex items-center gap-2 mx-auto"
+                      >
+                        <Plus size={18} />
+                        Agregar Educación
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {educations.map((edu, index) => (
+                        <div key={edu.id} className="bg-white/10 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <h4 className="font-semibold text-white">Educación {index + 1}</h4>
+                            <button
+                              type="button"
+                              onClick={() => removeEducation(index)}
+                              className="text-red-300 hover:text-red-400 p-1"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
 
-                  <div>
-                    <label className="block text-white text-sm mb-1">Carrera</label>
-                    <input
-                      type="text"
-                      value={carrera}
-                      onChange={(e) => setCarrera(e.target.value)}
-                      className={inputClass('carrera')}
-                      placeholder="Ej: Ingeniería en Sistemas, Diseño Gráfico..."
-                    />
-                  </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-white text-xs mb-1">Nivel de Estudios</label>
+                              <select
+                                value={edu.nivel}
+                                onChange={(e) => updateEducation(index, 'nivel', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white"
+                              >
+                                <option value="">Seleccionar</option>
+                                {NIVELES_ESTUDIO.map((nivel) => (
+                                  <option key={nivel} value={nivel}>
+                                    {nivel}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-white text-xs mb-1">Estatus</label>
+                              <select
+                                value={edu.estatus}
+                                onChange={(e) => updateEducation(index, 'estatus', e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white"
+                              >
+                                <option value="">Seleccionar</option>
+                                <option value="Cursando">Cursando</option>
+                                <option value="Terminado">Terminado</option>
+                                <option value="Trunco">Trunco</option>
+                                <option value="Titulado">Titulado</option>
+                              </select>
+                            </div>
+                          </div>
 
-                  <div>
-                    <label className="block text-white text-sm mb-1">Nivel de Estudios</label>
-                    <select
-                      value={nivelEstudios}
-                      onChange={(e) => setNivelEstudios(e.target.value)}
-                      className={selectClass('nivelEstudios')}
-                    >
-                      <option value="">Seleccionar</option>
-                      {NIVELES_ESTUDIO.map((nivel) => (
-                        <option key={nivel} value={nivel}>
-                          {nivel}
-                        </option>
+                          <div className="mt-3">
+                            <label className="block text-white text-xs mb-1">Institución</label>
+                            <input
+                              type="text"
+                              value={edu.institucion}
+                              onChange={(e) => updateEducation(index, 'institucion', e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                              placeholder="Ej: UANL, Tec de Monterrey, UNAM..."
+                            />
+                          </div>
+
+                          <div className="mt-3">
+                            <label className="block text-white text-xs mb-1">Carrera</label>
+                            <input
+                              type="text"
+                              value={edu.carrera}
+                              onChange={(e) => updateEducation(index, 'carrera', e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                              placeholder="Ej: Ingeniería en Sistemas, Diseño Gráfico..."
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div>
+                              <label className="block text-white text-xs mb-1">Año Inicio</label>
+                              <input
+                                type="number"
+                                value={edu.añoInicio || ''}
+                                onChange={(e) => updateEducation(index, 'añoInicio', e.target.value ? parseInt(e.target.value) : null)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="2020"
+                                min="1950"
+                                max="2030"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white text-xs mb-1">Año Fin</label>
+                              <input
+                                type="number"
+                                value={edu.añoFin || ''}
+                                onChange={(e) => updateEducation(index, 'añoFin', e.target.value ? parseInt(e.target.value) : null)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                placeholder="2024"
+                                min="1950"
+                                max="2030"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </select>
-                  </div>
+
+                      <button
+                        type="button"
+                        onClick={addEducation}
+                        className="w-full py-3 border-2 border-dashed border-white/30 text-white/70 rounded-lg hover:border-white/50 hover:text-white flex items-center justify-center gap-2"
+                      >
+                        <Plus size={18} />
+                        Agregar Otra Educación
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -897,7 +1025,7 @@ export default function RegisterPage() {
                     <label className="block text-white text-sm mb-1">CV (Currículum)</label>
                     <div className="space-y-2">
                       <input
-                        type="url"
+                        type="text"
                         value={cvUrl}
                         onChange={(e) => setCvUrl(e.target.value)}
                         className={inputClass('cvUrl')}
@@ -928,7 +1056,7 @@ export default function RegisterPage() {
                   <div>
                     <label className="block text-white text-sm mb-1">LinkedIn</label>
                     <input
-                      type="url"
+                      type="text"
                       value={linkedinUrl}
                       onChange={(e) => setLinkedinUrl(e.target.value)}
                       className={inputClass('linkedinUrl')}
@@ -939,7 +1067,7 @@ export default function RegisterPage() {
                   <div>
                     <label className="block text-white text-sm mb-1">Portafolio</label>
                     <input
-                      type="url"
+                      type="text"
                       value={portafolioUrl}
                       onChange={(e) => setPortafolioUrl(e.target.value)}
                       className={inputClass('portafolioUrl')}
@@ -952,9 +1080,14 @@ export default function RegisterPage() {
               {/* Paso 6: Documentos */}
               {currentStep === 6 && (
                 <div className="space-y-4">
-                  <p className="text-white/80 text-sm mb-4">
-                    Agrega documentos adicionales como certificaciones, títulos, etc. (opcional)
-                  </p>
+                  {/* FIX: Mensaje informativo para que el usuario pause y vea que está en el último paso */}
+                  <div className="bg-white/20 border border-white/30 rounded-lg p-4 mb-2">
+                    <p className="text-white font-semibold text-sm mb-1">📋 Último paso antes de crear tu cuenta</p>
+                    <p className="text-white/80 text-xs">
+                      Si tienes certificaciones, títulos u otros documentos relevantes, puedes agregarlos aquí.
+                      Si no tienes documentos por ahora, puedes dar click en &quot;Crear Cuenta&quot; directamente.
+                    </p>
+                  </div>
 
                   {documents.length === 0 ? (
                     <div className="text-center py-8 bg-white/10 rounded-lg">
@@ -1075,7 +1208,7 @@ export default function RegisterPage() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || stepTransitioning}
                     className="flex-1 py-3 bg-button-orange text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isSubmitting ? (
@@ -1097,7 +1230,12 @@ export default function RegisterPage() {
               {currentStep < 6 && (
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(6)}
+                  onClick={() => {
+                    // FIX: Protección contra double-click al saltar a paso 6
+                    setStepTransitioning(true);
+                    setCurrentStep(6);
+                    setTimeout(() => setStepTransitioning(false), 500);
+                  }}
                   className="w-full mt-3 text-white/70 text-sm hover:text-white"
                 >
                   Omitir y crear cuenta con datos básicos

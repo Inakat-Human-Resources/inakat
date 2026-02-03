@@ -218,7 +218,7 @@ export default function JobCandidatesPage() {
     const confirmMessages: Record<string, string> = {
       company_interested: `¿Marcar a ${candidateName} como "Me interesa"?`,
       interviewed: `¿Marcar a ${candidateName} como "Entrevistado"?`,
-      rejected: `¿Descartar a ${candidateName}? Esta acción no se puede deshacer.`,
+      rejected: `¿Descartar a ${candidateName}?`,
       accepted: `¿Iniciar proceso de contratación con ${candidateName}?`
     };
 
@@ -556,11 +556,24 @@ export default function JobCandidatesPage() {
                         </span>
                       </div>
                     )}
+                    {/* FIX-03: Botones de recuperación para candidatos descartados */}
                     {app.status === 'rejected' && (
-                      <div className="mt-3 pt-3 border-t border-gray-100 text-center">
-                        <span className="text-sm text-gray-400 italic">
-                          Candidato descartado
-                        </span>
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-sm text-gray-400 italic text-center mb-2">Candidato descartado</p>
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            onClick={() => handleCandidateAction(app.id, 'company_interested', app.candidateName)}
+                            className="px-3 py-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
+                          >
+                            Recuperar
+                          </button>
+                          <button
+                            onClick={() => handleCandidateAction(app.id, 'accepted', app.candidateName)}
+                            className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                          >
+                            Contratación
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

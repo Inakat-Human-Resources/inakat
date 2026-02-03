@@ -206,6 +206,7 @@ export async function POST(request: Request) {
       universidad,
       carrera,
       nivelEstudios,
+      educacion, // FEATURE: Educación múltiple (array)
       profile,
       seniority,
       cvUrl,
@@ -317,9 +318,11 @@ export async function POST(request: Request) {
         telefono: telefono || null,
         sexo: sexo || null,
         fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
-        universidad: universidad || null,
-        carrera: carrera || null,
-        nivelEstudios: nivelEstudios || null,
+        // FEATURE: Educación múltiple - guardar JSON y sincronizar legacy
+        educacion: educacion && educacion.length > 0 ? JSON.stringify(educacion) : null,
+        universidad: educacion && educacion.length > 0 ? (educacion[0].institucion || null) : (universidad || null),
+        carrera: educacion && educacion.length > 0 ? (educacion[0].carrera || null) : (carrera || null),
+        nivelEstudios: educacion && educacion.length > 0 ? (educacion[0].nivel || null) : (nivelEstudios || null),
         profile: profile || null,
         seniority: seniority || null,
         cvUrl: cvUrl || null,

@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   Users,
@@ -77,6 +78,7 @@ interface DashboardStats {
 }
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<DashboardStats>({
     totalJobs: 0,
     activeJobs: 0,
@@ -626,9 +628,13 @@ export default function AdminDashboardPage() {
                         <p className="text-sm text-gray-600">{job.location}</p>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full font-semibold text-sm">
+                        <button
+                          onClick={() => router.push(`/admin/assign-candidates?jobId=${job.id}`)}
+                          className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full font-semibold text-sm hover:bg-blue-200 hover:scale-110 transition-all cursor-pointer"
+                          title="Ver candidatos asignados"
+                        >
                           {job._count?.applications || 0}
-                        </span>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-center">
                         {getStatusBadge(job.status)}

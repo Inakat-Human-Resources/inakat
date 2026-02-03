@@ -9,7 +9,8 @@ import {
   Briefcase,
   Bookmark,
   MoreVertical,
-  Building2
+  Building2,
+  ChevronDown  // FIX-05: Para dropdown de ordenamiento
 } from 'lucide-react';
 import ApplyJobModal from './ApplyJobModal';
 
@@ -26,6 +27,7 @@ interface Job {
   requirements: string | null;
   status: string;
   createdAt: string;
+  profile?: string;  // FIX-06: Campo de especialidad para filtro
 }
 
 interface User {
@@ -49,6 +51,14 @@ const SearchPositionsSection = () => {
   const [locationFilter, setLocationFilter] = useState('');
   const [jobTypeFilter, setJobTypeFilter] = useState('');
 
+  // FIX-05: Estado para ordenamiento
+  const [sortOrder, setSortOrder] = useState<string>('newest');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // FIX-06: Estado para filtro de especialidad
+  const [specialties, setSpecialties] = useState<{id: number, name: string}[]>([]);
+  const [specialtyFilter, setSpecialtyFilter] = useState('');
+
   // Modal de aplicación
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applicationSuccess, setApplicationSuccess] = useState(false);
@@ -63,10 +73,20 @@ const SearchPositionsSection = () => {
     fetchJobs();
   }, []);
 
-  // Aplicar filtros cuando cambien
+  // FIX-06: Cargar especialidades al montar
+  useEffect(() => {
+    fetch('/api/specialties')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setSpecialties(data.data);
+      })
+      .catch(err => console.error('Error fetching specialties:', err));
+  }, []);
+
+  // Aplicar filtros cuando cambien (FIX-05: agregado sortOrder, FIX-06: agregado specialtyFilter)
   useEffect(() => {
     applyFilters();
-  }, [jobs, searchTerm, locationFilter, jobTypeFilter]);
+  }, [jobs, searchTerm, locationFilter, jobTypeFilter, sortOrder, specialtyFilter]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -123,6 +143,27 @@ const SearchPositionsSection = () => {
 
     if (jobTypeFilter && jobTypeFilter !== 'all') {
       filtered = filtered.filter((job) => job.jobType === jobTypeFilter);
+    }
+
+    // FIX-06: Filtro por especialidad
+    if (specialtyFilter) {
+      filtered = filtered.filter(job => job.profile === specialtyFilter);
+    }
+
+    // FIX-05: Ordenamiento
+    switch (sortOrder) {
+      case 'newest':
+        filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        break;
+      case 'az':
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'za':
+        filtered.sort((a, b) => b.title.localeCompare(a.title));
+        break;
     }
 
     setFilteredJobs(filtered);
@@ -234,6 +275,20 @@ const SearchPositionsSection = () => {
               </select>
             </div>
 
+            {/* FIX-06: Filtro por especialidad */}
+            <div className="w-full md:w-1/4">
+              <select
+                className="w-full p-3 text-black rounded-full"
+                value={specialtyFilter}
+                onChange={(e) => setSpecialtyFilter(e.target.value)}
+              >
+                <option value="">Todas las especialidades</option>
+                {specialties.map(s => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
             <button className="bg-lemon-green text-black font-bold px-8 py-3 rounded-full hover:bg-green-700 flex items-center justify-center gap-2">
               <Search size={20} />
               BUSCAR
@@ -305,22 +360,52 @@ const SearchPositionsSection = () => {
           </div>
         )}
 
-        {/* Filtros de estado */}
+        {/* Filtros de estado y ordenamiento */}
         <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-2">
-            <button className="text-black font-bold border-2 border-button-green px-6 py-2 rounded-full bg-button-green text-white">
-              Guardados
+          {/* FIX-04: Solo mostrar estos botones si hay sesión */}
+          {user && (
+            <div className="flex gap-2">
+              <button className="text-black font-bold border-2 border-button-green px-6 py-2 rounded-full bg-button-green text-white">
+                Guardados
+              </button>
+              <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
+                Postulados
+              </button>
+              <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
+                Vencidos
+              </button>
+            </div>
+          )}
+          {!user && <div />} {/* Spacer cuando no hay user */}
+
+          {/* FIX-05: Dropdown funcional de ordenamiento */}
+          <div className="relative">
+            <button
+              onClick={() => setShowSortDropdown(!showSortDropdown)}
+              className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green flex items-center gap-2"
+            >
+              Ordenar por
+              <ChevronDown size={16} />
             </button>
-            <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
-              Postulados
-            </button>
-            <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
-              Vencidos
-            </button>
+            {showSortDropdown && (
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border z-10 min-w-[200px]">
+                {[
+                  { value: 'newest', label: 'Más reciente' },
+                  { value: 'oldest', label: 'Menos reciente' },
+                  { value: 'az', label: 'A → Z' },
+                  { value: 'za', label: 'Z → A' },
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    onClick={() => { setSortOrder(option.value); setShowSortDropdown(false); }}
+                    className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${sortOrder === option.value ? 'font-bold text-button-green' : 'text-gray-700'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
-            Ordenar por
-          </button>
         </div>
 
         {/* Loading state */}

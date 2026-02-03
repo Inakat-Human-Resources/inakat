@@ -170,6 +170,7 @@ export async function GET(request: Request) {
             fechaNacimiento: true,
             source: true,
             notas: true,
+            educacion: true, // FEATURE: Educación múltiple
             experiences: { orderBy: { fechaInicio: 'desc' } },
             documents: { orderBy: { createdAt: 'desc' } }
           }

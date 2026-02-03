@@ -2,6 +2,9 @@
 
 'use client';
 
+// FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
@@ -550,7 +553,7 @@ export default function SpecialistJobCandidates() {
                         <div className="flex items-center gap-3 mt-2">
                           {(app.cvUrl || app.candidateProfile?.cvUrl) && (
                             <a
-                              href={app.cvUrl || app.candidateProfile?.cvUrl || '#'}
+                              href={ensureUrl(app.cvUrl || app.candidateProfile?.cvUrl || '#')}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs text-blue-600 hover:underline flex items-center gap-1"
@@ -562,7 +565,7 @@ export default function SpecialistJobCandidates() {
                           )}
                           {app.candidateProfile?.linkedinUrl && (
                             <a
-                              href={app.candidateProfile.linkedinUrl}
+                              href={ensureUrl(app.candidateProfile.linkedinUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs text-blue-600 hover:underline flex items-center gap-1"

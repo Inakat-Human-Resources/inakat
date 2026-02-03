@@ -2,6 +2,9 @@
 
 'use client';
 
+// FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 import React, { useState, useEffect } from 'react';
 import {
   Search,
@@ -34,6 +37,17 @@ interface CandidateDocument {
   createdAt: string;
 }
 
+// FEATURE: Educación múltiple
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
+}
+
 interface Candidate {
   id: number;
   nombre: string;
@@ -47,6 +61,7 @@ interface Candidate {
   universidad: string | null;
   carrera: string | null;
   nivelEstudios: string | null;
+  educacion: string | null; // FEATURE: Educación múltiple (JSON string)
   profile: string | null;
   seniority: string | null;
   añosExperiencia: number;
@@ -351,6 +366,33 @@ export default function AdminCandidatesPage() {
         {source}
       </span>
     );
+  };
+
+  // FEATURE: Parsear educación múltiple
+  const parseEducacion = (candidate: Candidate): Education[] => {
+    if (candidate.educacion) {
+      try {
+        const parsed = JSON.parse(candidate.educacion);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Si falla el parse, continuamos con fallback
+      }
+    }
+    // Fallback: crear array con datos legacy si existen
+    if (candidate.universidad || candidate.carrera || candidate.nivelEstudios) {
+      return [{
+        id: 1,
+        nivel: candidate.nivelEstudios || '',
+        institucion: candidate.universidad || '',
+        carrera: candidate.carrera || '',
+        añoInicio: null,
+        añoFin: null,
+        estatus: ''
+      }];
+    }
+    return [];
   };
 
   // Stats
@@ -765,7 +807,7 @@ export default function AdminCandidatesPage() {
                     </button>
                     {candidate.linkedinUrl && (
                       <a
-                        href={candidate.linkedinUrl}
+                        href={ensureUrl(candidate.linkedinUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded"
@@ -848,7 +890,7 @@ export default function AdminCandidatesPage() {
                               <Edit size={18} />
                             </button>
                             {candidate.linkedinUrl && (
-                              <a href={candidate.linkedinUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Ver LinkedIn">
+                              <a href={ensureUrl(candidate.linkedinUrl)} target="_blank" rel="noopener noreferrer" className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded" title="Ver LinkedIn">
                                 <ExternalLink size={18} />
                               </a>
                             )}
@@ -925,18 +967,6 @@ export default function AdminCandidatesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Universidad</p>
-                  <p className="font-medium">
-                    {candidateToView.universidad || '-'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Carrera</p>
-                  <p className="font-medium">
-                    {candidateToView.carrera || '-'}
-                  </p>
-                </div>
-                <div>
                   <p className="text-sm text-gray-500">Perfil</p>
                   <p className="font-medium">
                     {candidateToView.profile || '-'}
@@ -959,6 +989,46 @@ export default function AdminCandidatesPage() {
                   <p className="font-medium">{candidateToView.source}</p>
                 </div>
               </div>
+
+              {/* FEATURE: Educación múltiple */}
+              {parseEducacion(candidateToView).length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-500 mb-2 flex items-center gap-2">
+                    <GraduationCap size={16} />
+                    Educación
+                  </p>
+                  <div className="space-y-2">
+                    {parseEducacion(candidateToView).map((edu) => (
+                      <div key={edu.id} className="bg-gray-50 p-3 rounded-lg">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium">{edu.carrera || 'Sin carrera'}</p>
+                            <p className="text-sm text-gray-600">{edu.institucion || 'Sin institución'}</p>
+                            {edu.nivel && (
+                              <p className="text-xs text-gray-500">{edu.nivel}</p>
+                            )}
+                          </div>
+                          {edu.estatus && (
+                            <span className={`px-2 py-1 text-xs font-medium rounded ${
+                              edu.estatus === 'Titulado' ? 'bg-green-100 text-green-700' :
+                              edu.estatus === 'Terminado' ? 'bg-blue-100 text-blue-700' :
+                              edu.estatus === 'Cursando' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {edu.estatus}
+                            </span>
+                          )}
+                        </div>
+                        {(edu.añoInicio || edu.añoFin) && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            {edu.añoInicio || '?'} - {edu.añoFin || 'Presente'}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {candidateToView.notas && (
                 <div>
@@ -1001,7 +1071,7 @@ export default function AdminCandidatesPage() {
               <div className="flex flex-wrap gap-2 pt-4 border-t">
                 {candidateToView.cvUrl && (
                   <a
-                    href={candidateToView.cvUrl}
+                    href={ensureUrl(candidateToView.cvUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2"
@@ -1012,7 +1082,7 @@ export default function AdminCandidatesPage() {
                 )}
                 {candidateToView.linkedinUrl && (
                   <a
-                    href={candidateToView.linkedinUrl}
+                    href={ensureUrl(candidateToView.linkedinUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2"
@@ -1023,7 +1093,7 @@ export default function AdminCandidatesPage() {
                 )}
                 {candidateToView.portafolioUrl && (
                   <a
-                    href={candidateToView.portafolioUrl}
+                    href={ensureUrl(candidateToView.portafolioUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-2"

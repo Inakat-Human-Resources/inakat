@@ -188,7 +188,8 @@ export async function GET(request: Request) {
               cvUrl: candidate.cvUrl,
               linkedinUrl: candidate.linkedinUrl,
               portafolioUrl: candidate.portafolioUrl,
-              notas: candidate.notas
+              notas: candidate.notas,
+              educacion: candidate.educacion // FEATURE: Educación múltiple
             }
           : null,
         recruiterNotes: notes?.recruiterNotes || null,

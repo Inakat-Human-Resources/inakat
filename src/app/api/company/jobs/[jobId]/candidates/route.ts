@@ -138,6 +138,7 @@ export async function GET(
                 linkedinUrl: candidate.linkedinUrl,
                 portafolioUrl: candidate.portafolioUrl,
                 notas: candidate.notas,
+                educacion: candidate.educacion, // FEATURE: Educación múltiple
                 experiences: candidate.experiences,
                 documents: candidate.documents
               }

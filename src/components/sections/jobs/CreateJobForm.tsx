@@ -240,6 +240,16 @@ const CreateJobForm = () => {
     fetchSpecialties();
   }, []);
 
+  // FIX-01: Re-fetch créditos cuando el usuario regresa de otra página (ej: comprar créditos)
+  useEffect(() => {
+    const handleFocus = () => {
+      // Re-cargar info del usuario para tener créditos actualizados
+      fetchUserInfo();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   // Limpiar subcategoría cuando cambia el perfil
   useEffect(() => {
     setFormData((prev) => ({ ...prev, subcategory: '' }));

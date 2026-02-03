@@ -2,6 +2,9 @@
 
 'use client';
 
+// FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 import { useState, useRef } from 'react';
 import {
   X,
@@ -48,11 +51,23 @@ interface CandidateDocument {
   createdAt?: string;
 }
 
+// FEATURE: Educación múltiple
+interface Education {
+  id: number;
+  nivel: string;
+  institucion: string;
+  carrera: string;
+  añoInicio?: number | null;
+  añoFin?: number | null;
+  estatus: string;
+}
+
 interface CandidateProfile {
   id?: number;
   universidad?: string;
   carrera?: string;
   nivelEstudios?: string;
+  educacion?: string; // FEATURE: Educación múltiple (JSON string)
   añosExperiencia?: number;
   profile?: string;
   subcategory?: string;
@@ -93,6 +108,7 @@ interface BankCandidate {
   universidad?: string | null;
   carrera?: string | null;
   nivelEstudios?: string | null;
+  educacion?: string | null; // FEATURE: Educación múltiple (JSON string)
   añosExperiencia: number;
   profile?: string | null;
   subcategory?: string | null;
@@ -170,6 +186,7 @@ export default function CandidateProfileModal({
         universidad: application.candidateProfile?.universidad,
         carrera: application.candidateProfile?.carrera,
         nivelEstudios: application.candidateProfile?.nivelEstudios,
+        educacion: application.candidateProfile?.educacion, // FEATURE: Educación múltiple
         añosExperiencia: application.candidateProfile?.añosExperiencia,
         profile: application.candidateProfile?.profile,
         subcategory: application.candidateProfile?.subcategory,
@@ -196,6 +213,7 @@ export default function CandidateProfileModal({
         universidad: candidate!.universidad,
         carrera: candidate!.carrera,
         nivelEstudios: candidate!.nivelEstudios,
+        educacion: candidate!.educacion, // FEATURE: Educación múltiple
         añosExperiencia: candidate!.añosExperiencia,
         profile: candidate!.profile,
         subcategory: candidate!.subcategory,
@@ -258,6 +276,35 @@ export default function CandidateProfileModal({
       </span>
     );
   };
+
+  // FEATURE: Parsear educación múltiple
+  const parseEducacion = (): Education[] => {
+    if (data.educacion) {
+      try {
+        const parsed = JSON.parse(data.educacion);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {
+        // Si falla el parse, continuamos con fallback
+      }
+    }
+    // Fallback: crear array con datos legacy si existen
+    if (data.universidad || data.carrera || data.nivelEstudios) {
+      return [{
+        id: 1,
+        nivel: data.nivelEstudios || '',
+        institucion: data.universidad || '',
+        carrera: data.carrera || '',
+        añoInicio: null,
+        añoFin: null,
+        estatus: ''
+      }];
+    }
+    return [];
+  };
+
+  const educaciones = parseEducacion();
 
   const getSourceLabel = (source?: string) => {
     const labels: Record<string, string> = {
@@ -482,31 +529,51 @@ export default function CandidateProfileModal({
             )}
           </div>
 
-          {/* Education & Experience Overview */}
+          {/* FEATURE: Educación múltiple */}
+          {educaciones.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-[#2b5d62]" />
+                Educación
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {educaciones.map((edu, index) => (
+                  <div key={edu.id || index} className="p-4 border border-gray-200 rounded-lg">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{edu.carrera || 'Sin carrera'}</h4>
+                        <p className="text-sm text-gray-600">{edu.institucion || 'Sin institución'}</p>
+                      </div>
+                      {edu.estatus && (
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          edu.estatus === 'Titulado' ? 'bg-green-100 text-green-800' :
+                          edu.estatus === 'Terminado' ? 'bg-blue-100 text-blue-800' :
+                          edu.estatus === 'Cursando' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {edu.estatus}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      {edu.nivel && <span className="font-medium">{edu.nivel}</span>}
+                      {(edu.añoInicio || edu.añoFin) && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <span>
+                            {edu.añoInicio || '?'} - {edu.añoFin || 'Presente'}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Experience & Professional Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {data.universidad && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <GraduationCap className="w-4 h-4" />
-                  <span className="text-xs font-medium">Universidad</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{data.universidad}</p>
-                {data.carrera && (
-                  <p className="text-xs text-gray-600 mt-1">{data.carrera}</p>
-                )}
-              </div>
-            )}
-
-            {data.nivelEstudios && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <GraduationCap className="w-4 h-4" />
-                  <span className="text-xs font-medium">Nivel de Estudios</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{data.nivelEstudios}</p>
-              </div>
-            )}
-
             {data.añosExperiencia !== undefined && (
               <div className="p-4 border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-2 text-gray-500 mb-1">
@@ -564,7 +631,7 @@ export default function CandidateProfileModal({
           <div className="flex flex-wrap gap-3 mb-6">
             {data.cvUrl && (
               <a
-                href={data.cvUrl}
+                href={ensureUrl(data.cvUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] transition-colors"
@@ -576,7 +643,7 @@ export default function CandidateProfileModal({
 
             {data.linkedinUrl && (
               <a
-                href={data.linkedinUrl}
+                href={ensureUrl(data.linkedinUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#0077b5] text-white rounded-lg hover:bg-[#006097] transition-colors"
@@ -588,7 +655,7 @@ export default function CandidateProfileModal({
 
             {data.portafolioUrl && (
               <a
-                href={data.portafolioUrl}
+                href={ensureUrl(data.portafolioUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"

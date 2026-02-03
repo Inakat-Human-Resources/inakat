@@ -29,10 +29,20 @@ const registerSchema = z.object({
   sexo: z.enum(['M', 'F', 'Otro']).optional(),
   fechaNacimiento: z.string().optional(),
 
-  // Educación
-  universidad: z.string().optional(),
-  carrera: z.string().optional(),
-  nivelEstudios: z.string().optional(),
+  // Educación (FEATURE: Educación múltiple)
+  educacion: z
+    .array(
+      z.object({
+        id: z.number().optional(),
+        nivel: z.string(),
+        institucion: z.string(),
+        carrera: z.string(),
+        añoInicio: z.number().nullable().optional(),
+        añoFin: z.number().nullable().optional(),
+        estatus: z.string()
+      })
+    )
+    .optional(),
 
   // Profesional
   profile: z.string().optional(),
@@ -121,9 +131,7 @@ export async function POST(request: Request) {
       telefono,
       sexo,
       fechaNacimiento,
-      universidad,
-      carrera,
-      nivelEstudios,
+      educacion,
       profile,
       subcategory,
       seniority,
@@ -197,9 +205,11 @@ export async function POST(request: Request) {
           telefono: telefono || null,
           sexo: sexo || null,
           fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
-          universidad: universidad || null,
-          carrera: carrera || null,
-          nivelEstudios: nivelEstudios || null,
+          // FEATURE: Educación múltiple - guardar JSON y sincronizar campos legacy
+          educacion: educacion && educacion.length > 0 ? JSON.stringify(educacion) : null,
+          universidad: educacion && educacion.length > 0 ? (educacion[0].institucion || null) : null,
+          carrera: educacion && educacion.length > 0 ? (educacion[0].carrera || null) : null,
+          nivelEstudios: educacion && educacion.length > 0 ? (educacion[0].nivel || null) : null,
           profile: profile || null,
           subcategory: subcategory || null,
           seniority: seniority || null,

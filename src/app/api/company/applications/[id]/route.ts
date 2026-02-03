@@ -1,3 +1,5 @@
+// RUTA: src/app/api/company/applications/[id]/route.ts
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -99,19 +101,21 @@ export async function PATCH(
     }
 
     // Verificar que la aplicación está en un status que la empresa puede cambiar
-    // Estados finales: rejected, accepted - no se pueden cambiar
-    if (application.status === 'rejected' || application.status === 'accepted') {
+    // FIX-03: Solo 'accepted' es estado final. 'rejected' ahora es recuperable.
+    if (application.status === 'accepted') {
       return NextResponse.json(
-        { success: false, error: 'Este candidato ya tiene un estado final y no puede ser modificado' },
+        { success: false, error: 'Este candidato ya está en proceso de contratación y no puede ser modificado' },
         { status: 400 }
       );
     }
 
     // Solo puede modificar aplicaciones visibles para la empresa
+    // FIX-03: Agregado 'rejected' para permitir recuperar candidatos descartados
     const COMPANY_MODIFIABLE_STATUSES = [
       'sent_to_company',
       'company_interested',
-      'interviewed'
+      'interviewed',
+      'rejected'
     ];
 
     if (!COMPANY_MODIFIABLE_STATUSES.includes(application.status)) {
@@ -124,10 +128,12 @@ export async function PATCH(
     // Validar transiciones de status válidas
     // Nota: Permitimos ir directo a 'accepted' desde cualquier estado visible
     // porque Eduardo pidió "En proceso de contratación" como opción directa
+    // FIX-03: Agregadas transiciones desde 'rejected' para permitir recuperar candidatos
     const validTransitions: Record<string, string[]> = {
       'sent_to_company': ['company_interested', 'accepted', 'rejected'],
       'company_interested': ['interviewed', 'accepted', 'rejected'],
-      'interviewed': ['accepted', 'rejected']
+      'interviewed': ['accepted', 'rejected'],
+      'rejected': ['company_interested', 'accepted']  // Recuperar o ir directo a contratación
     };
 
     const allowedNextStatuses = validTransitions[application.status] || [];
@@ -327,7 +333,8 @@ export async function GET(
           cvUrl: candidate.cvUrl,
           linkedinUrl: candidate.linkedinUrl,
           portafolioUrl: candidate.portafolioUrl,
-          notas: candidate.notas
+          notas: candidate.notas,
+          educacion: candidate.educacion // FEATURE: Educación múltiple
         } : null,
         recruiterNotes: jobAssignment?.recruiterNotes || null,
         specialistNotes: jobAssignment?.specialistNotes || null
