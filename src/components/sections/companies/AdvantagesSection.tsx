@@ -42,18 +42,18 @@ const benefits: Benefit[] = [
 
 const AdvantagesSection = () => {
   return (
-    <section className="py-16 bg-custom-beige relative overflow-hidden">
-      {/* Decorative image on the left */}
+    <section className="py-8 md:py-16 bg-custom-beige relative overflow-hidden">
+      {/* Decorative image on the left - solo desktop */}
       <Image
         src={decorativeImage}
         alt="Decoración"
-        className="absolute left-[-10em] top-1/2 transform -translate-y-1/2 rotate-[-90deg] w-[300px]"
+        className="absolute left-[-10em] top-1/2 transform -translate-y-1/2 rotate-[-90deg] w-[300px] hidden md:block"
       />
 
       <div className="container mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 ml-[50px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 ml-0 md:ml-[50px] px-4 md:px-0">
           {/* Title and description column */}
-          <div className="md:col-span-4 py-16 px-10">
+          <div className="md:col-span-4 py-8 md:py-16 px-4 md:px-10">
             <h2 className="text-4xl font-bold text-title-dark mb-6">
               DESCUBRE LOS <br />
               BENEFICIOS DE <br />
@@ -68,7 +68,7 @@ const AdvantagesSection = () => {
 
           {/* Benefits grid */}
           <div className="md:col-span-8">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
               {benefits.map((benefit, index) => (
                 <div
                   key={index}

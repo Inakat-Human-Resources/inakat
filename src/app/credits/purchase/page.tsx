@@ -532,7 +532,7 @@ export default function PurchaseCreditsPage() {
                       </div>
 
                       {discountInfo.pricing && selectedPkg && (
-                        <div className="mt-4 pt-4 border-t border-green-200 grid grid-cols-3 gap-4 text-center">
+                        <div className="mt-4 pt-4 border-t border-green-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                           <div>
                             <p className="text-xs text-gray-500">Precio original</p>
                             <p className="text-lg line-through text-gray-400">

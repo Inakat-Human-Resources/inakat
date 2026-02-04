@@ -957,7 +957,7 @@ const CreateJobForm = () => {
           <label className="block text-sm font-semibold mb-2">
             Salario mensual (MXN) *
           </label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>

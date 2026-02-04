@@ -9,17 +9,17 @@ const WhyInakatSection = () => {
   const router = useRouter();
 
   return (
-    <section className="bg-soft-green text-white">
+    <section className="bg-soft-green text-white overflow-hidden">
       <div className="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="relative w-full h-full min-h-[400px]">
+        <div className="relative w-full h-full min-h-[250px] md:min-h-[400px] hidden md:block">
           <Image
             src={semicircleImage}
             alt="Por qué INAKAT"
-            className="absolute w-full h-full object-cover left-[-4em]"
+            className="absolute w-full h-full object-cover left-0 md:left-[-4em]"
             fill
           />
         </div>
-        <div className="md:w-4/3 flex flex-wrap justify-center md:justify-start gap-4 mt-6 mb-16 md:mt-0 pt-16">
+        <div className="w-full flex flex-wrap justify-center md:justify-start gap-4 mt-6 mb-16 md:mt-0 pt-8 md:pt-16 px-4 md:px-0">
           <h2 className="text-3xl font-bold mb-6 text-primary-blue">
             ¿Por qué INAKAT?
           </h2>

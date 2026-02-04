@@ -241,7 +241,7 @@ const Navbar = () => {
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-[420px] bg-white rounded-lg shadow-lg py-2 border border-gray-200">
+                  <div className="absolute right-0 mt-2 w-[min(420px,90vw)] bg-white rounded-lg shadow-lg py-2 border border-gray-200">
                     {/* User Info */}
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-semibold text-gray-900">

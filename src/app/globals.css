@@ -70,7 +70,14 @@
       'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding-top: 8em; /* Space for fixed navbar */
+    padding-top: 5rem; /* Mobile: navbar más compacto */
+    overflow-x: hidden; /* CRÍTICO: Prevenir scroll horizontal */
+  }
+
+  @media (min-width: 768px) {
+    body {
+      padding-top: 8em; /* Desktop: espacio completo para navbar */
+    }
   }
 
   code {

@@ -20,9 +20,9 @@ const SpecialtiesSection = () => {
   ];
 
   return (
-    <section className="relative w-full bg-custom-beige py-16">
-      {/* Left semicircle image */}
-      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1/2">
+    <section className="relative w-full bg-custom-beige py-16 overflow-hidden">
+      {/* Left semicircle image - solo desktop */}
+      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1/2 hidden md:block">
         <Image
           src={semicircleImage}
           alt="Decoración derecha"
@@ -30,8 +30,8 @@ const SpecialtiesSection = () => {
           style={{ clipPath: "inset(0 0 0 50%)" }}
         />
       </div>
-      {/* Right image */}
-      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2">
+      {/* Right image - solo desktop */}
+      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2 hidden md:block">
         <Image
           src={semicircleImage}
           alt="Decoración izquierda"

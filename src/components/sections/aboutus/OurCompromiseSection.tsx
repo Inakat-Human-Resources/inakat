@@ -6,15 +6,15 @@ import aboutBackground from "@/assets/images/2-about/3.png";
 const OurCompromiseSection = () => {
   return (
     <section
-      className="bg-cover bg-center flex items-center justify-center py-10 relative"
+      className="bg-cover bg-center flex items-center justify-center py-10 relative overflow-hidden"
       style={{ backgroundImage: `url(${aboutBackground.src})` }}
     >
-      <div className="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center min-h-[80%]">
-        {/* Left decorative image (rotated -90°) */}
+      <div className="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center min-h-[80%] px-4 md:px-0">
+        {/* Left decorative image (rotated -90°) - solo desktop */}
         <Image
           src={logoImage}
           alt="Decoración izquierda"
-          className="absolute left-[-5em] top-1/2 transform -translate-y-1/2 -rotate-90 w-1/6"
+          className="absolute left-[-5em] top-1/2 transform -translate-y-1/2 -rotate-90 w-1/6 hidden md:block"
         />
         {/* First column: Commitment (right aligned) */}
         <div className="bg-primary-light-green p-8 rounded-lg shadow-lg flex items-center justify-end max-w-md ml-auto flex-1 h-full">
@@ -64,11 +64,11 @@ const OurCompromiseSection = () => {
           </p>
         </div>
 
-        {/* Right decorative image (rotated +90°) */}
+        {/* Right decorative image (rotated +90°) - solo desktop */}
         <Image
           src={logoImage}
           alt="Decoración derecha"
-          className="absolute right-[-5em] top-1/2 transform -translate-y-1/2 rotate-90 w-1/6"
+          className="absolute right-[-5em] top-1/2 transform -translate-y-1/2 rotate-90 w-1/6 hidden md:block"
         />
       </div>
     </section>

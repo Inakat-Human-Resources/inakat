@@ -75,7 +75,7 @@ export default function LoginPage() {
   };
 
   return (
-    <section className="bg-custom-beige min-h-screen flex items-center justify-center">
+    <section className="bg-custom-beige min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-4xl flex bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Columna Izquierda: Imagen y Texto */}
         <div className="relative w-1/2 hidden md:flex flex-col justify-center items-center p-8 bg-cover bg-center">
@@ -95,7 +95,7 @@ export default function LoginPage() {
         </div>
 
         {/* Columna Derecha: Formulario */}
-        <div className="w-full md:w-1/2 bg-soft-green p-10 flex flex-col justify-center items-center">
+        <div className="w-full md:w-1/2 bg-soft-green p-6 md:p-10 flex flex-col justify-center items-center">
           <div className="w-24 h-24 mb-4">
             <Image
               src={logoIcon}
