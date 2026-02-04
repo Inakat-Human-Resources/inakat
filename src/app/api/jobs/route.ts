@@ -16,7 +16,7 @@ function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
   return {
     ...job,
     company: 'Empresa Confidencial',
-    location: job.location ? job.location.split(',')[1]?.trim() || 'México' : 'México', // Solo estado/país
+    location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México', // Solo estado/país
     logoUrl: null, // Ocultar logo en vacantes confidenciales
   };
 }

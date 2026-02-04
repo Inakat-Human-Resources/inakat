@@ -21,7 +21,12 @@ describe('Middleware - Excepciones Públicas', () => {
     { pathname: '/api/recruiter/dashboard', method: 'GET', requiredRole: 'recruiter' },
     { pathname: '/api/specialist/dashboard', method: 'GET', requiredRole: 'specialist' },
     { pathname: '/api/vendor/my-code', method: 'GET', requiredRole: 'any' },
-    { pathname: '/api/upload', method: 'POST', requiredRole: 'any' }
+    { pathname: '/api/upload', method: 'POST', requiredRole: 'any' },
+    { pathname: '/api/evaluations/notes', method: 'GET', requiredRole: 'any' },
+    { pathname: '/api/evaluations/notes', method: 'POST', requiredRole: 'any' },
+    { pathname: '/api/credits/purchases', method: 'POST', requiredRole: 'company' },
+    { pathname: '/api/profile/experience', method: 'POST', requiredRole: 'any' },
+    { pathname: '/api/profile/documents', method: 'POST', requiredRole: 'any' }
   ];
 
   describe('Rutas públicas', () => {
@@ -77,6 +82,27 @@ describe('Middleware - Excepciones Públicas', () => {
         exc => exc.pathname.startsWith('/api/admin') && exc.method === 'POST'
       );
       expect(adminPostIsPublic).toBe(false);
+    });
+
+    it('GET /api/evaluations/notes NO debe ser público', () => {
+      const isPublic = PUBLIC_EXCEPTIONS.some(
+        exc => exc.pathname === '/api/evaluations/notes'
+      );
+      expect(isPublic).toBe(false);
+    });
+
+    it('GET /api/credits/purchases NO debe ser público', () => {
+      const isPublic = PUBLIC_EXCEPTIONS.some(
+        exc => exc.pathname.startsWith('/api/credits')
+      );
+      expect(isPublic).toBe(false);
+    });
+
+    it('/api/profile sub-rutas deben estar protegidas', () => {
+      const isPublic = PUBLIC_EXCEPTIONS.some(
+        exc => exc.pathname.startsWith('/api/profile')
+      );
+      expect(isPublic).toBe(false);
     });
   });
 

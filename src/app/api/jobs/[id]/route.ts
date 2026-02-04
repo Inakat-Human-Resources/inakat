@@ -6,6 +6,36 @@ import { calculateJobCreditCost } from '@/lib/pricing';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 
+// Helper para verificar autenticación y ownership
+async function verifyJobOwnership(jobUserId: number | null): Promise<{
+  authenticated: boolean;
+  authorized: boolean;
+  userId?: number;
+  role?: string;
+  error?: string;
+}> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('auth-token')?.value;
+
+  if (!token) {
+    return { authenticated: false, authorized: false, error: 'No autenticado' };
+  }
+
+  const payload = verifyToken(token);
+  if (!payload?.userId) {
+    return { authenticated: false, authorized: false, error: 'Token inválido' };
+  }
+
+  const isAdmin = payload.role === 'admin';
+  const isOwner = jobUserId === payload.userId;
+
+  if (!isAdmin && !isOwner) {
+    return { authenticated: true, authorized: false, userId: payload.userId, role: payload.role, error: 'No tienes permiso para modificar esta vacante' };
+  }
+
+  return { authenticated: true, authorized: true, userId: payload.userId, role: payload.role };
+}
+
 // Función para sanitizar vacantes confidenciales
 function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
   if (!job.isConfidential || isOwnerOrAdmin) {
@@ -16,7 +46,7 @@ function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
   return {
     ...job,
     company: 'Empresa Confidencial',
-    location: job.location ? job.location.split(',')[1]?.trim() || 'México' : 'México',
+    location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México',
     logoUrl: null, // Ocultar logo en vacantes confidenciales
   };
 }
@@ -144,6 +174,15 @@ export async function PATCH(
       );
     }
 
+    // Verificar autenticación y ownership
+    const auth = await verifyJobOwnership(existingJob.userId);
+    if (!auth.authenticated) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
+    }
+    if (!auth.authorized) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    }
+
     // Verificar si el tiempo de edición ha expirado (4 horas)
     // Solo aplica para ediciones de contenido, no para cambios de status
     const allowedFieldsAfterExpiry = ['status', 'closedReason'];
@@ -225,8 +264,17 @@ export async function PATCH(
       }
     }
 
-    // Preparar datos para actualizar (convertir salaryMin/salaryMax a Int si existen)
-    const updateData = { ...body };
+    // Whitelist de campos permitidos (previene inyección de userId, creditCost, editableUntil)
+    const allowedPatchFields = ['status', 'closedReason', 'title', 'company', 'location',
+      'salary', 'salaryMin', 'salaryMax', 'jobType', 'workMode', 'description',
+      'requirements', 'companyRating', 'profile', 'subcategory', 'seniority',
+      'educationLevel', 'habilidades', 'responsabilidades', 'resultadosEsperados',
+      'valoresActitudes', 'informacionAdicional', 'isConfidential'];
+    const updateData: Record<string, any> = {};
+    for (const field of allowedPatchFields) {
+      if (body[field] !== undefined) updateData[field] = body[field];
+    }
+    // Convertir salaryMin/salaryMax a Int si existen
     if (updateData.salaryMin !== undefined) {
       updateData.salaryMin = updateData.salaryMin ? parseInt(updateData.salaryMin) : null;
     }
@@ -282,6 +330,15 @@ export async function PUT(
         { success: false, error: 'Vacante no encontrada' },
         { status: 404 }
       );
+    }
+
+    // Verificar autenticación y ownership
+    const auth = await verifyJobOwnership(existingJob.userId);
+    if (!auth.authenticated) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
+    }
+    if (!auth.authorized) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
     }
 
     // Verificar si el tiempo de edición ha expirado (4 horas)
@@ -547,6 +604,15 @@ export async function DELETE(
         { success: false, error: 'Job not found' },
         { status: 404 }
       );
+    }
+
+    // Verificar autenticación y ownership
+    const auth = await verifyJobOwnership(existingJob.userId);
+    if (!auth.authenticated) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 401 });
+    }
+    if (!auth.authorized) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
     }
 
     // Eliminar vacante

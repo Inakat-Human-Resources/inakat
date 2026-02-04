@@ -74,6 +74,12 @@ export function middleware(request: NextRequest) {
   // Verificar permisos de ADMIN para rutas específicas
   const isAdminRoute =
     pathname.startsWith('/api/company-requests') ||
+    // NOTA: /api/applications y sub-rutas están restringidas a admin en middleware.
+    // Companies/recruiters/specialists acceden a applications vía sus propias rutas:
+    // - /api/company/applications/[id]
+    // - /api/recruiter/dashboard
+    // - /api/specialist/dashboard
+    // NO mover esta restricción sin verificar esas rutas alternativas.
     pathname.startsWith('/api/applications') ||
     pathname.startsWith('/api/admin/') ||
     pathname.startsWith('/applications') ||
@@ -259,8 +265,11 @@ export const config = {
     '/api/my-applications',
     '/api/candidate/:path*',
     '/api/profile',
+    '/api/profile/:path*',
     '/api/recruiter/:path*',
     '/api/specialist/:path*',
+    '/api/evaluations/:path*',
+    '/api/credits/:path*',
     '/api/vendor/:path*',
     '/admin/:path*',
     '/applications/:path*',

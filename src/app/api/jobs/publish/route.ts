@@ -6,6 +6,16 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { calculateJobCreditCost } from '@/lib/pricing';
 
+// Función para sanitizar vacantes confidenciales
+function sanitizeConfidentialJob(job: any) {
+  if (!job.isConfidential) return job;
+  return {
+    ...job,
+    company: 'Empresa Confidencial',
+    location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México',
+  };
+}
+
 // GET - Listar todas las vacantes activas
 export async function GET(request: Request) {
   try {
@@ -68,10 +78,13 @@ export async function GET(request: Request) {
       }
     });
 
+    // Sanitizar vacantes confidenciales
+    const sanitizedJobs = jobs.map(job => sanitizeConfidentialJob(job));
+
     return NextResponse.json({
       success: true,
-      data: jobs,
-      count: jobs.length
+      data: sanitizedJobs,
+      count: sanitizedJobs.length
     });
   } catch (error) {
     console.error('Error fetching jobs:', error);

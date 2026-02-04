@@ -48,6 +48,9 @@ model User {
   // Códigos de descuento (para vendors)
   discountCodes           DiscountCode[] @relation("VendorCodes")
 
+  // Notas de evaluación (para recruiters y specialists)
+  evaluationNotes         EvaluationNote[] @relation("EvaluationNoteAuthor")
+
   @@index([email])
   @@index([role])
   @@index([isActive])
@@ -208,6 +211,9 @@ model Application {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   reviewedAt      DateTime?
+
+  // Notas de evaluación
+  evaluationNotes EvaluationNote[]
 
   @@index([jobId])
   @@index([userId])
@@ -584,10 +590,12 @@ model EvaluationNote {
 
   // Autor de la nota
   authorId      Int
+  author        User      @relation("EvaluationNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   authorRole    String    // "recruiter", "specialist"
 
   // Aplicación asociada
   applicationId Int
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   // Contenido
   content       String    @db.Text
