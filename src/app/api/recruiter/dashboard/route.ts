@@ -37,8 +37,6 @@ async function verifyRecruiter() {
  * OPTIMIZADO: Eliminadas queries N+1, usa batch queries
  */
 export async function GET(request: Request) {
-  const startTime = Date.now();
-
   try {
     const auth = await verifyRecruiter();
     if ('error' in auth) {
@@ -282,9 +280,6 @@ export async function GET(request: Request) {
       // Total de candidatos en seguimiento (enviados al especialista o más adelante)
       totalSent: sentToSpecialistCount + evaluatingCount + sentToCompanyCount + hiredCount + rejectedCount
     };
-
-    const duration = Date.now() - startTime;
-    console.log(`[PERF] Recruiter dashboard loaded in ${duration}ms (${assignments.length} assignments, ${uniqueEmails.length} unique candidates)`);
 
     return NextResponse.json({
       success: true,

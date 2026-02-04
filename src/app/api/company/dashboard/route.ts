@@ -1,3 +1,5 @@
+// RUTA: src/app/api/company/dashboard/route.ts
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -9,8 +11,6 @@ import { prisma } from '@/lib/prisma';
  * OPTIMIZADO: Eliminadas queries N+1, usa batch queries
  */
 export async function GET(request: Request) {
-  const startTime = Date.now();
-
   try {
     // Obtener userId de los headers (agregado por middleware)
     const userId = request.headers.get('x-user-id');
@@ -260,9 +260,6 @@ export async function GET(request: Request) {
         ).length
       };
     });
-
-    const duration = Date.now() - startTime;
-    console.log(`[PERF] Company dashboard loaded in ${duration}ms (${allApplications.length} applications, ${uniqueEmails.length} unique candidates)`);
 
     // 9. Respuesta completa
     return NextResponse.json({

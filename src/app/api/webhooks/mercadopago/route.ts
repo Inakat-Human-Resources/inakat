@@ -1,3 +1,5 @@
+// RUTA: src/app/api/webhooks/mercadopago/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -154,7 +156,7 @@ export async function POST(req: NextRequest) {
 
     // Si ya fue procesado, no hacer nada (idempotencia)
     if (purchase.paymentStatus === 'paid') {
-      console.log('[Webhook] Payment already processed:', { purchaseId: purchase.id });
+      console.warn('[Webhook] Payment already processed:', { purchaseId: purchase.id });
       return NextResponse.json({ received: true, alreadyProcessed: true });
     }
 
@@ -212,7 +214,7 @@ export async function POST(req: NextRequest) {
       // TODO: Enviar email de confirmación
 
     } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
-      console.log('[Webhook] Payment rejected/cancelled:', {
+      console.warn('[Webhook] Payment rejected/cancelled:', {
         paymentId,
         status: paymentInfo.status,
         statusDetail: paymentInfo.status_detail

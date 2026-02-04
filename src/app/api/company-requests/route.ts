@@ -1,3 +1,5 @@
+// RUTA: src/app/api/company-requests/route.ts
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -122,8 +124,6 @@ export async function POST(request: Request) {
 
       return { companyRequest, user };
     });
-
-    console.log(`Usuario de empresa creado: ${result.user.email} (pendiente de aprobación)`);
 
     return NextResponse.json(
       {

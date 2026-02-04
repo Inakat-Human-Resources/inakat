@@ -169,7 +169,9 @@ export async function POST(request: Request) {
     // - Si es empresa y quiere publicar ahora: verificar créditos
     // - Por defecto: guardar como borrador
     let initialStatus = 'draft';
+    let balanceAfterPublish: number | null = null;
 
+    // MEJ-002: Usar transacción para deducción de créditos (evita race conditions)
     if (publishNow && userId) {
       const user = await prisma.user.findUnique({
         where: { id: userId }
@@ -180,39 +182,45 @@ export async function POST(request: Request) {
           // Admin puede publicar sin créditos
           initialStatus = 'active';
         } else if (user.role === 'company') {
-          // Empresa necesita créditos
-          if (user.credits >= creditCost) {
-            initialStatus = 'active';
+          // Empresa necesita créditos - usar transacción para atomicidad
+          try {
+            await prisma.$transaction(async (tx) => {
+              // Leer usuario dentro de la transacción para bloqueo
+              const freshUser = await tx.user.findUnique({
+                where: { id: userId }
+              });
 
-            // Descontar créditos
-            await prisma.user.update({
-              where: { id: userId },
-              data: { credits: { decrement: creditCost } }
-            });
-
-            // Registrar transacción
-            await prisma.creditTransaction.create({
-              data: {
-                userId: userId,
-                type: 'spend',
-                amount: -creditCost,
-                balanceBefore: user.credits,
-                balanceAfter: user.credits - creditCost,
-                description: `Publicación de vacante: ${title}`
+              if (!freshUser || freshUser.credits < creditCost) {
+                throw new Error('INSUFFICIENT_CREDITS');
               }
+
+              // Descontar créditos atómicamente
+              const updatedUser = await tx.user.update({
+                where: { id: userId },
+                data: { credits: { decrement: creditCost } }
+              });
+
+              balanceAfterPublish = updatedUser.credits;
             });
-          } else {
-            // No tiene créditos, guardar como borrador
-            return NextResponse.json(
-              {
-                success: false,
-                error: 'Créditos insuficientes para publicar',
-                required: creditCost,
-                available: user.credits,
-                savedAsDraft: false
-              },
-              { status: 402 }
-            );
+
+            initialStatus = 'active';
+          } catch (error: any) {
+            if (error.message === 'INSUFFICIENT_CREDITS') {
+              const currentUser = await prisma.user.findUnique({
+                where: { id: userId }
+              });
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: 'Créditos insuficientes para publicar',
+                  required: creditCost,
+                  available: currentUser?.credits || 0,
+                  savedAsDraft: false
+                },
+                { status: 402 }
+              );
+            }
+            throw error;
           }
         }
       }
@@ -247,15 +255,18 @@ export async function POST(request: Request) {
       }
     });
 
-    // Actualizar el jobId en la transacción si se creó
-    if (initialStatus === 'active' && userId && userRole === 'company') {
-      await prisma.creditTransaction.updateMany({
-        where: {
-          userId,
+    // Registrar transacción de créditos si se publicó
+    if (initialStatus === 'active' && userId && userRole === 'company' && balanceAfterPublish !== null) {
+      await prisma.creditTransaction.create({
+        data: {
+          userId: userId,
+          type: 'spend',
+          amount: -creditCost,
+          balanceBefore: balanceAfterPublish + creditCost, // Balance antes del decremento
+          balanceAfter: balanceAfterPublish,
           description: `Publicación de vacante: ${title}`,
-          jobId: null
-        },
-        data: { jobId: job.id }
+          jobId: job.id
+        }
       });
     }
 
@@ -359,38 +370,61 @@ export async function PUT(request: Request) {
       creditCost = pricingResult.credits;
     }
 
-    // Verificar créditos (excepto admin)
+    // MEJ-002: Usar transacción para deducción de créditos (evita race conditions)
+    let newBalance = user.credits;
+
     if (user.role !== 'admin') {
-      if (user.credits < creditCost) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Créditos insuficientes para publicar',
-            required: creditCost,
-            available: user.credits
-          },
-          { status: 402 }
-        );
-      }
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Leer usuario dentro de la transacción para bloqueo
+          const freshUser = await tx.user.findUnique({
+            where: { id: user.id }
+          });
 
-      // Descontar créditos
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { credits: { decrement: creditCost } }
-      });
+          if (!freshUser || freshUser.credits < creditCost) {
+            throw new Error('INSUFFICIENT_CREDITS');
+          }
 
-      // Registrar transacción
-      await prisma.creditTransaction.create({
-        data: {
-          userId: user.id,
-          type: 'spend',
-          amount: -creditCost,
-          balanceBefore: user.credits,
-          balanceAfter: user.credits - creditCost,
-          description: `Publicación de vacante: ${job.title}`,
-          jobId: job.id
+          // Descontar créditos atómicamente
+          const updatedUser = await tx.user.update({
+            where: { id: user.id },
+            data: { credits: { decrement: creditCost } }
+          });
+
+          // Registrar transacción de créditos
+          await tx.creditTransaction.create({
+            data: {
+              userId: user.id,
+              type: 'spend',
+              amount: -creditCost,
+              balanceBefore: freshUser.credits,
+              balanceAfter: updatedUser.credits,
+              description: `Publicación de vacante: ${job.title}`,
+              jobId: job.id
+            }
+          });
+
+          return { newBalance: updatedUser.credits };
+        });
+
+        newBalance = result.newBalance;
+      } catch (error: any) {
+        if (error.message === 'INSUFFICIENT_CREDITS') {
+          const currentUser = await prisma.user.findUnique({
+            where: { id: user.id }
+          });
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Créditos insuficientes para publicar',
+              required: creditCost,
+              available: currentUser?.credits || 0
+            },
+            { status: 402 }
+          );
         }
-      });
+        throw error;
+      }
     }
 
     // Calcular tiempo límite para editar (4 horas desde publicación)
@@ -411,7 +445,7 @@ export async function PUT(request: Request) {
       message: '¡Vacante publicada exitosamente!',
       data: updatedJob,
       creditCost: creditCost,
-      newBalance: user.role === 'admin' ? user.credits : user.credits - creditCost
+      newBalance: newBalance
     });
   } catch (error) {
     console.error('Error publishing job:', error);

@@ -1,9 +1,50 @@
+// RUTA: prisma/seed.ts
+//
+// Variables de entorno requeridas para el seed:
+// ─────────────────────────────────────────────────────────────────────────────
+// SEED_ADMIN_PASSWORD       - Contraseña del usuario admin principal
+// SEED_ADMIN2_PASSWORD      - Contraseña del segundo admin (Guillermo)
+// SEED_COMPANY_PASSWORD     - Contraseña para usuarios de empresa
+// SEED_RECRUITER_PASSWORD   - Contraseña para reclutadores
+// SEED_SPECIALIST_PASSWORD  - Contraseña para especialistas
+// SEED_CANDIDATE_PASSWORD   - Contraseña para candidatos con cuenta
+// SEED_USER_PASSWORD        - Contraseña para usuarios normales
+// SEED_STAFF_PASSWORD       - Contraseña para staff (especialistas/reclutadores adicionales)
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// Validar que todas las variables de entorno requeridas existen
+function validateEnvVars(): void {
+  const requiredVars = [
+    'SEED_ADMIN_PASSWORD',
+    'SEED_ADMIN2_PASSWORD',
+    'SEED_COMPANY_PASSWORD',
+    'SEED_RECRUITER_PASSWORD',
+    'SEED_SPECIALIST_PASSWORD',
+    'SEED_CANDIDATE_PASSWORD',
+    'SEED_USER_PASSWORD',
+    'SEED_STAFF_PASSWORD'
+  ];
+
+  const missing = requiredVars.filter(v => !process.env[v]);
+
+  if (missing.length > 0) {
+    console.error('❌ ERROR: Faltan variables de entorno requeridas para el seed:\n');
+    missing.forEach(v => console.error(`   • ${v}`));
+    console.error('\n📝 Agrega estas variables a tu archivo .env antes de ejecutar el seed.');
+    console.error('   Consulta .env.example para más información.\n');
+    process.exit(1);
+  }
+}
+
 async function main() {
+  // Validar variables de entorno antes de continuar
+  validateEnvVars();
+
   console.log('🌱 Iniciando seed híbrido completo...\n');
 
   // =============================================
@@ -14,12 +55,12 @@ async function main() {
   const admins = [
     {
       email: process.env.ADMIN_EMAIL || 'admin@inakat.com',
-      password: process.env.ADMIN_PASSWORD || 'AdminInakat2024!',
+      password: process.env.SEED_ADMIN_PASSWORD!,
       nombre: process.env.ADMIN_NOMBRE || 'Administrador'
     },
     {
       email: 'guillermo.sanchezy@gmail.com',
-      password: 'Guillermo2024!',
+      password: process.env.SEED_ADMIN2_PASSWORD!,
       nombre: 'Guillermo Sánchez'
     }
   ];
@@ -57,7 +98,7 @@ async function main() {
   // =============================================
   console.log('\n🏢 Creando empresas...');
 
-  const companyPassword = await bcrypt.hash('Company123!', 10);
+  const companyPassword = await bcrypt.hash(process.env.SEED_COMPANY_PASSWORD!, 10);
 
   // Empresa 1: TechSolutions México
   let company1 = await prisma.user.findUnique({
@@ -195,7 +236,7 @@ async function main() {
   // 2.5 RECLUTADORES DE PRUEBA
   // =============================================
   console.log('\n👥 Creando reclutadores de prueba...');
-  const recruiterPassword = await bcrypt.hash('Recruiter2024!', 10);
+  const recruiterPassword = await bcrypt.hash(process.env.SEED_RECRUITER_PASSWORD!, 10);
 
   const recruiter1 = await prisma.user.upsert({
     where: { email: 'reclutador1@inakat.com' },
@@ -233,7 +274,7 @@ async function main() {
   // 2.6 ESPECIALISTAS DE PRUEBA
   // =============================================
   console.log('\n🔧 Creando especialistas de prueba...');
-  const specialistPassword = await bcrypt.hash('Specialist2024!', 10);
+  const specialistPassword = await bcrypt.hash(process.env.SEED_SPECIALIST_PASSWORD!, 10);
 
   const specialist1 = await prisma.user.upsert({
     where: { email: 'especialista.tech@inakat.com' },
@@ -289,7 +330,7 @@ async function main() {
   // 2.7 CANDIDATO CON CUENTA DE PRUEBA
   // =============================================
   console.log('\n🎯 Creando candidato con cuenta...');
-  const candidatePassword = await bcrypt.hash('Candidate2024!', 10);
+  const candidatePassword = await bcrypt.hash(process.env.SEED_CANDIDATE_PASSWORD!, 10);
 
   const candidateUser = await prisma.user.upsert({
     where: { email: 'candidato.test@gmail.com' },
@@ -334,7 +375,7 @@ async function main() {
   // =============================================
   console.log('\n👤 Creando usuarios normales (aplicantes)...');
 
-  const userPassword = await bcrypt.hash('User123!', 10);
+  const userPassword = await bcrypt.hash(process.env.SEED_USER_PASSWORD!, 10);
 
   const normalUsers = [
     {
@@ -1020,40 +1061,30 @@ Responsabilidades:
   console.log(`  • Solicitudes pendientes: ${requestsCreated}`);
 
   console.log('\n🔐 CREDENCIALES DE PRUEBA:');
-  console.log('\n  👤 ADMIN 1:');
+  console.log('   (Las contraseñas se leen de variables de entorno SEED_*)\n');
+  console.log('  👤 ADMIN 1:');
   console.log('     Email: admin@inakat.com');
-  console.log('     Password: AdminInakat2024!');
+  console.log('     Password: $SEED_ADMIN_PASSWORD');
   console.log('\n  👤 ADMIN 2 (Guillermo):');
   console.log('     Email: guillermo.sanchezy@gmail.com');
-  console.log('     Password: Guillermo2024!');
-  console.log('\n  🏢 EMPRESA 1 (TechSolutions):');
-  console.log('     Email: contact@techsolutions.mx');
-  console.log('     Password: Company123!');
-  console.log('     Créditos: 50');
-  console.log('     Vacantes: 6 (tech)');
-  console.log('\n  🏢 EMPRESA 2 (Creative Digital):');
-  console.log('     Email: rh@creativedigital.mx');
-  console.log('     Password: Company123!');
-  console.log('     Créditos: 50');
-  console.log('     Vacantes: 6 (diseño/marketing)');
-  console.log('\n  🏢 EMPRESA 3 (Grupo Financiero):');
-  console.log('     Email: hr@grupofinanciero.mx');
-  console.log('     Password: Company123!');
-  console.log('     Créditos: 50');
-  console.log('     Vacantes: 6 (negocios/finanzas)');
-  console.log('\n  👥 RECLUTADORES (Password: Recruiter2024!):');
+  console.log('     Password: $SEED_ADMIN2_PASSWORD');
+  console.log('\n  🏢 EMPRESAS (Password: $SEED_COMPANY_PASSWORD):');
+  console.log('     contact@techsolutions.mx - TechSolutions (50 créditos, 6 vacantes tech)');
+  console.log('     rh@creativedigital.mx - Creative Digital (50 créditos, 6 vacantes diseño)');
+  console.log('     hr@grupofinanciero.mx - Grupo Financiero (50 créditos, 6 vacantes finanzas)');
+  console.log('\n  👥 RECLUTADORES (Password: $SEED_RECRUITER_PASSWORD):');
   console.log('     reclutador1@inakat.com');
   console.log('     reclutador2@inakat.com');
 
-  console.log('\n  🔧 ESPECIALISTAS (Password: Specialist2024!):');
+  console.log('\n  🔧 ESPECIALISTAS (Password: $SEED_SPECIALIST_PASSWORD):');
   console.log('     especialista.tech@inakat.com (Tecnología)');
   console.log('     especialista.diseno@inakat.com (Diseño Gráfico)');
   console.log('     especialista.finanzas@inakat.com (Finanzas)');
 
-  console.log('\n  🎯 CANDIDATO CON CUENTA (Password: Candidate2024!):');
+  console.log('\n  🎯 CANDIDATO CON CUENTA (Password: $SEED_CANDIDATE_PASSWORD):');
   console.log('     candidato.test@gmail.com');
 
-  console.log('\n  👤 USUARIOS NORMALES (Password: User123!):');
+  console.log('\n  👤 USUARIOS NORMALES (Password: $SEED_USER_PASSWORD):');
   console.log('     carlos.dev@gmail.com - Desarrollador');
   console.log('     ana.designer@gmail.com - Diseñadora');
   console.log('     luis.marketing@gmail.com - Marketing');
@@ -2246,7 +2277,7 @@ async function seedSpecialties() {
 async function seedStaff() {
   console.log('🌱 Creando especialistas y reclutadores...\n');
 
-  const defaultPassword = await bcrypt.hash('Staff2024!', 10);
+  const defaultPassword = await bcrypt.hash(process.env.SEED_STAFF_PASSWORD!, 10);
 
   // =============================================
   // ESPECIALISTAS (de la lista de Lalo)
@@ -2406,7 +2437,7 @@ async function seedStaff() {
   console.log(`  • Reclutadores: ${recruitersCreated} nuevos`);
 
   console.log('\n🔐 CREDENCIALES:');
-  console.log('   Password para todos: Staff2024!\n');
+  console.log('   Password para todos: $SEED_STAFF_PASSWORD\n');
 
   console.log('👨‍💻 ESPECIALISTAS:');
   specialists.forEach((s) => {

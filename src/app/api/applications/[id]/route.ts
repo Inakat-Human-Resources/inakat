@@ -1,3 +1,5 @@
+// RUTA: src/app/api/applications/[id]/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
@@ -446,13 +448,6 @@ export async function PATCH(
       }
     }
 
-    console.log('[Applications] Updated:', {
-      applicationId,
-      by: currentUser?.userId,
-      role: currentUser?.role,
-      newStatus: status
-    });
-
     return NextResponse.json({
       success: true,
       message: 'Application updated successfully',
@@ -519,11 +514,6 @@ export async function DELETE(
     // Eliminar aplicación
     await prisma.application.delete({
       where: { id: applicationId }
-    });
-
-    console.log('[Applications] Deleted:', {
-      applicationId,
-      by: currentUser.userId
     });
 
     return NextResponse.json({

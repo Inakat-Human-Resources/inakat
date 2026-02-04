@@ -37,8 +37,6 @@ async function verifySpecialist() {
  * OPTIMIZADO: Eliminadas queries N+1, usa batch queries
  */
 export async function GET(request: Request) {
-  const startTime = Date.now();
-
   try {
     const auth = await verifySpecialist();
     if ('error' in auth) {
@@ -241,9 +239,6 @@ export async function GET(request: Request) {
       sentToCompany: sentToCompanyCount,
       discarded: discardedCount
     };
-
-    const duration = Date.now() - startTime;
-    console.log(`[PERF] Specialist dashboard loaded in ${duration}ms (${assignments.length} assignments, ${uniqueEmails.length} unique candidates)`);
 
     return NextResponse.json({
       success: true,

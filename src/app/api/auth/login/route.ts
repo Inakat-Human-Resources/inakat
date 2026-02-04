@@ -1,3 +1,5 @@
+// RUTA: src/app/api/auth/login/route.ts
+
 import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/lib/auth';
 import { validate, loginSchema } from '@/lib/validations';

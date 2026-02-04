@@ -18,12 +18,13 @@ const client = new MercadoPagoConfig({
 });
 const payment = new Payment(client);
 
-// Paquetes disponibles
-const PACKAGES = {
-  single: { credits: 1, price: 4000, pricePerCredit: 4000 },
-  pack_10: { credits: 10, price: 35000, pricePerCredit: 3500 },
-  pack_15: { credits: 15, price: 50000, pricePerCredit: 3333 },
-  pack_20: { credits: 20, price: 65000, pricePerCredit: 3250 }
+// Mapeo de packageType a cantidad de créditos
+// Los precios se obtienen de la DB (CreditPackage)
+const PACKAGE_CREDITS: Record<string, number> = {
+  pack_1: 1,
+  pack_10: 10,
+  pack_15: 15,
+  pack_20: 20
 };
 
 export async function POST(req: NextRequest) {
@@ -41,10 +42,25 @@ export async function POST(req: NextRequest) {
 
     const { packageType, paymentData, discountCode } = await req.json();
 
-    // Validar paquete
-    const pkg = PACKAGES[packageType as keyof typeof PACKAGES];
+    // MEJ-001: Validar packageType y obtener precio de la DB
+    const credits = PACKAGE_CREDITS[packageType as keyof typeof PACKAGE_CREDITS];
+    if (!credits) {
+      return NextResponse.json({ error: 'Tipo de paquete inválido' }, { status: 400 });
+    }
+
+    // Buscar el paquete en la DB para obtener el precio real
+    const pkg = await prisma.creditPackage.findFirst({
+      where: {
+        credits: credits,
+        isActive: true
+      }
+    });
+
     if (!pkg) {
-      return NextResponse.json({ error: 'Paquete inválido' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Paquete no disponible. Contacta al administrador.' },
+        { status: 400 }
+      );
     }
 
     // Validar código de descuento si se proporciona
@@ -144,7 +160,7 @@ export async function POST(req: NextRequest) {
 
     console.log('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
 
-    // Registrar compra en DB
+    // Registrar compra en DB (siempre como pending, se actualiza en la transacción si es approved)
     const purchase = await prisma.creditPurchase.create({
       data: {
         userId: payload.userId,
@@ -152,10 +168,10 @@ export async function POST(req: NextRequest) {
         pricePerCredit: finalPrice / pkg.credits, // Precio por crédito después de descuento
         totalPrice: finalPrice,
         packageType,
-        paymentStatus: paymentResult.status === 'approved' ? 'paid' : 'pending',
+        paymentStatus: 'pending', // Se actualiza a 'paid' en la transacción si es approved
         paymentId: String(paymentResult.id),
         paymentMethod: paymentData.payment_method_id,
-        paidAt: paymentResult.status === 'approved' ? new Date() : null
+        paidAt: null // Se establece en la transacción si es approved
       }
     });
 
@@ -180,30 +196,45 @@ export async function POST(req: NextRequest) {
       console.log('[Payments] Discount code applied:', { code: validDiscountCode.code, discountAmount, commissionAmount });
     }
 
-    // Si el pago fue aprobado inmediatamente, agregar créditos
+    // MEJ-003: Si el pago fue aprobado inmediatamente, agregar créditos usando transacción
     if (paymentResult.status === 'approved') {
       const balanceBefore = user.credits;
 
-      const updatedUser = await prisma.user.update({
-        where: { id: payload.userId },
-        data: {
-          credits: {
-            increment: pkg.credits
+      // Usar transacción para garantizar consistencia (igual que el webhook)
+      const { updatedUser, updatedPurchase } = await prisma.$transaction(async (tx) => {
+        // Actualizar purchase status
+        const updatedPurchase = await tx.creditPurchase.update({
+          where: { id: purchase.id },
+          data: {
+            paymentStatus: 'paid',
+            paidAt: new Date()
           }
-        }
-      });
+        });
 
-      // Registrar transacción
-      await prisma.creditTransaction.create({
-        data: {
-          userId: payload.userId,
-          type: 'purchase',
-          amount: pkg.credits,
-          balanceBefore,
-          balanceAfter: updatedUser.credits,
-          purchaseId: purchase.id,
-          description: `Compra de ${pkg.credits} créditos - Pago ID: ${paymentResult.id}`
-        }
+        // Agregar créditos al usuario
+        const updatedUser = await tx.user.update({
+          where: { id: payload.userId },
+          data: {
+            credits: {
+              increment: pkg.credits
+            }
+          }
+        });
+
+        // Registrar transacción de créditos
+        await tx.creditTransaction.create({
+          data: {
+            userId: payload.userId,
+            type: 'purchase',
+            amount: pkg.credits,
+            balanceBefore,
+            balanceAfter: updatedUser.credits,
+            purchaseId: purchase.id,
+            description: `Compra de ${pkg.credits} créditos - Pago ID: ${paymentResult.id}`
+          }
+        });
+
+        return { updatedUser, updatedPurchase };
       });
 
       console.log('[Payments] Credits added:', { credits: pkg.credits, userId: payload.userId });
@@ -211,7 +242,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         status: 'approved',
-        purchase,
+        purchase: updatedPurchase,
         creditsAdded: pkg.credits,
         newBalance: updatedUser.credits,
         paymentId: paymentResult.id,
