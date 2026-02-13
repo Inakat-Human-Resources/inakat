@@ -535,6 +535,10 @@ export default function ProfilePage() {
         method: 'POST',
         body: formData
       });
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al subir foto');
+      }
 
       const uploadData = await uploadRes.json();
 
@@ -593,6 +597,10 @@ export default function ProfilePage() {
         credentials: 'include',
         body: formData
       });
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al subir archivo');
+      }
 
       const uploadData = await uploadResponse.json();
 
@@ -612,6 +620,10 @@ export default function ProfilePage() {
           fileType: newDocFile.type.split('/')[1] || 'file'
         })
       });
+      if (!docResponse.ok) {
+        const errorData = await docResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al guardar documento');
+      }
 
       const docData = await docResponse.json();
 

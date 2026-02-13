@@ -136,6 +136,10 @@ const ApplyJobModal = ({
       const checkRes = await fetch(
         `/api/applications/check?jobId=${jobId}&email=${encodeURIComponent(profileData.data.email)}`
       );
+      if (!checkRes.ok) {
+        const errorData = await checkRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al verificar aplicación');
+      }
       const checkData = await checkRes.json();
 
       if (checkData.success && checkData.hasApplied) {

@@ -2,6 +2,7 @@
 
 import React, { useState, FormEvent } from "react";
 import SocialLinks from "./SocialLinks";
+import ErrorToast from "@/components/shared/ErrorToast";
 
 const ContactForm = () => {
   const [formData, setFormData] = useState({
@@ -50,9 +51,6 @@ const ContactForm = () => {
         throw new Error(data.error || "Error al enviar el mensaje");
       }
     } catch (error) {
-      // Scroll hacia arriba para mostrar el mensaje de error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
       setSubmitStatus({
         type: "error",
         message:
@@ -74,6 +72,10 @@ const ContactForm = () => {
 
   return (
     <section className="bg-button-green text-white p-10 pl-9 pr-9 rounded-3xl shadow-lg w-full h-full flex flex-col">
+      <ErrorToast
+        message={submitStatus.type === "error" ? submitStatus.message : null}
+        onClose={() => setSubmitStatus({ type: null, message: "" })}
+      />
       <h2 className="text-2xl font-bold">ESCRÍBENOS</h2>
       <p className="mt-2">
         Contáctanos para impulsar el futuro de tu empresa con talento altamente

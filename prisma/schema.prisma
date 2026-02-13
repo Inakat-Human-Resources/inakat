@@ -72,7 +72,7 @@ model CompanyRequest {
   correoEmpresa             String
   sitioWeb                  String?
   razonSocial               String
-  rfc                       String    @unique
+  rfc                       String
   direccionEmpresa          String
   latitud                   Float?
   longitud                  Float?

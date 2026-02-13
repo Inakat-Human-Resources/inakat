@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Error fetching company requests:", error);
     return NextResponse.json(
-      { error: "Failed to fetch requests" },
+      { error: "Error al obtener las solicitudes. Intenta de nuevo." },
       { status: 500 }
     );
   }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       !password
     ) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Faltan campos requeridos" },
         { status: 400 }
       );
     }
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error("Error creating company request:", error);
 
-    // Manejar error de RFC duplicado (Prisma unique constraint violation)
+    // Manejar error de email duplicado (Prisma unique constraint violation)
     if (
       error &&
       typeof error === 'object' &&
@@ -149,12 +149,6 @@ export async function POST(request: Request) {
       Array.isArray(error.meta.target)
     ) {
       const target = error.meta.target as string[];
-      if (target.includes('rfc')) {
-        return NextResponse.json(
-          { error: "Ya existe una solicitud con este RFC. Por favor, verifica tus datos o contacta soporte." },
-          { status: 409 }
-        );
-      }
       if (target.includes('email')) {
         return NextResponse.json(
           { error: "Ya existe una cuenta con este correo electrónico." },
@@ -164,7 +158,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Failed to submit company request" },
+      { error: "Error al enviar la solicitud. Intenta de nuevo." },
       { status: 500 }
     );
   }

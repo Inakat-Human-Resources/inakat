@@ -241,6 +241,10 @@ export default function CandidateProfileModal({
         const formData = new FormData();
         formData.append('file', noteDocument);
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!uploadRes.ok) {
+          const errorData = await uploadRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Error al subir documento');
+        }
         const uploadData = await uploadRes.json();
         if (uploadData.url) {
           documentUrl = uploadData.url;
@@ -498,6 +502,11 @@ export default function CandidateProfileModal({
         method: 'POST',
         body: formData
       });
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({}));
+        setDocError(errorData.error || 'Error al subir archivo');
+        return;
+      }
 
       const uploadData = await uploadResponse.json();
 
@@ -516,6 +525,11 @@ export default function CandidateProfileModal({
           fileType: newDocFile.type.split('/')[1] || 'file'
         })
       });
+      if (!docResponse.ok) {
+        const errorData = await docResponse.json().catch(() => ({}));
+        setDocError(errorData.error || 'Error al guardar documento');
+        return;
+      }
 
       const docData = await docResponse.json();
 

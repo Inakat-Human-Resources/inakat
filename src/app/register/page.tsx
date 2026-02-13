@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   Check
 } from 'lucide-react';
+import ErrorToast from '@/components/shared/ErrorToast';
 import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
 
@@ -443,14 +444,10 @@ export default function RegisterPage() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           setGeneralError(data.error || 'Error al registrarse');
-          // Scroll hacia arriba para mostrar el mensaje de error
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }
     } catch (error) {
       setGeneralError('Error al conectar con el servidor');
-      // Scroll hacia arriba para mostrar el mensaje de error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       console.error('Error registering:', error);
     } finally {
       setIsSubmitting(false);
@@ -474,6 +471,10 @@ export default function RegisterPage() {
 
   return (
     <section className="bg-custom-beige min-h-screen flex items-center justify-center py-8 px-4">
+      <ErrorToast
+        message={generalError}
+        onClose={() => setGeneralError(null)}
+      />
       <div className="w-full max-w-6xl flex bg-white rounded-lg shadow-lg overflow-hidden min-h-[700px]">
         {/* Columna Izquierda: Imagen y Texto */}
         <div className="relative w-1/3 hidden lg:flex flex-col justify-center items-center p-8 bg-cover bg-center">
@@ -563,12 +564,6 @@ export default function RegisterPage() {
           </div>
 
           {/* Error general */}
-          {generalError && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
-              {generalError}
-            </div>
-          )}
-
           {/* Mensaje de éxito */}
           {successMessage && (
             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">

@@ -239,6 +239,7 @@ export default function AdminCandidatesPage() {
       }
     } catch (error) {
       console.error('Error fetching documents:', error);
+      setNotification({ type: 'error', message: 'Error al cargar los documentos del candidato.' });
     } finally {
       setIsLoadingDocs(false);
     }
@@ -259,6 +260,10 @@ export default function AdminCandidatesPage() {
         method: 'POST',
         body: formData
       });
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al subir archivo');
+      }
       const uploadData = await uploadRes.json();
 
       if (!uploadData.success) {
@@ -276,6 +281,10 @@ export default function AdminCandidatesPage() {
           fileType: file.type
         })
       });
+      if (!docRes.ok) {
+        const errorData = await docRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al guardar documento');
+      }
       const docData = await docRes.json();
 
       if (docData.success) {

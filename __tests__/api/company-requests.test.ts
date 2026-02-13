@@ -2,7 +2,7 @@
 
 /**
  * Tests para las APIs de solicitudes de empresa
- * Verifican: creación, validaciones, RFC único
+ * Verifican: creación, validaciones, RFC compartido entre departamentos
  */
 
 // Mock de Prisma
@@ -175,8 +175,8 @@ describe('Company Requests API Logic Tests', () => {
     });
   });
 
-  describe('POST /api/company-requests - RFC único', () => {
-    it('debería crear solicitud con RFC único', async () => {
+  describe('POST /api/company-requests - RFC compartido entre departamentos', () => {
+    it('debería crear solicitud con RFC válido', async () => {
       const newRequest = {
         id: 1,
         nombre: 'Carlos',
@@ -209,28 +209,46 @@ describe('Company Requests API Logic Tests', () => {
       expect(request.status).toBe('pending');
     });
 
-    it('debería fallar con RFC duplicado (error P2002 de Prisma)', async () => {
-      const prismaError = {
-        code: 'P2002',
-        meta: { target: ['rfc'] },
+    it('debería permitir RFC duplicado (múltiples departamentos)', async () => {
+      // Primer departamento
+      const dept1 = {
+        id: 1,
+        nombre: 'Ana',
+        apellidoPaterno: 'López',
+        apellidoMaterno: 'García',
+        nombreEmpresa: 'Corp SA - TI',
+        correoEmpresa: 'ti@corp.com',
+        razonSocial: 'Corp SA de CV',
+        rfc: 'CSA123456ABC',
+        direccionEmpresa: 'Av. Principal 100',
+        status: 'pending',
       };
 
-      mockPrismaCompanyRequest.create.mockRejectedValue(prismaError);
+      // Segundo departamento, mismo RFC
+      const dept2 = {
+        id: 2,
+        nombre: 'Pedro',
+        apellidoPaterno: 'Ruiz',
+        apellidoMaterno: 'Soto',
+        nombreEmpresa: 'Corp SA - RH',
+        correoEmpresa: 'rh@corp.com',
+        razonSocial: 'Corp SA de CV',
+        rfc: 'CSA123456ABC',
+        direccionEmpresa: 'Av. Principal 100',
+        status: 'pending',
+      };
 
-      await expect(
-        mockPrismaCompanyRequest.create({
-          data: {
-            nombre: 'Test',
-            apellidoPaterno: 'Test',
-            apellidoMaterno: 'Test',
-            nombreEmpresa: 'Test',
-            correoEmpresa: 'test@test.com',
-            razonSocial: 'Test SA',
-            rfc: 'DUPLICADO123',
-            direccionEmpresa: 'Dir',
-          },
-        })
-      ).rejects.toEqual(prismaError);
+      mockPrismaCompanyRequest.create
+        .mockResolvedValueOnce(dept1)
+        .mockResolvedValueOnce(dept2);
+
+      const result1 = await mockPrismaCompanyRequest.create({ data: dept1 });
+      const result2 = await mockPrismaCompanyRequest.create({ data: dept2 });
+
+      expect(result1.rfc).toBe('CSA123456ABC');
+      expect(result2.rfc).toBe('CSA123456ABC');
+      expect(result1.id).not.toBe(result2.id);
+      expect(result1.correoEmpresa).not.toBe(result2.correoEmpresa);
     });
   });
 

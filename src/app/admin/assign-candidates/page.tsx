@@ -185,12 +185,14 @@ function AssignCandidatesContent() {
         setJobAssignment(data.jobAssignment || null);
       } else {
         console.error('Error fetching pipeline:', data.error);
+        setError('Error al cargar el pipeline de candidatos.');
         setPipelineCandidates([]);
         setPipelineStats(null);
         setJobAssignment(null);
       }
     } catch (err) {
       console.error('Error fetching pipeline:', err);
+      setError('Error de conexión al cargar el pipeline.');
       setPipelineCandidates([]);
       setPipelineStats(null);
       setJobAssignment(null);
@@ -210,6 +212,7 @@ function AssignCandidatesContent() {
       }
     } catch (err) {
       console.error('Error fetching specialties:', err);
+      setError('Error al cargar las especialidades.');
     }
   };
 
@@ -332,6 +335,7 @@ function AssignCandidatesContent() {
       }
     } catch (err) {
       console.error('Error fetching assignments:', err);
+      setError('Error al cargar las asignaciones.');
     }
   };
 
@@ -348,6 +352,7 @@ function AssignCandidatesContent() {
       }
     } catch (err) {
       console.error('Error fetching assigned:', err);
+      setError('Error al cargar los candidatos asignados.');
     }
   };
 

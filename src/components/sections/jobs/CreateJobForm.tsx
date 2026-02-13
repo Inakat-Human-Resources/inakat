@@ -19,6 +19,7 @@ import {
   Clock,
   EyeOff
 } from 'lucide-react';
+import ErrorToast from '@/components/shared/ErrorToast';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 
 // Configuración de Google Maps
@@ -339,6 +340,7 @@ const CreateJobForm = () => {
   const fetchPricingOptions = async () => {
     try {
       const response = await fetch('/api/pricing/calculate');
+      if (!response.ok) return;
       const data = await response.json();
       if (data.success) {
         setPricingOptions(data.options);
@@ -351,6 +353,7 @@ const CreateJobForm = () => {
   const fetchSpecialties = async () => {
     try {
       const response = await fetch('/api/specialties?subcategories=true');
+      if (!response.ok) return;
       const data = await response.json();
       if (data.success) {
         setSpecialties(data.data);
@@ -626,9 +629,6 @@ const CreateJobForm = () => {
         );
       }
     } catch (error) {
-      // Scroll hacia arriba para mostrar el mensaje de error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
       setSubmitStatus({
         type: 'error',
         message:
@@ -715,6 +715,10 @@ const CreateJobForm = () => {
 
   return (
     <div className="max-w-4xl mx-auto bg-white p-4 md:p-8 rounded-lg shadow-lg">
+      <ErrorToast
+        message={submitStatus.type === 'error' ? submitStatus.message : null}
+        onClose={() => setSubmitStatus({ type: null, message: '' })}
+      />
       {/* Header con créditos - Responsive */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
         <div>

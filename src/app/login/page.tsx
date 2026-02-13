@@ -6,6 +6,7 @@ import React, { useState, FormEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Facebook, Linkedin } from 'lucide-react';
+import ErrorToast from '@/components/shared/ErrorToast';
 import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
 
@@ -61,13 +62,9 @@ export default function LoginPage() {
         }
       } else {
         setError(data.error || 'Error al iniciar sesión');
-        // Scroll hacia arriba para mostrar el mensaje de error
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
       setError('Error al conectar con el servidor');
-      // Scroll hacia arriba para mostrar el mensaje de error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       console.error('Error logging in:', error);
     } finally {
       setIsSubmitting(false);
@@ -76,6 +73,10 @@ export default function LoginPage() {
 
   return (
     <section className="bg-custom-beige min-h-screen flex items-center justify-center px-4">
+      <ErrorToast
+        message={error}
+        onClose={() => setError(null)}
+      />
       <div className="w-full max-w-4xl flex bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Columna Izquierda: Imagen y Texto */}
         <div className="relative w-1/2 hidden md:flex flex-col justify-center items-center p-8 bg-cover bg-center">

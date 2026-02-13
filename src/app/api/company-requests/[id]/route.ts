@@ -14,7 +14,7 @@ export async function PATCH(
 
     if (isNaN(requestId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request ID' },
+        { success: false, error: 'ID de solicitud inválido' },
         { status: 400 }
       );
     }
@@ -27,7 +27,7 @@ export async function PATCH(
       return NextResponse.json(
         {
           success: false,
-          error: 'Invalid status. Must be: pending, approved, or rejected'
+          error: 'Estado inválido. Debe ser: pending, approved o rejected'
         },
         { status: 400 }
       );
@@ -40,7 +40,7 @@ export async function PATCH(
 
     if (!existingRequest) {
       return NextResponse.json(
-        { success: false, error: 'Request not found' },
+        { success: false, error: 'Solicitud no encontrada' },
         { status: 404 }
       );
     }
@@ -73,7 +73,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Error updating company request:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update request' },
+      { success: false, error: 'Error al actualizar la solicitud. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -90,7 +90,7 @@ export async function PUT(
 
     if (isNaN(requestId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request ID' },
+        { success: false, error: 'ID de solicitud inválido' },
         { status: 400 }
       );
     }
@@ -115,7 +115,7 @@ export async function PUT(
 
     if (!existingRequest) {
       return NextResponse.json(
-        { success: false, error: 'Request not found' },
+        { success: false, error: 'Solicitud no encontrada' },
         { status: 404 }
       );
     }
@@ -123,7 +123,7 @@ export async function PUT(
     // Only allow editing pending requests
     if (existingRequest.status !== 'pending') {
       return NextResponse.json(
-        { success: false, error: 'Only pending requests can be edited' },
+        { success: false, error: 'Solo las solicitudes pendientes pueden ser editadas' },
         { status: 400 }
       );
     }
@@ -148,7 +148,7 @@ export async function PUT(
     return NextResponse.json(
       {
         success: true,
-        message: 'Company request updated successfully',
+        message: 'Solicitud de empresa actualizada exitosamente',
         data: updatedRequest
       },
       { status: 200 }
@@ -156,7 +156,7 @@ export async function PUT(
   } catch (error) {
     console.error('Error updating company request data:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update request data' },
+      { success: false, error: 'Error al actualizar los datos de la solicitud. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -173,7 +173,7 @@ export async function GET(
 
     if (isNaN(requestId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request ID' },
+        { success: false, error: 'ID de solicitud inválido' },
         { status: 400 }
       );
     }
@@ -184,7 +184,7 @@ export async function GET(
 
     if (!companyRequest) {
       return NextResponse.json(
-        { success: false, error: 'Request not found' },
+        { success: false, error: 'Solicitud no encontrada' },
         { status: 404 }
       );
     }
@@ -193,7 +193,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching company request:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch request' },
+      { success: false, error: 'Error al obtener la solicitud. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -210,7 +210,7 @@ export async function DELETE(
 
     if (isNaN(requestId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request ID' },
+        { success: false, error: 'ID de solicitud inválido' },
         { status: 400 }
       );
     }
@@ -222,7 +222,7 @@ export async function DELETE(
 
     if (!existingRequest) {
       return NextResponse.json(
-        { success: false, error: 'Request not found' },
+        { success: false, error: 'Solicitud no encontrada' },
         { status: 404 }
       );
     }
@@ -235,14 +235,14 @@ export async function DELETE(
     return NextResponse.json(
       {
         success: true,
-        message: 'Request deleted successfully'
+        message: 'Solicitud eliminada exitosamente'
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Error deleting company request:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to delete request' },
+      { success: false, error: 'Error al eliminar la solicitud. Intenta de nuevo.' },
       { status: 500 }
     );
   }

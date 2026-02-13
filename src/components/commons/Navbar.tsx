@@ -77,10 +77,13 @@ const Navbar = () => {
   const handleLogout = async () => {
     try {
       // Llamar al endpoint de logout
-      await fetch('/api/auth/logout', {
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       });
+      if (!response.ok) {
+        console.error('Error logging out: response not ok');
+      }
     } catch (error) {
       console.error('Error logging out:', error);
     } finally {

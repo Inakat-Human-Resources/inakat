@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 import { Building2 } from 'lucide-react';
+import ErrorToast from '@/components/shared/ErrorToast';
 
 const libraries: ("places")[] = ["places"];
 const mapContainerStyle = {
@@ -464,9 +465,6 @@ const FormRegisterForQuotationSection = () => {
         throw new Error(data.error || 'Error al enviar solicitud');
       }
     } catch (error) {
-      // Scroll hacia arriba para mostrar el mensaje de error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
       setSubmitStatus({
         type: 'error',
         message:
@@ -480,6 +478,11 @@ const FormRegisterForQuotationSection = () => {
   };
 
   return (
+    <>
+    <ErrorToast
+      message={submitStatus.type === 'error' ? submitStatus.message : null}
+      onClose={() => setSubmitStatus({ type: null, message: '' })}
+    />
     <section
       id="formulario-registro"
       className="bg-title-dark text-white bg-center py-20"
@@ -989,6 +992,7 @@ const FormRegisterForQuotationSection = () => {
         </div>
       )}
     </section>
+    </>
   );
 };
 

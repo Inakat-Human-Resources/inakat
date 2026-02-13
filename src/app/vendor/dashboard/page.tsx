@@ -73,6 +73,9 @@ export default function VendorDashboardPage() {
   const [savingCode, setSavingCode] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Estado para errores
+  const [error, setError] = useState<string | null>(null);
+
   // Estado para ventas
   const [sales, setSales] = useState<Sale[]>([]);
   const [summary, setSummary] = useState<Summary>({
@@ -101,6 +104,7 @@ export default function VendorDashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching discount code:', error);
+      setError('Error al cargar tu código de descuento. Intenta recargar la página.');
     } finally {
       setLoadingCode(false);
     }
@@ -123,6 +127,7 @@ export default function VendorDashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching sales:', error);
+      setError('Error al cargar las ventas. Intenta recargar la página.');
     } finally {
       setLoadingSales(false);
     }
@@ -219,6 +224,17 @@ export default function VendorDashboardPage() {
             Gestiona tu código de descuento y visualiza tus comisiones
           </p>
         </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+            <AlertCircle size={20} />
+            <p className="text-sm">{error}</p>
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Resumen de Comisiones */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">

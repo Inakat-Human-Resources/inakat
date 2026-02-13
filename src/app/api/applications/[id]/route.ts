@@ -90,7 +90,7 @@ function checkApplicationPermission(
 ): { hasPermission: boolean; reason?: string } {
   // Sin autenticación, no tiene permiso
   if (!user) {
-    return { hasPermission: false, reason: 'Authentication required' };
+    return { hasPermission: false, reason: 'Autenticación requerida' };
   }
 
   // Admin puede ver todo
@@ -127,7 +127,7 @@ function checkApplicationPermission(
 
   return {
     hasPermission: false,
-    reason: `Role '${user.role}' does not have permission to access this application`
+    reason: `El rol '${user.role}' no tiene permiso para acceder a esta aplicación`
   };
 }
 
@@ -145,7 +145,7 @@ export async function GET(
 
     if (isNaN(applicationId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid application ID' },
+        { success: false, error: 'ID de aplicación inválido' },
         { status: 400 }
       );
     }
@@ -192,7 +192,7 @@ export async function GET(
 
     if (!application) {
       return NextResponse.json(
-        { success: false, error: 'Application not found' },
+        { success: false, error: 'Aplicación no encontrada' },
         { status: 404 }
       );
     }
@@ -289,7 +289,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching application:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch application' },
+      { success: false, error: 'Error al obtener la aplicación. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -309,7 +309,7 @@ export async function PATCH(
 
     if (isNaN(applicationId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid application ID' },
+        { success: false, error: 'ID de aplicación inválido' },
         { status: 400 }
       );
     }
@@ -342,7 +342,7 @@ export async function PATCH(
 
     if (!existingApplication) {
       return NextResponse.json(
-        { success: false, error: 'Application not found' },
+        { success: false, error: 'Aplicación no encontrada' },
         { status: 404 }
       );
     }
@@ -391,7 +391,7 @@ export async function PATCH(
       return NextResponse.json(
         {
           success: false,
-          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+          error: `Estado inválido. Debe ser uno de: ${validStatuses.join(', ')}`
         },
         { status: 400 }
       );
@@ -450,14 +450,14 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: 'Application updated successfully',
+      message: 'Aplicación actualizada exitosamente',
       data: updatedApplication
     });
 
   } catch (error) {
     console.error('Error updating application:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update application' },
+      { success: false, error: 'Error al actualizar la aplicación. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -477,7 +477,7 @@ export async function DELETE(
 
     if (isNaN(applicationId)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid application ID' },
+        { success: false, error: 'ID de aplicación inválido' },
         { status: 400 }
       );
     }
@@ -506,7 +506,7 @@ export async function DELETE(
 
     if (!existingApplication) {
       return NextResponse.json(
-        { success: false, error: 'Application not found' },
+        { success: false, error: 'Aplicación no encontrada' },
         { status: 404 }
       );
     }
@@ -518,13 +518,13 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: 'Application deleted successfully'
+      message: 'Aplicación eliminada exitosamente'
     });
 
   } catch (error) {
     console.error('Error deleting application:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to delete application' },
+      { success: false, error: 'Error al eliminar la aplicación. Intenta de nuevo.' },
       { status: 500 }
     );
   }

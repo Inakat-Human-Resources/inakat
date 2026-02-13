@@ -146,6 +146,7 @@ export default function AdminVendorsPage() {
       }
     } catch (error) {
       console.error('Error fetching vendors:', error);
+      setNotification({ type: 'error', message: 'Error al cargar los vendedores. Intenta recargar la página.' });
     } finally {
       setLoadingVendors(false);
     }
@@ -167,6 +168,7 @@ export default function AdminVendorsPage() {
       }
     } catch (error) {
       console.error('Error fetching commissions:', error);
+      setNotification({ type: 'error', message: 'Error al cargar las comisiones. Intenta recargar la página.' });
     } finally {
       setLoadingCommissions(false);
     }

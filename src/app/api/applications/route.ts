@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Error fetching applications:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch applications' },
+      { success: false, error: 'Error al obtener las aplicaciones. Intenta de nuevo.' },
       { status: 500 }
     );
   }
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error creating application:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create application' },
+      { success: false, error: 'Error al crear la aplicación. Intenta de nuevo.' },
       { status: 500 }
     );
   }
