@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, Mail, Phone, FileText, Calendar } from 'lucide-react';
 
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 interface Application {
   id: number;
   jobId: number;
@@ -418,7 +420,7 @@ const ApplicationsManagementPanel = () => {
                   <div>
                     <h3 className="font-bold text-lg mb-3">Curriculum Vitae</h3>
                     <a
-                      href={selectedApplication.cvUrl}
+                      href={ensureUrl(selectedApplication.cvUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-button-green hover:text-green-700 font-semibold"

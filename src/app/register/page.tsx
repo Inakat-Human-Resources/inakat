@@ -97,6 +97,9 @@ export default function RegisterPage() {
   const [telefono, setTelefono] = useState('');
   const [sexo, setSexo] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
+  const [ciudad, setCiudad] = useState('');
+  const [estado, setEstado] = useState('');
+  const [ubicacionCercana, setUbicacionCercana] = useState('');
   // FEAT-2: Foto de perfil
   const [fotoUrl, setFotoUrl] = useState('');
   const [fotoFile, setFotoFile] = useState<File | null>(null);
@@ -113,6 +116,7 @@ export default function RegisterPage() {
 
   // Paso 4: Experiencias
   const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [expErrors, setExpErrors] = useState<Record<number, string>>({});
 
   // Paso 5: Links
   const [cvUrl, setCvUrl] = useState('');
@@ -211,6 +215,20 @@ export default function RegisterPage() {
     updated[index] = { ...updated[index], [field]: value };
     if (field === 'esActual' && value) {
       updated[index].fechaFin = '';
+      setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+    }
+    // Validar que fechaFin no sea anterior a fechaInicio
+    if (field === 'fechaInicio' || field === 'fechaFin') {
+      const exp = updated[index];
+      if (exp.fechaInicio && exp.fechaFin && !exp.esActual) {
+        if (new Date(exp.fechaFin) < new Date(exp.fechaInicio)) {
+          setExpErrors(prev => ({ ...prev, [index]: 'La fecha de fin no puede ser anterior a la fecha de inicio' }));
+        } else {
+          setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+        }
+      } else {
+        setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+      }
     }
     setExperiences(updated);
   };
@@ -388,6 +406,12 @@ export default function RegisterPage() {
       return;
     }
 
+    // Validar errores de fechas en experiencias
+    if (Object.keys(expErrors).length > 0) {
+      setGeneralError('Corrige los errores en las fechas de experiencia antes de continuar');
+      return;
+    }
+
     setIsSubmitting(true);
     setGeneralError(null);
 
@@ -406,6 +430,9 @@ export default function RegisterPage() {
           telefono: telefono || undefined,
           sexo: sexo || undefined,
           fechaNacimiento: fechaNacimiento || undefined,
+          ciudad: ciudad || undefined,
+          estado: estado || undefined,
+          ubicacionCercana: ubicacionCercana || undefined,
           fotoUrl: fotoUrl || undefined, // FEAT-2: Foto de perfil
           // Educación (FEATURE: Educación múltiple)
           educacion: educations.filter(e => e.institucion || e.carrera || e.nivel),
@@ -701,6 +728,42 @@ export default function RegisterPage() {
                       />
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-white text-sm mb-1">Ciudad</label>
+                      <input
+                        type="text"
+                        value={ciudad}
+                        onChange={(e) => setCiudad(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        placeholder="Tu ciudad"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Estado</label>
+                      <input
+                        type="text"
+                        value={estado}
+                        onChange={(e) => setEstado(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        placeholder="Tu estado"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-white text-sm mb-1">Ubicación cercana</label>
+                      <input
+                        type="text"
+                        value={ubicacionCercana}
+                        onChange={(e) => setUbicacionCercana(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        placeholder="Colonia, zona o referencia"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-white/60 text-xs mt-1">
+                    Indica una ubicación cercana o de referencia (por ejemplo, tu colonia o zona). No es necesario que sea exacta. Esta información sólo se utiliza para ofrecerte oportunidades cercanas a ti.
+                  </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -1036,6 +1099,10 @@ export default function RegisterPage() {
                               />
                             </div>
                           </div>
+
+                          {expErrors[index] && (
+                            <p className="text-red-300 text-xs mt-1">{expErrors[index]}</p>
+                          )}
 
                           <div className="mt-3">
                             <label className="flex items-center gap-2 text-white text-sm">

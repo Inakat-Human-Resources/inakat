@@ -152,6 +152,7 @@ model Job {
   resultadosEsperados   String?   @db.Text
   valoresActitudes      String?   @db.Text
   informacionAdicional  String?   @db.Text
+  notasInternas         String?   @db.Text  // Info interna para INAKAT, no visible para candidatos
 
   // Vacante confidencial (oculta nombre, dirección y logo de empresa en vista pública)
   isConfidential  Boolean   @default(false)
@@ -354,7 +355,12 @@ model Candidate {
   // Filtros demográficos
   sexo            String?   // "M", "F", "Otro"
   fechaNacimiento DateTime?
-  
+
+  // Ubicación personal
+  ciudad           String?
+  estado           String?
+  ubicacionCercana String?  // Colonia, zona o referencia cercana
+
   // Educación (campos legacy para compatibilidad)
   universidad     String?
   carrera         String?

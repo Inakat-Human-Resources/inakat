@@ -668,19 +668,6 @@ export default function SpecialistJobCandidates() {
                               <span className="hidden sm:inline">Evaluar</span>
                             </button>
                             <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_company')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Enviar a empresa"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
-                            <button
                               onClick={() => handleMoveApplication(app.id, 'discarded')}
                               disabled={actionLoading === app.id}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"

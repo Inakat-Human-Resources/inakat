@@ -90,7 +90,7 @@ export default function CompanyJobsTable({
   const tabs: { key: JobTab; label: string; count: number; color: string }[] = [
     { key: 'active', label: 'Activas', count: categorizedJobs.active.length, color: 'green' },
     { key: 'paused', label: 'En pausa', count: categorizedJobs.paused.length, color: 'yellow' },
-    { key: 'expired', label: 'Expiradas', count: categorizedJobs.expired.length, color: 'orange' },
+    // { key: 'expired', label: 'Expiradas', count: categorizedJobs.expired.length, color: 'orange' }, // TODO: Habilitar cuando se implemente expiración automática
     { key: 'draft', label: 'Borradores', count: categorizedJobs.draft.length, color: 'gray' },
     { key: 'closed', label: 'Cerradas', count: categorizedJobs.closed.length, color: 'red' }
   ];

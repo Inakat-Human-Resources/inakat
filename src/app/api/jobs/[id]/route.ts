@@ -101,9 +101,12 @@ export async function GET(
     }
 
     // Transformar para incluir logoUrl directamente
+    // SEGURIDAD: Excluir notasInternas de la respuesta pública
     const logoUrl = job.user?.companyRequest?.logoUrl || null;
-    const { user, ...jobWithoutUser } = job;
-    const jobWithLogo = { ...jobWithoutUser, logoUrl };
+    const { user, notasInternas, ...jobWithoutSensitive } = job;
+    const jobWithLogo = isOwnerOrAdmin
+      ? { ...jobWithoutSensitive, notasInternas, logoUrl }
+      : { ...jobWithoutSensitive, logoUrl };
 
     // Sanitizar si es confidencial y no es propietario/admin
     const sanitizedJob = sanitizeConfidentialJob(jobWithLogo, isOwnerOrAdmin);
@@ -269,7 +272,7 @@ export async function PATCH(
       'salary', 'salaryMin', 'salaryMax', 'jobType', 'workMode', 'description',
       'requirements', 'companyRating', 'profile', 'subcategory', 'seniority',
       'educationLevel', 'habilidades', 'responsabilidades', 'resultadosEsperados',
-      'valoresActitudes', 'informacionAdicional', 'isConfidential'];
+      'valoresActitudes', 'informacionAdicional', 'notasInternas', 'isConfidential'];
     const updateData: Record<string, any> = {};
     for (const field of allowedPatchFields) {
       if (body[field] !== undefined) updateData[field] = body[field];
@@ -383,6 +386,7 @@ export async function PUT(
       resultadosEsperados,
       valoresActitudes,
       informacionAdicional,
+      notasInternas,
       isConfidential
     } = body;
 
@@ -546,6 +550,7 @@ export async function PUT(
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
         informacionAdicional: informacionAdicional || null,
+        notasInternas: notasInternas || null,
         // Vacante confidencial
         ...(isConfidential !== undefined && { isConfidential }),
         // Actualizar creditCost si cambió

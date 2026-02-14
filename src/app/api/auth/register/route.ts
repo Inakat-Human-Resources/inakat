@@ -28,6 +28,9 @@ const registerSchema = z.object({
   telefono: z.string().optional(),
   sexo: z.enum(['M', 'F', 'Otro']).optional(),
   fechaNacimiento: z.string().optional(),
+  ciudad: z.string().optional(),
+  estado: z.string().optional(),
+  ubicacionCercana: z.string().optional(),
 
   // Educación (FEATURE: Educación múltiple)
   educacion: z
@@ -108,6 +111,9 @@ function calcularAñosExperiencia(
   return Math.round(totalMonths / 12);
 }
 
+// Normalizar URLs: agregar https:// si falta
+const normalizeUrl = (url: string | undefined) => url && !url.startsWith('http') ? `https://${url}` : url;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -134,6 +140,9 @@ export async function POST(request: Request) {
       telefono,
       sexo,
       fechaNacimiento,
+      ciudad,
+      estado,
+      ubicacionCercana,
       educacion,
       profile,
       subcategory,
@@ -209,6 +218,9 @@ export async function POST(request: Request) {
           telefono: telefono || null,
           sexo: sexo || null,
           fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
+          ciudad: ciudad || null,
+          estado: estado || null,
+          ubicacionCercana: ubicacionCercana || null,
           // FEATURE: Educación múltiple - guardar JSON y sincronizar campos legacy
           educacion: educacion && educacion.length > 0 ? JSON.stringify(educacion) : null,
           universidad: educacion && educacion.length > 0 ? (educacion[0].institucion || null) : null,
@@ -217,9 +229,9 @@ export async function POST(request: Request) {
           profile: profile || null,
           subcategory: subcategory || null,
           seniority: seniority || null,
-          cvUrl: cvUrl || null,
-          linkedinUrl: linkedinUrl || null,
-          portafolioUrl: portafolioUrl || null,
+          cvUrl: normalizeUrl(cvUrl) || null,
+          linkedinUrl: normalizeUrl(linkedinUrl) || null,
+          portafolioUrl: normalizeUrl(portafolioUrl) || null,
           source: 'registro',
           añosExperiencia,
           status: 'available',

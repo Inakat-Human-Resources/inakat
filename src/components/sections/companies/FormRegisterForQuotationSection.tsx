@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 import { Building2 } from 'lucide-react';
 import ErrorToast from '@/components/shared/ErrorToast';
@@ -42,6 +43,8 @@ interface Errors {
 }
 
 const FormRegisterForQuotationSection = () => {
+  const router = useRouter();
+  const [loginCredentials, setLoginCredentials] = useState<{email: string, password: string} | null>(null);
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     apellidoPaterno: '',
@@ -433,6 +436,8 @@ const FormRegisterForQuotationSection = () => {
       const data = await response.json();
 
       if (data.success) {
+        // Guardar credenciales para auto-login
+        setLoginCredentials({ email: formData.correoEmpresa, password: formData.password });
         // Limpiar el formulario
         setFormData({
           nombre: '',
@@ -888,7 +893,7 @@ const FormRegisterForQuotationSection = () => {
 
                   <div>
                     <label className="block mb-2 text-sm font-semibold">
-                      Documentos *
+                      Constancia de Situación Fiscal *
                     </label>
                     <input
                       type="file"
@@ -978,15 +983,37 @@ const FormRegisterForQuotationSection = () => {
 
             {/* Mensaje */}
             <p className="text-gray-600 mb-8 text-lg">
-              Tu solicitud ha sido recibida. Nuestro equipo la revisará y te contactaremos pronto.
+              Tu cuenta ha sido creada exitosamente. Ya puedes acceder a la plataforma.
             </p>
 
             {/* Botón */}
             <button
-              onClick={() => setShowSuccessModal(false)}
+              onClick={async () => {
+                if (!loginCredentials) {
+                  router.push('/login');
+                  return;
+                }
+                try {
+                  const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      email: loginCredentials.email,
+                      password: loginCredentials.password
+                    })
+                  });
+                  if (res.ok) {
+                    router.push('/company/dashboard');
+                  } else {
+                    router.push('/login');
+                  }
+                } catch {
+                  router.push('/login');
+                }
+              }}
               className="w-full bg-button-green text-white font-bold py-4 px-8 rounded-xl hover:bg-green-700 transition-colors text-lg"
             >
-              Entendido
+              Ir a plataforma
             </button>
           </div>
         </div>

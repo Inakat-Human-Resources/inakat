@@ -169,6 +169,20 @@ export async function PUT(
     const body = await request.json();
     const { empresa, puesto, ubicacion, fechaInicio, fechaFin, esActual, descripcion } = body;
 
+    // Validar que fechaFin no sea anterior a fechaInicio
+    const effectiveFechaInicio = fechaInicio !== undefined ? fechaInicio : existing.fechaInicio;
+    const effectiveFechaFin = fechaFin !== undefined ? fechaFin : existing.fechaFin;
+    const effectiveEsActual = esActual !== undefined ? esActual : existing.esActual;
+
+    if (effectiveFechaFin && !effectiveEsActual) {
+      if (new Date(effectiveFechaFin) < new Date(effectiveFechaInicio)) {
+        return NextResponse.json(
+          { success: false, error: 'La fecha de fin no puede ser anterior a la fecha de inicio' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Preparar datos a actualizar
     const updateData: any = {};
     if (empresa !== undefined) updateData.empresa = empresa;

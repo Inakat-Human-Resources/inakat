@@ -92,6 +92,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validar que fechaFin no sea anterior a fechaInicio
+    if (fechaFin && !esActual) {
+      if (new Date(fechaFin) < new Date(fechaInicio)) {
+        return NextResponse.json(
+          { success: false, error: 'La fecha de fin no puede ser anterior a la fecha de inicio' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Crear experiencia
     const experience = await prisma.experience.create({
       data: {

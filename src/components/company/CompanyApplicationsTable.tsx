@@ -24,6 +24,8 @@ import {
   ThumbsDown
 } from 'lucide-react';
 
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 interface Experience {
   id: number;
   puesto: string;
@@ -417,7 +419,7 @@ export default function CompanyApplicationsTable({
                     <div className="flex items-center gap-2 mt-2">
                       {application.cvUrl && (
                         <a
-                          href={application.cvUrl}
+                          href={ensureUrl(application.cvUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -428,7 +430,7 @@ export default function CompanyApplicationsTable({
                       )}
                       {application.candidateProfile?.linkedinUrl && (
                         <a
-                          href={application.candidateProfile.linkedinUrl}
+                          href={ensureUrl(application.candidateProfile.linkedinUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -553,7 +555,7 @@ export default function CompanyApplicationsTable({
                           <div className="flex flex-wrap gap-3 pt-2">
                             {application.candidateProfile.cvUrl && (
                               <a
-                                href={application.candidateProfile.cvUrl}
+                                href={ensureUrl(application.candidateProfile.cvUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
@@ -564,7 +566,7 @@ export default function CompanyApplicationsTable({
                             )}
                             {application.candidateProfile.linkedinUrl && (
                               <a
-                                href={application.candidateProfile.linkedinUrl}
+                                href={ensureUrl(application.candidateProfile.linkedinUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
@@ -575,7 +577,7 @@ export default function CompanyApplicationsTable({
                             )}
                             {application.candidateProfile.portafolioUrl && (
                               <a
-                                href={application.candidateProfile.portafolioUrl}
+                                href={ensureUrl(application.candidateProfile.portafolioUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"

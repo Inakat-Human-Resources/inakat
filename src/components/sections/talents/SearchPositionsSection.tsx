@@ -30,6 +30,14 @@ interface Job {
   createdAt: string;
   profile?: string;  // FIX-06: Campo de especialidad para filtro
   logoUrl?: string | null; // FEAT-1: Logo de empresa
+  subcategory?: string;
+  seniority?: string;
+  educationLevel?: string;
+  habilidades?: string;
+  responsabilidades?: string;
+  resultadosEsperados?: string;
+  valoresActitudes?: string;
+  informacionAdicional?: string;
 }
 
 interface User {
@@ -560,6 +568,91 @@ const SearchPositionsSection = () => {
                       </h3>
                       <p className="text-gray-700 whitespace-pre-line">
                         {selectedJob.requirements}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Habilidades Requeridas (chips) */}
+                  {selectedJob.habilidades && (() => {
+                    try {
+                      const skills = JSON.parse(selectedJob.habilidades);
+                      return skills.length > 0 ? (
+                        <>
+                          <h3 className="font-bold text-lg mt-6 mb-2">Habilidades Requeridas</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {skills.map((skill: string, i: number) => (
+                              <span key={i} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      ) : null;
+                    } catch { return null; }
+                  })()}
+
+                  {/* Responsabilidades */}
+                  {selectedJob.responsabilidades && (
+                    <>
+                      <h3 className="font-bold text-lg mt-6 mb-2">Responsabilidades</h3>
+                      <p className="text-gray-700 whitespace-pre-line">
+                        {selectedJob.responsabilidades}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Resultados Esperados */}
+                  {selectedJob.resultadosEsperados && (
+                    <>
+                      <h3 className="font-bold text-lg mt-6 mb-2">Resultados Esperados (3-6 meses)</h3>
+                      <p className="text-gray-700 whitespace-pre-line">
+                        {selectedJob.resultadosEsperados}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Valores y Actitudes */}
+                  {selectedJob.valoresActitudes && (
+                    <>
+                      <h3 className="font-bold text-lg mt-6 mb-2">Valores y Actitudes</h3>
+                      <p className="text-gray-700 whitespace-pre-line">
+                        {selectedJob.valoresActitudes}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Especialidad, Nivel y Estudios (badges) */}
+                  {(selectedJob.profile || selectedJob.seniority || selectedJob.educationLevel) && (
+                    <div className="flex flex-wrap gap-2 mt-6">
+                      {selectedJob.profile && (
+                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                          {selectedJob.profile}
+                        </span>
+                      )}
+                      {selectedJob.subcategory && (
+                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
+                          {selectedJob.subcategory}
+                        </span>
+                      )}
+                      {selectedJob.seniority && (
+                        <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
+                          {selectedJob.seniority}
+                        </span>
+                      )}
+                      {selectedJob.educationLevel && selectedJob.educationLevel !== 'Sin requisito' && (
+                        <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm">
+                          {selectedJob.educationLevel}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Información Adicional */}
+                  {selectedJob.informacionAdicional && (
+                    <>
+                      <h3 className="font-bold text-lg mt-6 mb-2">Información Adicional</h3>
+                      <p className="text-gray-700 whitespace-pre-line">
+                        {selectedJob.informacionAdicional}
                       </p>
                     </>
                   )}

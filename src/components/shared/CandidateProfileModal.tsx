@@ -93,6 +93,9 @@ interface CandidateProfile {
   telefono?: string;
   sexo?: string;
   fechaNacimiento?: string;
+  ciudad?: string;
+  estado?: string;
+  ubicacionCercana?: string;
   source?: string;
   notas?: string;
   fotoUrl?: string; // FEAT-2: Foto de perfil
@@ -134,6 +137,9 @@ interface BankCandidate {
   cvUrl?: string | null;
   sexo?: string | null;
   fechaNacimiento?: string | null;
+  ciudad?: string | null;
+  estado?: string | null;
+  ubicacionCercana?: string | null;
   source?: string | null;
   notas?: string | null;
   fotoUrl?: string | null; // FEAT-2: Foto de perfil
@@ -306,6 +312,9 @@ export default function CandidateProfileModal({
         portafolioUrl: application.candidateProfile?.portafolioUrl,
         sexo: application.candidateProfile?.sexo,
         fechaNacimiento: application.candidateProfile?.fechaNacimiento,
+        ciudad: application.candidateProfile?.ciudad,
+        estado: application.candidateProfile?.estado,
+        ubicacionCercana: application.candidateProfile?.ubicacionCercana,
         source: application.candidateProfile?.source,
         adminNotas: application.candidateProfile?.notas,
         fotoUrl: application.candidateProfile?.fotoUrl, // FEAT-2: Foto de perfil
@@ -334,6 +343,9 @@ export default function CandidateProfileModal({
         portafolioUrl: candidate!.portafolioUrl,
         sexo: candidate!.sexo,
         fechaNacimiento: candidate!.fechaNacimiento,
+        ciudad: candidate!.ciudad,
+        estado: candidate!.estado,
+        ubicacionCercana: candidate!.ubicacionCercana,
         source: candidate!.source,
         adminNotas: candidate!.notas,
         fotoUrl: candidate!.fotoUrl, // FEAT-2: Foto de perfil
@@ -462,14 +474,18 @@ export default function CandidateProfileModal({
     return age;
   };
 
-  // Obtener ubicación del candidato (de la experiencia más reciente)
+  // Obtener ubicación del candidato (datos personales primero, luego experiencia)
   const getLocation = () => {
+    // Primero usar ubicación personal si existe
+    if (data.ciudad || data.estado) {
+      const parts = [data.ciudad, data.estado].filter(Boolean);
+      return parts.join(', ');
+    }
+    // Fallback: experiencia más reciente
     const experiences = data.experiences || [];
     if (experiences.length > 0) {
-      // Buscar trabajo actual primero
       const currentJob = experiences.find(exp => exp.esActual);
       if (currentJob?.ubicacion) return currentJob.ubicacion;
-      // Si no, usar la experiencia más reciente
       if (experiences[0]?.ubicacion) return experiences[0].ubicacion;
     }
     return null;
@@ -650,6 +666,9 @@ export default function CandidateProfileModal({
                 <div>
                   <p className="text-xs text-gray-500">Ubicación</p>
                   <p className="text-sm font-medium text-gray-900">{getLocation()}</p>
+                  {data.ubicacionCercana && (
+                    <p className="text-xs text-gray-500 mt-0.5">{data.ubicacionCercana}</p>
+                  )}
                 </div>
               </div>
             )}

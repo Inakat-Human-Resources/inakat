@@ -6,6 +6,9 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 
+// Normalizar URLs: agregar https:// si falta
+const normalizeUrl = (url: string | undefined) => url && !url.startsWith('http') ? `https://${url}` : url;
+
 // Obtener usuario autenticado
 async function getAuthenticatedUser() {
   const cookieStore = await cookies();
@@ -39,6 +42,9 @@ async function getAuthenticatedUser() {
           telefono: true,
           fechaNacimiento: true,
           sexo: true,
+          ciudad: true,
+          estado: true,
+          ubicacionCercana: true,
           universidad: true,
           carrera: true,
           nivelEstudios: true,
@@ -134,6 +140,9 @@ export async function GET() {
         telefono: user.candidate.telefono,
         fechaNacimiento: user.candidate.fechaNacimiento,
         sexo: user.candidate.sexo,
+        ciudad: user.candidate.ciudad,
+        estado: user.candidate.estado,
+        ubicacionCercana: user.candidate.ubicacionCercana,
         universidad: user.candidate.universidad,
         carrera: user.candidate.carrera,
         nivelEstudios: user.candidate.nivelEstudios,
@@ -243,6 +252,9 @@ export async function PUT(request: Request) {
         telefono,
         fechaNacimiento,
         sexo,
+        ciudad,
+        estado,
+        ubicacionCercana,
         universidad,
         carrera,
         nivelEstudios,
@@ -265,15 +277,18 @@ export async function PUT(request: Request) {
         updateCandidateData.fechaNacimiento = fechaNacimiento ? new Date(fechaNacimiento) : null;
       }
       if (sexo !== undefined) updateCandidateData.sexo = sexo;
+      if (ciudad !== undefined) updateCandidateData.ciudad = ciudad;
+      if (estado !== undefined) updateCandidateData.estado = estado;
+      if (ubicacionCercana !== undefined) updateCandidateData.ubicacionCercana = ubicacionCercana;
       if (universidad !== undefined) updateCandidateData.universidad = universidad;
       if (carrera !== undefined) updateCandidateData.carrera = carrera;
       if (nivelEstudios !== undefined) updateCandidateData.nivelEstudios = nivelEstudios;
       if (añosExperiencia !== undefined) updateCandidateData.añosExperiencia = añosExperiencia;
       if (profile !== undefined) updateCandidateData.profile = profile;
       if (seniority !== undefined) updateCandidateData.seniority = seniority;
-      if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = linkedinUrl;
-      if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = portafolioUrl;
-      if (cvUrl !== undefined) updateCandidateData.cvUrl = cvUrl;
+      if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = normalizeUrl(linkedinUrl) || linkedinUrl;
+      if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = normalizeUrl(portafolioUrl) || portafolioUrl;
+      if (cvUrl !== undefined) updateCandidateData.cvUrl = normalizeUrl(cvUrl) || cvUrl;
 
       // FEAT-2: Actualizar foto de perfil
       if (fotoUrl !== undefined) updateCandidateData.fotoUrl = fotoUrl;

@@ -16,6 +16,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 interface ApplyJobModalProps {
   jobId: number;
   jobTitle: string;
@@ -526,7 +528,7 @@ const ApplyJobModal = ({
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">CV:</span>
                     <a
-                      href={profile.candidate.cvUrl || '#'}
+                      href={profile.candidate.cvUrl ? ensureUrl(profile.candidate.cvUrl) : '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline text-sm"

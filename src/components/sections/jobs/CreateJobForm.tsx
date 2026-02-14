@@ -87,6 +87,7 @@ const CreateJobForm = () => {
     resultadosEsperados: '',
     valoresActitudes: '',
     informacionAdicional: '',
+    notasInternas: '',
     // Vacante confidencial
     isConfidential: false
   });
@@ -325,6 +326,7 @@ const CreateJobForm = () => {
           resultadosEsperados: job.resultadosEsperados || '',
           valoresActitudes: job.valoresActitudes || '',
           informacionAdicional: job.informacionAdicional || '',
+          notasInternas: job.notasInternas || '',
           isConfidential: job.isConfidential || false
         });
       } else {
@@ -661,6 +663,7 @@ const CreateJobForm = () => {
       resultadosEsperados: '',
       valoresActitudes: '',
       informacionAdicional: '',
+      notasInternas: '',
       isConfidential: false
     });
     setCalculatedCost(0);
@@ -1445,11 +1448,14 @@ const CreateJobForm = () => {
           />
         </div>
 
-        {/* Información Adicional */}
+        {/* Información Adicional (público) */}
         <div>
           <label className="block text-sm font-semibold mb-1">
             Información Adicional (Opcional)
           </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Visible para los candidatos que vean esta vacante.
+          </p>
           <textarea
             value={formData.informacionAdicional}
             onChange={(e) =>
@@ -1458,9 +1464,31 @@ const CreateJobForm = () => {
                 informacionAdicional: e.target.value
               }))
             }
-            rows={2}
-            placeholder="Aspectos técnicos, contextuales o estratégicos adicionales..."
+            rows={3}
+            placeholder="Comparte cualquier información complementaria que ayude a entender mejor la posición, el contexto del proyecto o lo que buscas en el perfil."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-button-green"
+          />
+        </div>
+
+        {/* Notas Internas (solo INAKAT) */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <label className="block text-sm font-semibold mb-1 text-blue-800">
+            Información interna para INAKAT (no visible para candidatos)
+          </label>
+          <p className="text-xs text-blue-600 mb-2">
+            Este espacio es sólo para uso interno de INAKAT. Aquí puedes agregar detalles sensibles o estratégicos que nos ayuden a identificar mejor al perfil ideal.
+          </p>
+          <textarea
+            value={formData.notasInternas}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                notasInternas: e.target.value
+              }))
+            }
+            rows={3}
+            placeholder="Información confidencial: perfil ideal, contexto interno, rangos reales de negociación, etc."
+            className="w-full p-3 border border-blue-200 rounded-lg resize-none focus:ring-2 focus:ring-blue-400 bg-white"
           />
         </div>
 

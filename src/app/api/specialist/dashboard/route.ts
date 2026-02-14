@@ -166,6 +166,9 @@ export async function GET(request: Request) {
             telefono: true,
             sexo: true,
             fechaNacimiento: true,
+            ciudad: true,
+            estado: true,
+            ubicacionCercana: true,
             source: true,
             notas: true,
             educacion: true, // FEATURE: Educación múltiple

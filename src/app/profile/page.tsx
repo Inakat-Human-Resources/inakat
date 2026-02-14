@@ -26,6 +26,8 @@ import {
   GraduationCap
 } from 'lucide-react';
 
+const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
 interface Experience {
   id: number;
   empresa: string;
@@ -107,6 +109,9 @@ export default function ProfilePage() {
   const [telefono, setTelefono] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [sexo, setSexo] = useState('');
+  const [ciudad, setCiudad] = useState('');
+  const [estado, setEstado] = useState('');
+  const [ubicacionCercana, setUbicacionCercana] = useState('');
   // FEAT-2: Foto de perfil
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -203,6 +208,9 @@ export default function ProfilePage() {
           setTelefono(c.telefono || '');
           setFechaNacimiento(c.fechaNacimiento ? c.fechaNacimiento.split('T')[0] : '');
           setSexo(c.sexo || '');
+          setCiudad(c.ciudad || '');
+          setEstado(c.estado || '');
+          setUbicacionCercana(c.ubicacionCercana || '');
           setAñosExperiencia(c.añosExperiencia ?? '');
           setProfileField(c.profile || '');
           setSeniority(c.seniority || '');
@@ -263,6 +271,9 @@ export default function ProfilePage() {
           telefono,
           fechaNacimiento: fechaNacimiento || null,
           sexo: sexo || null,
+          ciudad: ciudad || null,
+          estado: estado || null,
+          ubicacionCercana: ubicacionCercana || null,
           añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,
           profile: profileField,
           seniority,
@@ -329,6 +340,14 @@ export default function ProfilePage() {
     if (!expForm.empresa || !expForm.puesto || !expForm.fechaInicio) {
       setError('Empresa, puesto y fecha de inicio son requeridos');
       return;
+    }
+
+    // Validar que fechaFin no sea anterior a fechaInicio
+    if (expForm.fechaFin && !expForm.esActual) {
+      if (new Date(expForm.fechaFin) < new Date(expForm.fechaInicio)) {
+        setError('La fecha de fin no puede ser anterior a la fecha de inicio');
+        return;
+      }
     }
 
     try {
@@ -924,6 +943,48 @@ export default function ProfilePage() {
                     <option value="Otro">Otro</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ciudad
+                  </label>
+                  <input
+                    type="text"
+                    value={ciudad}
+                    onChange={(e) => setCiudad(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Tu ciudad"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Estado
+                  </label>
+                  <input
+                    type="text"
+                    value={estado}
+                    onChange={(e) => setEstado(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Tu estado"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ubicación cercana
+                  </label>
+                  <input
+                    type="text"
+                    value={ubicacionCercana}
+                    onChange={(e) => setUbicacionCercana(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                    placeholder="Colonia, zona o referencia"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">
+                    Indica una ubicación cercana o de referencia (por ejemplo, tu colonia o zona). No es necesario que sea exacta. Esta información sólo se utiliza para ofrecerte oportunidades cercanas a ti.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -1100,7 +1161,7 @@ export default function ProfilePage() {
                     <div>
                       <p className="font-medium text-gray-900">CV cargado</p>
                       <a
-                        href={cvUrl}
+                        href={ensureUrl(cvUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-blue-600 hover:underline flex items-center gap-1"

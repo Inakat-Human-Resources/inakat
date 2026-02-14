@@ -102,10 +102,14 @@ export async function GET(request: Request) {
     });
 
     // Transformar para incluir logoUrl directamente y sanitizar
+    // SEGURIDAD: Excluir notasInternas de la respuesta pública (solo visible en vista de propietario)
     const sanitizedJobs = jobs.map(job => {
       const logoUrl = job.user?.companyRequest?.logoUrl || null;
-      const { user, ...jobWithoutUser } = job;
-      return sanitizeConfidentialJob({ ...jobWithoutUser, logoUrl }, isOwnerView);
+      const { user, notasInternas, ...jobWithoutSensitive } = job;
+      const jobData = isOwnerView
+        ? { ...jobWithoutSensitive, notasInternas, logoUrl }
+        : { ...jobWithoutSensitive, logoUrl };
+      return sanitizeConfidentialJob(jobData, isOwnerView);
     });
 
     return NextResponse.json({
@@ -168,6 +172,7 @@ export async function POST(request: Request) {
       resultadosEsperados,
       valoresActitudes,
       informacionAdicional,
+      notasInternas,
       // Vacante confidencial
       isConfidential
     } = body;
@@ -348,6 +353,7 @@ export async function POST(request: Request) {
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
         informacionAdicional: informacionAdicional || null,
+        notasInternas: notasInternas || null,
         // Vacante confidencial
         isConfidential: isConfidential || false
       }
