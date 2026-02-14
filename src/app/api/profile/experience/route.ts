@@ -102,6 +102,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // Si es trabajo actual, forzar fechaFin a null
+    const effectiveFechaFin = esActual ? null : fechaFin;
+
     // Crear experiencia
     const experience = await prisma.experience.create({
       data: {
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
         puesto,
         ubicacion: ubicacion || null,
         fechaInicio: new Date(fechaInicio),
-        fechaFin: fechaFin ? new Date(fechaFin) : null,
+        fechaFin: effectiveFechaFin ? new Date(effectiveFechaFin) : null,
         esActual: esActual || false,
         descripcion: descripcion || null
       }

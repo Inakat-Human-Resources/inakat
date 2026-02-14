@@ -286,9 +286,9 @@ export async function PUT(request: Request) {
       if (añosExperiencia !== undefined) updateCandidateData.añosExperiencia = añosExperiencia;
       if (profile !== undefined) updateCandidateData.profile = profile;
       if (seniority !== undefined) updateCandidateData.seniority = seniority;
-      if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = normalizeUrl(linkedinUrl) || linkedinUrl;
-      if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = normalizeUrl(portafolioUrl) || portafolioUrl;
-      if (cvUrl !== undefined) updateCandidateData.cvUrl = normalizeUrl(cvUrl) || cvUrl;
+      if (linkedinUrl !== undefined) updateCandidateData.linkedinUrl = normalizeUrl(linkedinUrl);
+      if (portafolioUrl !== undefined) updateCandidateData.portafolioUrl = normalizeUrl(portafolioUrl);
+      if (cvUrl !== undefined) updateCandidateData.cvUrl = normalizeUrl(cvUrl);
 
       // FEAT-2: Actualizar foto de perfil
       if (fotoUrl !== undefined) updateCandidateData.fotoUrl = fotoUrl;

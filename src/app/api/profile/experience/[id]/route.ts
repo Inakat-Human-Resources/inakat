@@ -183,13 +183,16 @@ export async function PUT(
       }
     }
 
+    // Si es trabajo actual, forzar fechaFin a null
+    const finalFechaFin = effectiveEsActual ? null : effectiveFechaFin;
+
     // Preparar datos a actualizar
     const updateData: any = {};
     if (empresa !== undefined) updateData.empresa = empresa;
     if (puesto !== undefined) updateData.puesto = puesto;
     if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
     if (fechaInicio !== undefined) updateData.fechaInicio = new Date(fechaInicio);
-    if (fechaFin !== undefined) updateData.fechaFin = fechaFin ? new Date(fechaFin) : null;
+    if (fechaFin !== undefined || esActual !== undefined) updateData.fechaFin = finalFechaFin ? new Date(finalFechaFin) : null;
     if (esActual !== undefined) updateData.esActual = esActual;
     if (descripcion !== undefined) updateData.descripcion = descripcion;
 

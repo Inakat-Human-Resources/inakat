@@ -736,7 +736,7 @@ export default function RegisterPage() {
                         type="text"
                         value={ciudad}
                         onChange={(e) => setCiudad(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        className={inputClass('ciudad')}
                         placeholder="Tu ciudad"
                       />
                     </div>
@@ -746,7 +746,7 @@ export default function RegisterPage() {
                         type="text"
                         value={estado}
                         onChange={(e) => setEstado(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        className={inputClass('estado')}
                         placeholder="Tu estado"
                       />
                     </div>
@@ -756,7 +756,7 @@ export default function RegisterPage() {
                         type="text"
                         value={ubicacionCercana}
                         onChange={(e) => setUbicacionCercana(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                        className={inputClass('ubicacionCercana')}
                         placeholder="Colonia, zona o referencia"
                       />
                     </div>
