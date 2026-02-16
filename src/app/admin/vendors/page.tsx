@@ -16,7 +16,9 @@ import {
   Upload,
   AlertCircle,
   TrendingUp,
-  Eye
+  Eye,
+  EyeOff,
+  Plus
 } from 'lucide-react';
 
 interface Vendor {
@@ -117,6 +119,23 @@ export default function AdminVendorsPage() {
   // Notificación
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
+  // Modal crear vendedor
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [creatingVendor, setCreatingVendor] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    nombre: '',
+    apellidoPaterno: '',
+    apellidoMaterno: '',
+    email: '',
+    telefono: '',
+    password: '',
+    code: '',
+    discountPercent: 10,
+    commissionPercent: 10
+  });
+
   // Cargar datos al montar
   useEffect(() => {
     fetchVendors();
@@ -211,6 +230,52 @@ export default function AdminVendorsPage() {
     }
   };
 
+  const handleCreateVendor = async () => {
+    if (!createForm.nombre.trim() || !createForm.apellidoPaterno.trim() || !createForm.email.trim() || !createForm.password.trim() || !createForm.code.trim()) {
+      setCreateError('Nombre, apellido paterno, email, contraseña y código son requeridos');
+      return;
+    }
+
+    setCreatingVendor(true);
+    setCreateError('');
+
+    try {
+      const res = await fetch('/api/admin/vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm)
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setIsCreateModalOpen(false);
+        setCreateForm({
+          nombre: '',
+          apellidoPaterno: '',
+          apellidoMaterno: '',
+          email: '',
+          telefono: '',
+          password: '',
+          code: '',
+          discountPercent: 10,
+          commissionPercent: 10
+        });
+        setCreateError('');
+        setShowPassword(false);
+        fetchVendors();
+        setNotification({ type: 'success', message: data.message || 'Vendedor creado exitosamente' });
+      } else {
+        setCreateError(data.error || 'Error al crear vendedor');
+      }
+    } catch (error) {
+      console.error('Error creating vendor:', error);
+      setCreateError('Error de conexión');
+    } finally {
+      setCreatingVendor(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
@@ -254,11 +319,20 @@ export default function AdminVendorsPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
         {/* Header - Responsive */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Vendedores</h1>
-          <p className="text-gray-600 mt-1 text-sm md:text-base">
-            Códigos de descuento y comisiones
-          </p>
+        <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Vendedores</h1>
+            <p className="text-gray-600 mt-1 text-sm md:text-base">
+              Códigos de descuento y comisiones
+            </p>
+          </div>
+          <button
+            onClick={() => { setIsCreateModalOpen(true); setCreateError(''); }}
+            className="px-4 py-2.5 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Vendedor
+          </button>
         </div>
 
         {/* Notificación */}
@@ -812,6 +886,184 @@ export default function AdminVendorsPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Crear Vendedor */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white p-6 border-b flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-green-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Nuevo Vendedor</h3>
+              </div>
+              <button
+                onClick={() => { setIsCreateModalOpen(false); setCreateError(''); setShowPassword(false); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Nombre */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                  <input
+                    type="text"
+                    value={createForm.nombre}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, nombre: e.target.value }))}
+                    placeholder="Nombre"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Apellido Paterno *</label>
+                  <input
+                    type="text"
+                    value={createForm.apellidoPaterno}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoPaterno: e.target.value }))}
+                    placeholder="Apellido Paterno"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Apellido Materno</label>
+                  <input
+                    type="text"
+                    value={createForm.apellidoMaterno}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoMaterno: e.target.value }))}
+                    placeholder="Apellido Materno"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                  <input
+                    type="tel"
+                    value={createForm.telefono}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, telefono: e.target.value }))}
+                    placeholder="10 dígitos"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="vendedor@ejemplo.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Contraseña */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Código de descuento */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Código de Descuento *</label>
+                <input
+                  type="text"
+                  value={createForm.code}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="Ej: VENDEDOR10"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">Se convertirá a mayúsculas automáticamente</p>
+              </div>
+
+              {/* Porcentajes */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">% Descuento</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={createForm.discountPercent}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, discountPercent: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">% Comisión</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={createForm.commissionPercent}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, commissionPercent: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Error */}
+              {createError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {createError}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t p-4 flex gap-3">
+              <button
+                onClick={() => { setIsCreateModalOpen(false); setCreateError(''); setShowPassword(false); }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateVendor}
+                disabled={creatingVendor}
+                className="flex-1 px-4 py-2.5 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-sm flex items-center justify-center gap-2"
+              >
+                {creatingVendor ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Crear Vendedor
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

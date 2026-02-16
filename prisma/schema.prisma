@@ -51,6 +51,9 @@ model User {
   // Notas de evaluación (para recruiters y specialists)
   evaluationNotes         EvaluationNote[] @relation("EvaluationNoteAuthor")
 
+  // Solicitudes de entrevista (para empresas)
+  interviewRequests       InterviewRequest[] @relation("InterviewRequester")
+
   @@index([email])
   @@index([role])
   @@index([isActive])
@@ -215,6 +218,9 @@ model Application {
 
   // Notas de evaluación
   evaluationNotes EvaluationNote[]
+
+  // Solicitudes de entrevista
+  interviewRequests InterviewRequest[]
 
   @@index([jobId])
   @@index([userId])
@@ -610,6 +616,9 @@ model EvaluationNote {
   documentUrl   String?
   documentName  String?
 
+  // Visibilidad
+  isPublic      Boolean   @default(false) // true = visible para empresa
+
   // Timestamps
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -685,5 +694,45 @@ model DiscountCodeUse {
   @@index([companyUserId])
   @@index([commissionStatus])
   @@index([createdAt])
+}
+
+// =============================================
+// SOLICITUDES DE ENTREVISTA
+// =============================================
+model InterviewRequest {
+  id              Int       @id @default(autoincrement())
+
+  // Relación con aplicación
+  applicationId   Int
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  // Quien solicita (empresa)
+  requestedById   Int
+  requestedBy     User      @relation("InterviewRequester", fields: [requestedById], references: [id])
+
+  // Configuración
+  type            String    // "videocall", "presential"
+  duration        Int       @default(45) // minutos
+  participants    String?   @db.Text // JSON: [{nombre, email}]
+
+  // Horarios propuestos
+  availableSlots  String    @db.Text // JSON: [{date, time}]
+
+  // Mensaje opcional
+  message         String?   @db.Text
+
+  // Estado
+  status          String    @default("pending") // "pending", "confirmed", "rejected", "cancelled"
+  confirmedSlot   String?   // JSON: {date, time} — el slot confirmado
+  confirmedAt     DateTime?
+  confirmedById   Int?      // userId de quien confirma
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([applicationId])
+  @@index([requestedById])
+  @@index([status])
 }
 

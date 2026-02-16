@@ -108,6 +108,30 @@ export async function GET(
           }
         });
 
+        // Obtener notas públicas de evaluación para esta aplicación
+        const publicNotes = await prisma.evaluationNote.findMany({
+          where: {
+            applicationId: app.id,
+            isPublic: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            author: {
+              select: { nombre: true, apellidoPaterno: true }
+            }
+          }
+        });
+
+        const publicEvaluationNotes = publicNotes.map(note => ({
+          id: note.id,
+          authorRole: note.authorRole,
+          authorName: `${note.author.nombre} ${note.author.apellidoPaterno || ''}`.trim(),
+          content: note.content,
+          documentUrl: note.documentUrl,
+          documentName: note.documentName,
+          createdAt: note.createdAt,
+        }));
+
         return {
           id: app.id,
           candidateName: app.candidateName,
@@ -118,6 +142,7 @@ export async function GET(
           cvUrl: app.cvUrl,
           coverLetter: app.coverLetter,
           notes: app.notes,
+          publicEvaluationNotes,
           candidateProfile: candidate
             ? {
                 id: candidate.id,

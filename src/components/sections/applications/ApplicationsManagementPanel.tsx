@@ -89,7 +89,7 @@ const ApplicationsManagementPanel = () => {
       interviewed: applications.filter((a) => a.status === 'interviewed')
         .length,
       accepted: applications.filter((a) => a.status === 'accepted').length,
-      rejected: applications.filter((a) => a.status === 'rejected').length
+      rejected: applications.filter((a) => a.status === 'rejected' || a.status === 'discarded').length
     };
     setStats(newStats);
   };
@@ -124,7 +124,8 @@ const ApplicationsManagementPanel = () => {
       reviewing: 'bg-blue-100 text-blue-800',
       interviewed: 'bg-purple-100 text-purple-800',
       accepted: 'bg-green-100 text-green-800',
-      rejected: 'bg-red-100 text-red-800'
+      rejected: 'bg-red-100 text-red-800',
+      discarded: 'bg-yellow-100 text-yellow-800'
     };
     return badges[status] || 'bg-gray-100 text-gray-800';
   };
@@ -135,7 +136,8 @@ const ApplicationsManagementPanel = () => {
       reviewing: 'En Revisión',
       interviewed: 'Entrevistado',
       accepted: 'Aceptado',
-      rejected: 'Rechazado'
+      rejected: 'Rechazado',
+      discarded: 'Descartado'
     };
     return labels[status] || status;
   };
@@ -495,12 +497,12 @@ const ApplicationsManagementPanel = () => {
                       onClick={() =>
                         updateApplicationStatus(
                           selectedApplication.id,
-                          'rejected'
+                          'discarded'
                         )
                       }
                       className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                     >
-                      Rechazar
+                      Descartar
                     </button>
                   </div>
                 </div>

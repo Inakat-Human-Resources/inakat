@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
 
 // Helper para obtener info de usuario de los headers (agregados por middleware)
 function getAuthFromHeaders(request: NextRequest): { userId: number; role: string } | null {
@@ -142,6 +143,119 @@ export async function GET(request: NextRequest) {
     console.error('Error getting vendors:', error);
     return NextResponse.json(
       { success: false, error: 'Error al obtener vendedores' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Crear nuevo vendedor (User + DiscountCode)
+export async function POST(request: NextRequest) {
+  try {
+    const auth = getAuthFromHeaders(request);
+    if (!auth || auth.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const {
+      nombre,
+      apellidoPaterno,
+      apellidoMaterno,
+      email,
+      telefono,
+      password,
+      code,
+      discountPercent = 10,
+      commissionPercent = 10
+    } = body;
+
+    // Validar campos requeridos
+    if (!nombre || !apellidoPaterno || !email || !password || !code) {
+      return NextResponse.json(
+        { success: false, error: 'Nombre, apellido paterno, email, contraseña y código son requeridos' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar que no exista un User con ese email
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() }
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { success: false, error: 'Ya existe un usuario con ese email' },
+        { status: 409 }
+      );
+    }
+
+    // Verificar que no exista un DiscountCode con ese code
+    const existingCode = await prisma.discountCode.findUnique({
+      where: { code: code.toUpperCase().trim() }
+    });
+
+    if (existingCode) {
+      return NextResponse.json(
+        { success: false, error: 'Ya existe un código de descuento con ese nombre' },
+        { status: 409 }
+      );
+    }
+
+    // Hash de la contraseña
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Crear User con role 'vendor'
+    const newUser = await prisma.user.create({
+      data: {
+        nombre: nombre.trim(),
+        apellidoPaterno: apellidoPaterno.trim(),
+        apellidoMaterno: apellidoMaterno?.trim() || null,
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        role: 'vendor',
+        isActive: true,
+      }
+    });
+
+    // Crear DiscountCode vinculado al User
+    const newCode = await prisma.discountCode.create({
+      data: {
+        code: code.toUpperCase().trim(),
+        userId: newUser.id,
+        discountPercent: parseFloat(String(discountPercent)) || 10,
+        commissionPercent: parseFloat(String(commissionPercent)) || 10,
+        isActive: true,
+      }
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          user: {
+            id: newUser.id,
+            nombre: `${newUser.nombre} ${newUser.apellidoPaterno}`.trim(),
+            email: newUser.email,
+            role: newUser.role
+          },
+          code: {
+            id: newCode.id,
+            code: newCode.code,
+            discountPercent: newCode.discountPercent,
+            commissionPercent: newCode.commissionPercent
+          }
+        },
+        message: `Vendedor ${newUser.nombre} creado con código ${newCode.code}`
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error('Error creating vendor:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error al crear vendedor' },
       { status: 500 }
     );
   }

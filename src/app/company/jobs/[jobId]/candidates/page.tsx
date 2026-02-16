@@ -19,10 +19,12 @@ import {
   MapPin,
   Building,
   Calendar,
-  MessageSquare
+  MessageSquare,
+  Video
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
+import InterviewRequestModal from '@/components/company/InterviewRequestModal'; // FEAT-6: Solicitud de entrevista
 
 // Tipos
 interface Job {
@@ -126,6 +128,10 @@ export default function JobCandidatesPage() {
 
   // Notificación
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+  // FEAT-6: Solicitud de entrevista
+  const [interviewApp, setInterviewApp] = useState<Application | null>(null);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
 
   // Hover tooltip para candidatos
   const [hoveredAppId, setHoveredAppId] = useState<number | null>(null);
@@ -380,9 +386,9 @@ export default function JobCandidatesPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-between md:justify-end md:text-right bg-orange-50 md:bg-transparent rounded-lg p-3 md:p-0">
-              <p className="text-sm text-gray-500 md:mb-0">Total de candidatos</p>
-              <p className="text-2xl md:text-3xl font-bold text-button-orange ml-3 md:ml-0">{applications.length}</p>
+            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-orange-50 md:bg-transparent rounded-lg p-3 md:p-0 gap-1">
+              <p className="text-sm text-gray-500">Total de candidatos</p>
+              <p className="text-2xl md:text-3xl font-bold text-button-orange">{applications.length}</p>
             </div>
           </div>
         </div>
@@ -557,18 +563,19 @@ export default function JobCandidatesPage() {
                           </button>
                         )}
 
-                        {/* Entrevistado - Solo si está en company_interested */}
-                        {app.status === 'company_interested' && (
+                        {/* Solicitar Entrevista - Para sent_to_company y company_interested */}
+                        {(app.status === 'sent_to_company' || app.status === 'company_interested') && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleCandidateAction(app.id, 'interviewed', app.candidateName);
+                              setInterviewApp(app);
+                              setShowInterviewModal(true);
                             }}
                             className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-1"
-                            title="Marcar como Entrevistado"
+                            title="Solicitar entrevista"
                           >
-                            <MessageSquare className="w-4 h-4" />
-                            Entrevistado
+                            <Video className="w-4 h-4" />
+                            Solicitar Entrevista
                           </button>
                         )}
 
@@ -632,7 +639,27 @@ export default function JobCandidatesPage() {
         onPrev={handlePrevCandidate}
         currentIndex={candidateIndex}
         totalCount={filteredCandidates.length}
+        userRole="company"
       />
+
+      {/* FEAT-6: Modal de Solicitud de Entrevista */}
+      {interviewApp && (
+        <InterviewRequestModal
+          isOpen={showInterviewModal}
+          onClose={() => {
+            setShowInterviewModal(false);
+            setInterviewApp(null);
+          }}
+          applicationId={interviewApp.id}
+          candidateName={interviewApp.candidateName}
+          jobTitle={job?.title || ''}
+          candidatePhoto={interviewApp.candidateProfile?.fotoUrl}
+          onSuccess={() => {
+            setNotification({ type: 'success', message: `Solicitud de entrevista enviada para ${interviewApp.candidateName}` });
+            fetchData();
+          }}
+        />
+      )}
     </div>
   );
 }

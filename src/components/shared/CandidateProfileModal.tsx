@@ -73,6 +73,7 @@ interface EvaluationNote {
   content: string;
   documentUrl?: string | null;
   documentName?: string | null;
+  isPublic?: boolean;
   createdAt: string;
   authorName?: string;
 }
@@ -196,13 +197,14 @@ export default function CandidateProfileModal({
   const [evaluationNotes, setEvaluationNotes] = useState<EvaluationNote[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [noteDocument, setNoteDocument] = useState<File | null>(null);
+  const [isNotePublic, setIsNotePublic] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const noteFileRef = useRef<HTMLInputElement>(null);
 
   // Determinar si el usuario puede agregar notas de evaluación
   const canAddEvaluationNotes = ['recruiter', 'specialist'].includes(userRole || '');
-  const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin'].includes(userRole || '');
+  const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin', 'company'].includes(userRole || '');
 
   // FEAT-5: Cargar notas de evaluación cuando se abre el modal
   useEffect(() => {
@@ -214,6 +216,7 @@ export default function CandidateProfileModal({
       setEvaluationNotes([]);
       setNewNoteContent('');
       setNoteDocument(null);
+      setIsNotePublic(false);
     }
   }, [isOpen, application?.id, canViewEvaluationNotes]);
 
@@ -266,6 +269,7 @@ export default function CandidateProfileModal({
           content: newNoteContent.trim(),
           documentUrl,
           documentName,
+          isPublic: isNotePublic,
         }),
       });
 
@@ -274,6 +278,7 @@ export default function CandidateProfileModal({
         setEvaluationNotes(prev => [data.data, ...prev]);
         setNewNoteContent('');
         setNoteDocument(null);
+        setIsNotePublic(false);
         if (noteFileRef.current) noteFileRef.current.value = '';
       }
     } catch (error) {
@@ -952,13 +957,26 @@ export default function CandidateProfileModal({
                   {evaluationNotes.map((note) => (
                     <div key={note.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
                       <div className="flex justify-between items-center mb-2">
-                        <span className={`font-medium px-2 py-0.5 rounded text-xs ${
-                          note.authorRole === 'recruiter'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          {note.authorRole === 'recruiter' ? '🧠 Reclutador' : '🔧 Especialista'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium px-2 py-0.5 rounded text-xs ${
+                            note.authorRole === 'recruiter'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {note.authorRole === 'recruiter' ? 'Reclutador' : 'Especialista'}
+                          </span>
+                          {userRole !== 'company' && (
+                            note.isPublic ? (
+                              <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700 font-medium">
+                                Visible empresa
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500 font-medium">
+                                Solo INAKAT
+                              </span>
+                            )
+                          )}
+                        </div>
                         <span className="text-xs text-gray-400">
                           {new Date(note.createdAt).toLocaleDateString('es-MX', {
                             day: '2-digit',
@@ -998,6 +1016,18 @@ export default function CandidateProfileModal({
                     className="w-full border border-gray-300 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-[#2b5d62] focus:border-transparent"
                     rows={3}
                   />
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isNotePublic}
+                      onChange={(e) => setIsNotePublic(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#2b5d62] focus:ring-[#2b5d62]"
+                    />
+                    <span className="text-sm text-gray-600">Visible para empresa</span>
+                    {isNotePublic && (
+                      <span className="text-xs text-green-600 font-medium">(La empresa podrá leer esta nota)</span>
+                    )}
+                  </label>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-700 flex-1">
                       <Upload className="w-4 h-4" />

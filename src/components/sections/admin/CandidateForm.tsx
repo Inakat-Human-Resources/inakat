@@ -16,7 +16,11 @@ import {
   Loader2,
   ExternalLink,
   FileText,
-  Upload
+  Upload,
+  Eye,
+  EyeOff,
+  KeyRound,
+  CheckCircle
 } from 'lucide-react';
 
 interface Experience {
@@ -101,6 +105,16 @@ const CandidateForm = ({
   // Documentos
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploadingDoc, setUploadingDoc] = useState<number | null>(null);
+
+  // Cuenta de acceso
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetPasswordText, setShowResetPasswordText] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
 
   // Opciones
   const profiles = [
@@ -226,6 +240,13 @@ const CandidateForm = ({
     setDocuments([]);
     setActiveTab('personal');
     setError('');
+    setPassword('');
+    setShowPassword(false);
+    setShowResetPassword(false);
+    setResetPassword('');
+    setShowResetPasswordText(false);
+    setResetSuccess(false);
+    setShowCreateAccount(false);
   };
 
   // Agregar experiencia
@@ -373,10 +394,59 @@ const CandidateForm = ({
     }
   };
 
+  // Resetear contraseña de candidato existente
+  const handleResetPassword = async () => {
+    if (!candidateToEdit || !resetPassword.trim()) return;
+
+    if (resetPassword.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
+    setResettingPassword(true);
+    setError('');
+
+    try {
+      const res = await fetch(`/api/admin/candidates/${candidateToEdit.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: resetPassword })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setResetSuccess(true);
+        setResetPassword('');
+        setShowResetPassword(false);
+        setShowResetPasswordText(false);
+        setShowCreateAccount(false);
+        // Actualizar el candidateToEdit local para reflejar que ahora tiene userId
+        if (data.userId) {
+          candidateToEdit.userId = data.userId;
+        }
+      } else {
+        setError(data.error || 'Error al resetear contraseña');
+      }
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      setError('Error de conexión');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   // Enviar formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validar contraseña si se proporcionó
+    if (password && password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -408,7 +478,8 @@ const CandidateForm = ({
           name: doc.name,
           fileUrl: doc.fileUrl,
           fileType: doc.fileType
-        }))
+        })),
+        ...(password && { password }),
       };
 
       const url = candidateToEdit
@@ -688,6 +759,168 @@ const CandidateForm = ({
                     className="w-full p-3 border rounded-lg"
                   />
                 </div>
+              </div>
+
+              {/* Cuenta de Acceso */}
+              <div className="border-t border-b border-gray-200 py-4 my-2">
+                <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                  <KeyRound size={16} />
+                  Cuenta de Acceso
+                </h3>
+
+                {!candidateToEdit ? (
+                  /* Nuevo candidato: campo de contraseña opcional */
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Contraseña
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Mínimo 8 caracteres"
+                        className="w-full p-3 pr-10 border rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Opcional. Si se proporciona, el candidato podrá iniciar sesión en INAKAT con su email y esta contraseña.
+                    </p>
+                  </div>
+                ) : (
+                  /* Candidato existente: mostrar estado de cuenta */
+                  <div>
+                    {candidateToEdit.userId || resetSuccess ? (
+                      /* Tiene cuenta */
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                          <CheckCircle size={16} />
+                          <span className="text-sm font-medium">Tiene cuenta de acceso</span>
+                        </div>
+                        {!showResetPassword ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowResetPassword(true)}
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                          >
+                            <KeyRound size={14} />
+                            Resetear Contraseña
+                          </button>
+                        ) : (
+                          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">Nueva contraseña</label>
+                            <div className="relative">
+                              <input
+                                type={showResetPasswordText ? 'text' : 'password'}
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="Mínimo 8 caracteres"
+                                className="w-full p-2 pr-10 border rounded-lg text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowResetPasswordText(!showResetPasswordText)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                {showResetPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={handleResetPassword}
+                                disabled={resettingPassword || resetPassword.length < 8}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {resettingPassword ? (
+                                  <><Loader2 size={14} className="animate-spin" /> Guardando...</>
+                                ) : (
+                                  'Guardar'
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setShowResetPassword(false); setResetPassword(''); setShowResetPasswordText(false); }}
+                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* No tiene cuenta */
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+                          <User size={16} />
+                          <span className="text-sm">Sin cuenta de acceso</span>
+                        </div>
+                        {!showCreateAccount ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateAccount(true)}
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                          >
+                            <Plus size={14} />
+                            Crear cuenta de acceso
+                          </button>
+                        ) : (
+                          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">Contraseña para la cuenta</label>
+                            <div className="relative">
+                              <input
+                                type={showResetPasswordText ? 'text' : 'password'}
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="Mínimo 8 caracteres"
+                                className="w-full p-2 pr-10 border rounded-lg text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowResetPasswordText(!showResetPasswordText)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                {showResetPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              Se creará una cuenta con el email del candidato y esta contraseña.
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={handleResetPassword}
+                                disabled={resettingPassword || resetPassword.length < 8}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {resettingPassword ? (
+                                  <><Loader2 size={14} className="animate-spin" /> Creando...</>
+                                ) : (
+                                  'Crear cuenta'
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setShowCreateAccount(false); setResetPassword(''); setShowResetPasswordText(false); }}
+                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

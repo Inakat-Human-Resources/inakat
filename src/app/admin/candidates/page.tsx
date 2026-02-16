@@ -73,6 +73,7 @@ interface Candidate {
   status: string;
   createdAt: string;
   experiences: any[];
+  userId: number | null;
 }
 
 export default function AdminCandidatesPage() {

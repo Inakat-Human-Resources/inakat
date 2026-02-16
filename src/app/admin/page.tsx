@@ -24,7 +24,10 @@ import {
   Calendar,
   Banknote,
   Monitor,
-  GraduationCap
+  GraduationCap,
+  BarChart3,
+  Loader2,
+  ChevronRight
 } from 'lucide-react';
 
 interface Job {
@@ -96,6 +99,13 @@ export default function AdminDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Pipeline modal
+  const [pipelineJobId, setPipelineJobId] = useState<number | null>(null);
+  const [pipelineData, setPipelineData] = useState<any>(null);
+  const [loadingPipeline, setLoadingPipeline] = useState(false);
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
 
   // Estado para ordenamiento de tabla
   const [sortField, setSortField] = useState<string>('createdAt');
@@ -190,6 +200,56 @@ export default function AdminDashboardPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Fetch pipeline de una vacante
+  const fetchPipeline = async (jobId: number) => {
+    setPipelineJobId(jobId);
+    setLoadingPipeline(true);
+    setPipelineData(null);
+    setExpandedStage(null);
+    setFilterStatus(null);
+
+    try {
+      const res = await fetch(`/api/admin/jobs/${jobId}/pipeline`);
+      const data = await res.json();
+      if (data.success) {
+        setPipelineData(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching pipeline:', err);
+    } finally {
+      setLoadingPipeline(false);
+    }
+  };
+
+  // Helper: obtener aplicaciones filtradas por status
+  const getFilteredApplications = (status: string): any[] => {
+    if (!pipelineData?.applications) return [];
+    if (status === 'pending') {
+      return pipelineData.applications.filter((a: any) =>
+        a.status === 'pending' || a.status === 'injected_by_admin'
+      );
+    }
+    return pipelineData.applications.filter((a: any) => a.status === status);
+  };
+
+  // Helper: label legible de status
+  const getStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      pending: 'Por revisar',
+      reviewing: 'En revisión',
+      sent_to_specialist: 'Enviados a especialista',
+      discarded: 'Descartados',
+      evaluating: 'Evaluando',
+      sent_to_company: 'Enviados a empresa',
+      company_interested: 'Le interesan',
+      interested: 'Le interesan',
+      interviewed: 'Entrevistados',
+      rejected: 'Rechazados',
+      accepted: 'Contratados'
+    };
+    return labels[status] || status;
   };
 
   // Función para manejar ordenamiento
@@ -477,13 +537,14 @@ export default function AdminDashboardPage() {
                   <SortableHeader field="applications">Candidatos</SortableHeader>
                   <SortableHeader field="status">Estado</SortableHeader>
                   <SortableHeader field="createdAt">Fecha</SortableHeader>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Pipeline</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {sortedJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                       <Briefcase className="mx-auto mb-2 text-gray-400" size={40} />
                       {selectedCompany || selectedProfile
                         ? 'No hay vacantes con los filtros seleccionados'
@@ -561,6 +622,16 @@ export default function AdminDashboardPage() {
                             )
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => fetchPipeline(job.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm"
+                          title="Ver pipeline"
+                        >
+                          <BarChart3 size={14} />
+                          Pipeline
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -769,6 +840,240 @@ export default function AdminDashboardPage() {
                   setSelectedJob(null);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pipeline */}
+      {pipelineJobId !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-start p-6 border-b bg-gray-50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <BarChart3 size={20} className="text-purple-600" />
+                  Pipeline de Candidatos
+                </h2>
+                {pipelineData?.job && (
+                  <div className="mt-1">
+                    <p className="text-sm font-medium text-gray-700">{pipelineData.job.title}</p>
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Building2 size={12} />
+                      {pipelineData.job.company}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => { setPipelineJobId(null); setPipelineData(null); setFilterStatus(null); }}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingPipeline ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+                </div>
+              ) : pipelineData ? (
+                <div className="space-y-6">
+                  {/* Barra visual del pipeline */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                      <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Reclutador</p>
+                      <p className="text-2xl font-bold text-blue-800 mt-1">{pipelineData.stageTotals.recruiter}</p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
+                      <p className="text-xs font-semibold text-purple-600 uppercase tracking-wider">Especialista</p>
+                      <p className="text-2xl font-bold text-purple-800 mt-1">{pipelineData.stageTotals.specialist}</p>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                      <p className="text-xs font-semibold text-green-600 uppercase tracking-wider">Empresa</p>
+                      <p className="text-2xl font-bold text-green-800 mt-1">{pipelineData.stageTotals.company}</p>
+                    </div>
+                  </div>
+
+                  {/* Total */}
+                  <p className="text-sm text-gray-500 text-center">
+                    {pipelineData.total} candidato{pipelineData.total !== 1 ? 's' : ''} en total
+                  </p>
+
+                  {/* Secciones colapsables */}
+                  {/* Reclutador */}
+                  <div className="border border-blue-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => { setExpandedStage(expandedStage === 'recruiter' ? null : 'recruiter'); setFilterStatus(null); }}
+                      className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+                    >
+                      <span className="font-semibold text-blue-800 text-sm flex items-center gap-2">
+                        <FileText size={16} />
+                        Reclutador
+                      </span>
+                      <ChevronRight size={16} className={`text-blue-600 transition-transform ${expandedStage === 'recruiter' ? 'rotate-90' : ''}`} />
+                    </button>
+                    {expandedStage === 'recruiter' && (
+                      <div className="p-3 space-y-1">
+                        {[
+                          { key: 'pending', label: 'Por revisar', count: pipelineData.stages.recruiter.pending },
+                          { key: 'reviewing', label: 'En revisión', count: pipelineData.stages.recruiter.reviewing },
+                          { key: 'sent_to_specialist', label: 'Enviados a especialista', count: pipelineData.stages.recruiter.sent_to_specialist },
+                          { key: 'discarded', label: 'Descartados', count: pipelineData.stages.recruiter.discarded }
+                        ].map(item => (
+                          <button
+                            key={item.key}
+                            onClick={() => setFilterStatus(filterStatus === item.key ? null : item.key)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                              filterStatus === item.key
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <span className={`font-bold ${item.count > 0 ? 'text-blue-700' : 'text-gray-400'}`}>{item.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Especialista */}
+                  <div className="border border-purple-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => { setExpandedStage(expandedStage === 'specialist' ? null : 'specialist'); setFilterStatus(null); }}
+                      className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 transition-colors"
+                    >
+                      <span className="font-semibold text-purple-800 text-sm flex items-center gap-2">
+                        <GraduationCap size={16} />
+                        Especialista
+                      </span>
+                      <ChevronRight size={16} className={`text-purple-600 transition-transform ${expandedStage === 'specialist' ? 'rotate-90' : ''}`} />
+                    </button>
+                    {expandedStage === 'specialist' && (
+                      <div className="p-3 space-y-1">
+                        {[
+                          { key: 'evaluating', label: 'Evaluando', count: pipelineData.stages.specialist.evaluating },
+                          { key: 'sent_to_company', label: 'Enviados a empresa', count: pipelineData.stages.specialist.sent_to_company }
+                        ].map(item => (
+                          <button
+                            key={item.key}
+                            onClick={() => setFilterStatus(filterStatus === item.key ? null : item.key)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                              filterStatus === item.key
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <span className={`font-bold ${item.count > 0 ? 'text-purple-700' : 'text-gray-400'}`}>{item.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Empresa */}
+                  <div className="border border-green-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => { setExpandedStage(expandedStage === 'company' ? null : 'company'); setFilterStatus(null); }}
+                      className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 transition-colors"
+                    >
+                      <span className="font-semibold text-green-800 text-sm flex items-center gap-2">
+                        <Building2 size={16} />
+                        Empresa
+                      </span>
+                      <ChevronRight size={16} className={`text-green-600 transition-transform ${expandedStage === 'company' ? 'rotate-90' : ''}`} />
+                    </button>
+                    {expandedStage === 'company' && (
+                      <div className="p-3 space-y-1">
+                        {[
+                          { key: 'company_interested', label: 'Le interesan', count: pipelineData.stages.company.interested },
+                          { key: 'interviewed', label: 'Entrevistados', count: pipelineData.stages.company.interviewed },
+                          { key: 'rejected', label: 'Rechazados', count: pipelineData.stages.company.rejected },
+                          { key: 'accepted', label: 'Contratados', count: pipelineData.stages.company.accepted }
+                        ].map(item => (
+                          <button
+                            key={item.key}
+                            onClick={() => setFilterStatus(filterStatus === item.key ? null : item.key)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                              filterStatus === item.key
+                                ? 'bg-green-100 text-green-800'
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            <span className={`font-bold ${item.count > 0 ? 'text-green-700' : 'text-gray-400'}`}>{item.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lista de candidatos filtrados */}
+                  {filterStatus && (
+                    <div className="border rounded-lg">
+                      <div className="p-3 bg-gray-50 border-b flex items-center justify-between">
+                        <h4 className="font-semibold text-sm text-gray-700">
+                          {getStatusLabel(filterStatus)} ({getFilteredApplications(filterStatus).length})
+                        </h4>
+                        <button
+                          onClick={() => setFilterStatus(null)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="divide-y max-h-60 overflow-y-auto">
+                        {getFilteredApplications(filterStatus).length === 0 ? (
+                          <p className="p-4 text-sm text-gray-500 text-center">No hay candidatos en esta etapa</p>
+                        ) : (
+                          getFilteredApplications(filterStatus).map((app: any) => (
+                            <div key={app.id} className="p-3 flex items-center justify-between hover:bg-gray-50">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{app.candidateName}</p>
+                                <p className="text-xs text-gray-500">{app.candidateEmail}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-400">
+                                  {new Date(app.updatedAt).toLocaleDateString('es-MX', {
+                                    day: '2-digit',
+                                    month: 'short'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">Error al cargar pipeline</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+              {pipelineData?.job && (
+                <Link
+                  href={`/admin/assign-candidates?jobId=${pipelineData.job.id}`}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+                >
+                  <Users size={16} />
+                  Ver/Asignar Candidatos
+                </Link>
+              )}
+              <button
+                onClick={() => { setPipelineJobId(null); setPipelineData(null); setFilterStatus(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm"
               >
                 Cerrar
               </button>
