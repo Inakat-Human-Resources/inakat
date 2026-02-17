@@ -3,6 +3,7 @@ import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { applyRateLimit, UPLOAD_RATE_LIMIT } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -43,6 +44,10 @@ async function saveToLocalStorage(file: File, uniqueFileName: string): Promise<s
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting: 15 uploads por hora por IP
+    const rateLimited = applyRateLimit(request, 'upload', UPLOAD_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 

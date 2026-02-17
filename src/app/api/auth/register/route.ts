@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, generateToken } from '@/lib/auth';
 import { z } from 'zod';
+import { applyRateLimit, REGISTER_RATE_LIMIT } from '@/lib/rate-limit';
 
 /**
  * POST /api/auth/register
@@ -116,6 +117,10 @@ const normalizeUrl = (url: string | undefined) => url && !url.startsWith('http')
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting: 3 registros por hora por IP
+    const rateLimited = applyRateLimit(request, 'register', REGISTER_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
 
     // Validar datos de entrada

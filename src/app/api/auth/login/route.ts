@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { authenticateUser } from '@/lib/auth';
 import { validate, loginSchema } from '@/lib/validations';
+import { applyRateLimit, LOGIN_RATE_LIMIT } from '@/lib/rate-limit';
 
 /**
  * POST /api/auth/login
@@ -10,6 +11,10 @@ import { validate, loginSchema } from '@/lib/validations';
  */
 export async function POST(request: Request) {
   try {
+    // Rate limiting: 7 intentos por 15 minutos por IP
+    const rateLimited = applyRateLimit(request, 'login', LOGIN_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
 
     // Validar datos de entrada

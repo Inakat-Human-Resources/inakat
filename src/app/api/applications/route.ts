@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyRateLimit, APPLICATION_RATE_LIMIT } from '@/lib/rate-limit';
 
 // GET - Listar aplicaciones (filtradas por job o por usuario admin)
 export async function GET(request: Request) {
@@ -67,6 +68,10 @@ export async function GET(request: Request) {
 // POST - Crear nueva aplicación
 export async function POST(request: Request) {
   try {
+    // Rate limiting: 10 aplicaciones por hora por IP
+    const rateLimited = applyRateLimit(request, 'application', APPLICATION_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const {
       jobId,

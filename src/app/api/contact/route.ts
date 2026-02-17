@@ -2,9 +2,14 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { applyRateLimit, CONTACT_RATE_LIMIT } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting: 5 mensajes por hora por IP
+    const rateLimited = applyRateLimit(request, 'contact', CONTACT_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { nombre, email, telefono, mensaje } = body;
 

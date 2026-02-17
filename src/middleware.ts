@@ -269,6 +269,7 @@ export const config = {
     '/api/recruiter/:path*',
     '/api/specialist/:path*',
     '/api/evaluations/:path*',
+    '/api/interview-requests/:path*',
     '/api/credits/:path*',
     '/api/vendor/:path*',
     '/admin/:path*',
