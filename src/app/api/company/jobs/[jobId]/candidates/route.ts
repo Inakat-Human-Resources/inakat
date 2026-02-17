@@ -56,7 +56,8 @@ export async function GET(
         profile: true,
         seniority: true,
         createdAt: true,
-        userId: true
+        userId: true,
+        habilidades: true
       }
     });
 
@@ -165,6 +166,7 @@ export async function GET(
                 notas: candidate.notas,
                 educacion: candidate.educacion, // FEATURE: Educación múltiple
                 fotoUrl: candidate.fotoUrl, // FEAT-2: Foto de perfil
+                cartaPresentacion: candidate.cartaPresentacion || null,
                 experiences: candidate.experiences,
                 documents: candidate.documents
               }

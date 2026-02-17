@@ -30,7 +30,8 @@ import {
   Upload,
   Loader2,
   Save,
-  ClipboardList
+  ClipboardList,
+  Star
 } from 'lucide-react';
 
 // Tipos para el candidato (compatible con Application y Candidate)
@@ -100,6 +101,7 @@ interface CandidateProfile {
   source?: string;
   notas?: string;
   fotoUrl?: string; // FEAT-2: Foto de perfil
+  cartaPresentacion?: string;
   experiences?: Experience[];
   documents?: CandidateDocument[];
 }
@@ -144,6 +146,7 @@ interface BankCandidate {
   source?: string | null;
   notas?: string | null;
   fotoUrl?: string | null; // FEAT-2: Foto de perfil
+  cartaPresentacion?: string | null;
   status: string;
   experiences?: Experience[];
   documents?: CandidateDocument[];
@@ -168,6 +171,8 @@ interface CandidateProfileModalProps {
   onDocumentsUpdated?: () => void;
   // FEAT-5: Notas de evaluación
   userRole?: string; // Para saber si puede agregar notas
+  // Habilidades del job (JSON string o array) para evaluación
+  jobHabilidades?: string | null;
 }
 
 export default function CandidateProfileModal({
@@ -183,7 +188,8 @@ export default function CandidateProfileModal({
   totalCount,
   canAddDocuments = false,
   onDocumentsUpdated,
-  userRole
+  userRole,
+  jobHabilidades
 }: CandidateProfileModalProps) {
   // Estados para agregar documento
   const [showAddDocModal, setShowAddDocModal] = useState(false);
@@ -206,6 +212,14 @@ export default function CandidateProfileModal({
   const canAddEvaluationNotes = ['recruiter', 'specialist'].includes(userRole || '');
   const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin', 'company'].includes(userRole || '');
 
+  // Skill Ratings (calificaciones de habilidades)
+  const [skillRatings, setSkillRatings] = useState<Record<string, { rating: number; comment: string }>>({});
+  const [savedSkillRatings, setSavedSkillRatings] = useState<Array<{ skillName: string; rating: number; comment: string | null; ratedBy: { nombre: string }; updatedAt: string }>>([]);
+  const [savingSkillRatings, setSavingSkillRatings] = useState(false);
+  const [skillRatingsLoaded, setSkillRatingsLoaded] = useState(false);
+  const canEditSkillRatings = ['specialist', 'admin'].includes(userRole || '');
+  const canViewSkillRatings = ['specialist', 'admin', 'company'].includes(userRole || '');
+
   // FEAT-5: Cargar notas de evaluación cuando se abre el modal
   useEffect(() => {
     if (isOpen && application?.id && canViewEvaluationNotes) {
@@ -219,6 +233,79 @@ export default function CandidateProfileModal({
       setIsNotePublic(false);
     }
   }, [isOpen, application?.id, canViewEvaluationNotes]);
+
+  // Parsear habilidades del job
+  const parsedHabilidades: string[] = (() => {
+    if (!jobHabilidades) return [];
+    try {
+      const parsed = JSON.parse(jobHabilidades);
+      return Array.isArray(parsed) ? parsed.filter((h: unknown) => typeof h === 'string' && h.trim()) : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  // Cargar skill ratings cuando se abre el modal
+  useEffect(() => {
+    if (isOpen && application?.id && canViewSkillRatings && parsedHabilidades.length > 0) {
+      fetchSkillRatings(application.id);
+    }
+    if (!isOpen) {
+      setSkillRatings({});
+      setSavedSkillRatings([]);
+      setSkillRatingsLoaded(false);
+    }
+  }, [isOpen, application?.id, canViewSkillRatings]);
+
+  const fetchSkillRatings = async (applicationId: number) => {
+    try {
+      const res = await fetch(`/api/evaluations/skill-ratings?applicationId=${applicationId}`);
+      const data = await res.json();
+      if (data.success) {
+        setSavedSkillRatings(data.data);
+        // Precargar ratings en el estado editable
+        const ratingsMap: Record<string, { rating: number; comment: string }> = {};
+        for (const r of data.data) {
+          ratingsMap[r.skillName] = { rating: r.rating, comment: r.comment || '' };
+        }
+        setSkillRatings(ratingsMap);
+        setSkillRatingsLoaded(true);
+      }
+    } catch (error) {
+      console.error('Error cargando skill ratings:', error);
+    }
+  };
+
+  const handleSaveSkillRatings = async () => {
+    if (!application?.id) return;
+    setSavingSkillRatings(true);
+    try {
+      const ratings = Object.entries(skillRatings)
+        .filter(([, v]) => v.rating > 0)
+        .map(([skillName, v]) => ({
+          skillName,
+          rating: v.rating,
+          comment: v.comment || null
+        }));
+
+      if (ratings.length === 0) return;
+
+      const res = await fetch('/api/evaluations/skill-ratings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId: application.id, ratings })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Recargar para obtener datos actualizados
+        await fetchSkillRatings(application.id);
+      }
+    } catch (error) {
+      console.error('Error guardando skill ratings:', error);
+    } finally {
+      setSavingSkillRatings(false);
+    }
+  };
 
   // FEAT-5: Función para cargar notas de evaluación
   const fetchEvaluationNotes = async (applicationId: number) => {
@@ -323,6 +410,7 @@ export default function CandidateProfileModal({
         source: application.candidateProfile?.source,
         adminNotas: application.candidateProfile?.notas,
         fotoUrl: application.candidateProfile?.fotoUrl, // FEAT-2: Foto de perfil
+        cartaPresentacion: application.candidateProfile?.cartaPresentacion,
         experiences: application.candidateProfile?.experiences || [],
         documents: application.candidateProfile?.documents || []
       }
@@ -354,6 +442,7 @@ export default function CandidateProfileModal({
         source: candidate!.source,
         adminNotas: candidate!.notas,
         fotoUrl: candidate!.fotoUrl, // FEAT-2: Foto de perfil
+        cartaPresentacion: candidate!.cartaPresentacion,
         experiences: candidate!.experiences || [],
         documents: candidate!.documents || []
       };
@@ -816,7 +905,20 @@ export default function CandidateProfileModal({
             )}
           </div>
 
-          {/* Cover Letter */}
+          {/* Carta de Presentación del candidato */}
+          {data.cartaPresentacion && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#2b5d62]" />
+                Carta de Presentación
+              </h3>
+              <div className="p-4 bg-[#e8f4f4] border border-[#2b5d62]/20 rounded-lg">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.cartaPresentacion}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Cover Letter (de la aplicación) */}
           {data.coverLetter && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -825,6 +927,112 @@ export default function CandidateProfileModal({
               </h3>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.coverLetter}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Evaluación de Habilidades */}
+          {canViewSkillRatings && parsedHabilidades.length > 0 && application?.id && (
+            <div className="mb-6 border border-amber-200 rounded-lg overflow-hidden">
+              <div className="bg-amber-50 px-4 py-3 border-b border-amber-200">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Star className="w-5 h-5 text-amber-500" />
+                  Evaluación de Habilidades
+                </h3>
+                {!canEditSkillRatings && (
+                  <p className="text-xs text-gray-500 mt-1">Calificaciones del especialista</p>
+                )}
+              </div>
+              <div className="p-4 space-y-3">
+                {parsedHabilidades.map((skill) => {
+                  const currentRating = skillRatings[skill]?.rating || 0;
+                  const currentComment = skillRatings[skill]?.comment || '';
+                  const savedRating = savedSkillRatings.find(r => r.skillName === skill);
+
+                  return (
+                    <div key={skill} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-800">{skill}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => {
+                                if (!canEditSkillRatings) return;
+                                setSkillRatings(prev => ({
+                                  ...prev,
+                                  [skill]: { ...prev[skill], rating: star, comment: prev[skill]?.comment || '' }
+                                }));
+                              }}
+                              disabled={!canEditSkillRatings}
+                              className={`text-xl transition-colors ${
+                                canEditSkillRatings ? 'cursor-pointer hover:scale-110' : 'cursor-default'
+                              } ${star <= currentRating ? 'text-amber-400' : 'text-gray-300'}`}
+                            >
+                              {star <= currentRating ? '★' : '☆'}
+                            </button>
+                          ))}
+                        </div>
+                        {canEditSkillRatings && (
+                          <input
+                            type="text"
+                            value={currentComment}
+                            onChange={(e) => {
+                              setSkillRatings(prev => ({
+                                ...prev,
+                                [skill]: { ...prev[skill], rating: prev[skill]?.rating || 0, comment: e.target.value }
+                              }));
+                            }}
+                            placeholder="Comentario..."
+                            className="w-36 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+                          />
+                        )}
+                        {!canEditSkillRatings && savedRating?.comment && (
+                          <span className="text-xs text-gray-500 italic max-w-[200px] truncate" title={savedRating.comment}>
+                            {savedRating.comment}
+                          </span>
+                        )}
+                      </div>
+                      {!canEditSkillRatings && savedRating && (
+                        <span className="text-xs text-gray-400">
+                          por {savedRating.ratedBy.nombre}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {canEditSkillRatings && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveSkillRatings}
+                      disabled={savingSkillRatings || Object.values(skillRatings).every(v => v.rating === 0)}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {savingSkillRatings ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          Guardar Calificaciones
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {!canEditSkillRatings && skillRatingsLoaded && savedSkillRatings.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-2">
+                    Aún no se han calificado las habilidades.
+                  </p>
+                )}
               </div>
             </div>
           )}

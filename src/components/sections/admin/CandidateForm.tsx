@@ -98,6 +98,7 @@ const CandidateForm = ({
   // Otros
   const [source, setSource] = useState('manual');
   const [notas, setNotas] = useState('');
+  const [cartaPresentacion, setCartaPresentacion] = useState('');
 
   // Experiencias
   const [experiences, setExperiences] = useState<Experience[]>([]);
@@ -189,6 +190,7 @@ const CandidateForm = ({
       setLinkedinUrl(candidateToEdit.linkedinUrl || '');
       setSource(candidateToEdit.source || 'manual');
       setNotas(candidateToEdit.notas || '');
+      setCartaPresentacion(candidateToEdit.cartaPresentacion || '');
       setFotoUrl(candidateToEdit.fotoUrl || ''); // FEAT-2: Foto de perfil
 
       if (candidateToEdit.experiences) {
@@ -236,6 +238,7 @@ const CandidateForm = ({
     setLinkedinUrl('');
     setSource('manual');
     setNotas('');
+    setCartaPresentacion('');
     setExperiences([]);
     setDocuments([]);
     setActiveTab('personal');
@@ -468,6 +471,7 @@ const CandidateForm = ({
         linkedinUrl: linkedinUrl || null,
         source,
         notas: notas || null,
+        cartaPresentacion: cartaPresentacion || null,
         experiences: experiences.filter(
           (exp) => exp.empresa && exp.puesto && exp.fechaInicio
         ),
@@ -1004,6 +1008,27 @@ const CandidateForm = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-1">
+                  Carta de Presentación
+                </label>
+                <textarea
+                  value={cartaPresentacion}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 1000) setCartaPresentacion(e.target.value);
+                  }}
+                  rows={4}
+                  placeholder="Breve introducción profesional del candidato..."
+                  className="w-full p-3 border rounded-lg resize-none"
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs text-gray-500">Visible para empresas que revisen el perfil.</p>
+                  <span className={`text-xs ${cartaPresentacion.length >= 1000 ? 'text-red-500' : 'text-gray-400'}`}>
+                    {cartaPresentacion.length}/1000
+                  </span>
+                </div>
               </div>
 
               <div>

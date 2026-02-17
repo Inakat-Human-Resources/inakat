@@ -36,6 +36,7 @@ interface Job {
   status: string;
   profile?: string;
   seniority?: string;
+  habilidades?: string | null;
   createdAt: string;
 }
 
@@ -640,6 +641,7 @@ export default function JobCandidatesPage() {
         currentIndex={candidateIndex}
         totalCount={filteredCandidates.length}
         userRole="company"
+        jobHabilidades={job?.habilidades}
       />
 
       {/* FEAT-6: Modal de Solicitud de Entrevista */}

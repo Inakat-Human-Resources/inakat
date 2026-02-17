@@ -33,6 +33,8 @@ interface InterviewRequestModalProps {
   candidateName: string;
   jobTitle: string;
   candidatePhoto?: string | null;
+  companyName?: string;
+  companyEmail?: string;
   onSuccess: () => void;
 }
 
@@ -62,7 +64,7 @@ function getNextBusinessDays(count: number): { date: string; label: string; dayN
   return days;
 }
 
-const TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'];
+const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
 export default function InterviewRequestModal({
   isOpen,
@@ -71,11 +73,16 @@ export default function InterviewRequestModal({
   candidateName,
   jobTitle,
   candidatePhoto,
+  companyName,
+  companyEmail,
   onSuccess
 }: InterviewRequestModalProps) {
   const [type, setType] = useState<'videocall' | 'presential'>('videocall');
   const [duration, setDuration] = useState(45);
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const initialParticipants = companyName && companyEmail
+    ? [{ nombre: companyName, email: companyEmail }]
+    : [];
+  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
   const [newParticipantName, setNewParticipantName] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [showAddParticipant, setShowAddParticipant] = useState(false);
@@ -154,7 +161,7 @@ export default function InterviewRequestModal({
   const handleClose = () => {
     setType('videocall');
     setDuration(45);
-    setParticipants([]);
+    setParticipants(initialParticipants);
     setSelectedSlots([]);
     setMessage('');
     setError('');
@@ -176,6 +183,7 @@ export default function InterviewRequestModal({
             <div>
               <h2 className="text-lg font-bold text-gray-900">Solicitar Entrevista</h2>
               <p className="text-sm text-gray-500">{candidateName}</p>
+              <p className="text-xs text-purple-600 mt-0.5">Se enviará al equipo de INAKAT, quien coordinará los horarios con el candidato.</p>
             </div>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 p-1">
@@ -250,7 +258,7 @@ export default function InterviewRequestModal({
           {/* Participantes */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Participantes adicionales (opcional)
+              Participantes
             </label>
             {participants.length > 0 && (
               <div className="space-y-2 mb-3">
@@ -316,7 +324,7 @@ export default function InterviewRequestModal({
                 className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-700 font-medium"
               >
                 <Plus className="w-4 h-4" />
-                Agregar entrevistador
+                Añadir Participante
               </button>
             )}
           </div>
@@ -422,7 +430,7 @@ export default function InterviewRequestModal({
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                Enviar solicitud
+                Enviar solicitud a INAKAT
               </>
             )}
           </button>

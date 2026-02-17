@@ -56,6 +56,7 @@ async function getAuthenticatedUser() {
           portafolioUrl: true,
           cvUrl: true,
           fotoUrl: true, // FEAT-2: Foto de perfil
+          cartaPresentacion: true,
           experiences: {
             orderBy: { fechaInicio: 'desc' }
           }
@@ -153,6 +154,7 @@ export async function GET() {
         portafolioUrl: user.candidate.portafolioUrl,
         cvUrl: user.candidate.cvUrl,
         fotoUrl: user.candidate.fotoUrl, // FEAT-2: Foto de perfil
+        cartaPresentacion: user.candidate.cartaPresentacion || null,
         experiences: user.candidate.experiences || [],
         educacion: educacionArray
       };
@@ -265,7 +267,8 @@ export async function PUT(request: Request) {
         portafolioUrl,
         cvUrl,
         educacion,
-        fotoUrl // FEAT-2: Foto de perfil
+        fotoUrl, // FEAT-2: Foto de perfil
+        cartaPresentacion
       } = candidateData;
 
       const updateCandidateData: any = {};
@@ -292,6 +295,9 @@ export async function PUT(request: Request) {
 
       // FEAT-2: Actualizar foto de perfil
       if (fotoUrl !== undefined) updateCandidateData.fotoUrl = fotoUrl;
+
+      // Carta de presentación
+      if (cartaPresentacion !== undefined) updateCandidateData.cartaPresentacion = cartaPresentacion;
 
       // Guardar educación como JSON string
       if (educacion !== undefined) {

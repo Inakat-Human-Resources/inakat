@@ -81,6 +81,7 @@ interface ProfileData {
     portafolioUrl?: string;
     cvUrl?: string;
     fotoUrl?: string; // FEAT-2: Foto de perfil
+    cartaPresentacion?: string;
     experiences?: Experience[];
     educacion?: Education[];
   };
@@ -123,6 +124,7 @@ export default function ProfilePage() {
   const [seniority, setSeniority] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [portafolioUrl, setPortafolioUrl] = useState('');
+  const [cartaPresentacion, setCartaPresentacion] = useState('');
 
   // Experiencias
   const [experiences, setExperiences] = useState<Experience[]>([]);
@@ -216,6 +218,7 @@ export default function ProfilePage() {
           setSeniority(c.seniority || '');
           setLinkedinUrl(c.linkedinUrl || '');
           setPortafolioUrl(c.portafolioUrl || '');
+          setCartaPresentacion(c.cartaPresentacion || '');
           setCvUrl(c.cvUrl || null);
           setFotoUrl(c.fotoUrl || null); // FEAT-2: Foto de perfil
           setExperiences(c.experiences || []);
@@ -279,6 +282,7 @@ export default function ProfilePage() {
           seniority,
           linkedinUrl,
           portafolioUrl,
+          cartaPresentacion: cartaPresentacion || null,
           educacion: educacion
         };
       }
@@ -1142,6 +1146,33 @@ export default function ProfilePage() {
                     placeholder="https://miportfolio.com"
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Carta de Presentación */}
+          {profile.candidate && (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Carta de Presentación
+              </h2>
+              <textarea
+                value={cartaPresentacion}
+                onChange={(e) => {
+                  if (e.target.value.length <= 1000) setCartaPresentacion(e.target.value);
+                }}
+                placeholder="Redacta una breve introducción que resuma quién eres profesionalmente, tu experiencia clave y el tipo de oportunidades que buscas."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange resize-none"
+                rows={5}
+              />
+              <div className="flex justify-between items-center mt-2">
+                <p className="text-xs text-gray-500">
+                  Esta carta será visible para las empresas que revisen tu perfil.
+                </p>
+                <span className={`text-xs ${cartaPresentacion.length >= 1000 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {cartaPresentacion.length}/1000
+                </span>
               </div>
             </div>
           )}

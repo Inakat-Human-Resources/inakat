@@ -60,7 +60,7 @@ export async function GET(
     // Verificar que la vacante existe
     const job = await prisma.job.findUnique({
       where: { id: jobId },
-      select: { id: true, title: true, company: true, status: true }
+      select: { id: true, title: true, company: true, status: true, habilidades: true }
     });
 
     if (!job) {
@@ -70,18 +70,84 @@ export async function GET(
       );
     }
 
-    // Obtener todas las aplicaciones de esta vacante
+    // Obtener JobAssignment para notas de reclutador/especialista
+    const jobAssignment = await prisma.jobAssignment.findFirst({
+      where: { jobId },
+      select: { recruiterNotes: true, specialistNotes: true }
+    });
+
+    // Obtener todas las aplicaciones de esta vacante con datos completos
     const applications = await prisma.application.findMany({
       where: { jobId },
       select: {
         id: true,
         candidateName: true,
         candidateEmail: true,
+        candidatePhone: true,
+        cvUrl: true,
+        coverLetter: true,
         status: true,
+        notes: true,
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        evaluationNotes: {
+          include: {
+            author: { select: { nombre: true, role: true } }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
       },
       orderBy: { updatedAt: 'desc' }
+    });
+
+    // Enriquecer con datos del perfil de candidato (Candidate por email)
+    const candidateEmails = applications.map(a => a.candidateEmail);
+    const candidates = await prisma.candidate.findMany({
+      where: { email: { in: candidateEmails } },
+      include: {
+        experiences: true,
+        documents: true
+      }
+    });
+    const candidateMap = new Map(candidates.map(c => [c.email, c]));
+
+    // Mapear applications con candidateProfile y notas de evaluación
+    const enrichedApplications = applications.map(app => {
+      const candidate = candidateMap.get(app.candidateEmail);
+      return {
+        ...app,
+        evaluationNotes: app.evaluationNotes.map(note => ({
+          ...note,
+          authorName: note.author?.nombre || 'Sistema',
+          authorRole: note.author?.role || note.authorRole
+        })),
+        candidateProfile: candidate ? {
+          id: candidate.id,
+          universidad: candidate.universidad,
+          carrera: candidate.carrera,
+          nivelEstudios: candidate.nivelEstudios,
+          educacion: candidate.educacion,
+          añosExperiencia: candidate.añosExperiencia,
+          profile: candidate.profile,
+          subcategory: candidate.subcategory,
+          seniority: candidate.seniority,
+          linkedinUrl: candidate.linkedinUrl,
+          portafolioUrl: candidate.portafolioUrl,
+          cvUrl: candidate.cvUrl,
+          telefono: candidate.telefono,
+          sexo: candidate.sexo,
+          fechaNacimiento: candidate.fechaNacimiento?.toISOString() || null,
+          ciudad: candidate.ciudad,
+          estado: candidate.estado,
+          ubicacionCercana: candidate.ubicacionCercana,
+          source: candidate.source,
+          notas: candidate.notas,
+          fotoUrl: candidate.fotoUrl,
+          cartaPresentacion: candidate.cartaPresentacion || null,
+          experiences: candidate.experiences,
+          documents: candidate.documents
+        } : null
+      };
     });
 
     // Contar por status
@@ -124,7 +190,8 @@ export async function GET(
           id: job.id,
           title: job.title,
           company: job.company,
-          status: job.status
+          status: job.status,
+          habilidades: job.habilidades
         },
         total: applications.length,
         stageTotals: {
@@ -133,7 +200,11 @@ export async function GET(
           company: companyTotal
         },
         stages,
-        applications
+        applications: enrichedApplications,
+        jobAssignment: jobAssignment ? {
+          recruiterNotes: jobAssignment.recruiterNotes,
+          specialistNotes: jobAssignment.specialistNotes
+        } : null
       }
     });
   } catch (error) {

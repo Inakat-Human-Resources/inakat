@@ -102,11 +102,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Cambiar status de la application a 'interviewed'
-    await prisma.application.update({
-      where: { id: parseInt(applicationId) },
-      data: { status: 'interviewed' }
-    });
+    // Ya NO cambiar status aquí — Admin decide cuándo mover a 'interviewed'
+    // La application permanece en su status actual hasta que Admin confirme/agende
 
     return NextResponse.json(
       {

@@ -86,6 +86,7 @@ interface JobData {
   seniority: string;
   description: string;
   requirements: string;
+  habilidades?: string | null;
   user: {
     nombre: string;
     companyRequest?: {
@@ -792,6 +793,7 @@ export default function SpecialistJobCandidates() {
         canAddDocuments={true}
         onDocumentsUpdated={fetchJobData}
         userRole="specialist"
+        jobHabilidades={assignment.job.habilidades}
       />
     </div>
   );

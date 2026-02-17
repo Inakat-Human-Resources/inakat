@@ -29,6 +29,7 @@ import {
   Loader2,
   ChevronRight
 } from 'lucide-react';
+import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 
 interface Job {
   id: number;
@@ -106,6 +107,10 @@ export default function AdminDashboardPage() {
   const [loadingPipeline, setLoadingPipeline] = useState(false);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
+
+  // Pipeline candidate profile modal
+  const [selectedPipelineCandidate, setSelectedPipelineCandidate] = useState<any>(null);
+  const [isPipelineCandidateModalOpen, setIsPipelineCandidateModalOpen] = useState(false);
 
   // Estado para ordenamiento de tabla
   const [sortField, setSortField] = useState<string>('createdAt');
@@ -848,6 +853,20 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {/* Modal ficha de candidato desde pipeline */}
+      {isPipelineCandidateModalOpen && selectedPipelineCandidate && (
+        <CandidateProfileModal
+          isOpen={isPipelineCandidateModalOpen}
+          onClose={() => setIsPipelineCandidateModalOpen(false)}
+          application={selectedPipelineCandidate}
+          candidate={selectedPipelineCandidate.candidateProfile}
+          recruiterNotes={pipelineData?.jobAssignment?.recruiterNotes || undefined}
+          showRecruiterNotes={!!pipelineData?.jobAssignment?.recruiterNotes}
+          userRole="admin"
+          jobHabilidades={pipelineData?.job?.habilidades}
+        />
+      )}
+
       {/* Modal Pipeline */}
       {pipelineJobId !== null && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1040,7 +1059,16 @@ export default function AdminDashboardPage() {
                                 <p className="text-sm font-medium text-gray-900">{app.candidateName}</p>
                                 <p className="text-xs text-gray-500">{app.candidateEmail}</p>
                               </div>
-                              <div className="text-right">
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => {
+                                    setSelectedPipelineCandidate(app);
+                                    setIsPipelineCandidateModalOpen(true);
+                                  }}
+                                  className="text-sm text-teal-600 hover:underline"
+                                >
+                                  Ver ficha →
+                                </button>
                                 <p className="text-xs text-gray-400">
                                   {new Date(app.updatedAt).toLocaleDateString('es-MX', {
                                     day: '2-digit',
