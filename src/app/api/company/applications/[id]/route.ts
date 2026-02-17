@@ -181,7 +181,7 @@ export async function PATCH(
     if (status === 'accepted' && closeJob === true) {
       await prisma.job.update({
         where: { id: application.job.id },
-        data: { status: 'closed' }
+        data: { status: 'closed', closedReason: 'success' }
       });
       jobClosed = true;
     }

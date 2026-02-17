@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, generateToken } from '@/lib/auth';
+import { normalizeUrl } from '@/lib/utils';
 import { z } from 'zod';
 import { applyRateLimit, REGISTER_RATE_LIMIT } from '@/lib/rate-limit';
 
@@ -111,9 +112,6 @@ function calcularAñosExperiencia(
 
   return Math.round(totalMonths / 12);
 }
-
-// Normalizar URLs: agregar https:// si falta
-const normalizeUrl = (url: string | undefined) => url && !url.startsWith('http') ? `https://${url}` : url;
 
 export async function POST(request: Request) {
   try {

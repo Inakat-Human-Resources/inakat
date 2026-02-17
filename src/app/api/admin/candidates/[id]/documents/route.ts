@@ -2,36 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
-
-// Roles permitidos para gestionar documentos de candidatos
-const ALLOWED_ROLES = ['admin', 'recruiter', 'specialist'];
-
-// Middleware para verificar que el usuario tiene permisos
-async function verifyAllowedUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
-
-  if (!token) {
-    return { error: 'No autenticado', status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { error: 'Token inválido', status: 401 };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId }
-  });
-
-  if (!user || !ALLOWED_ROLES.includes(user.role)) {
-    return { error: 'Acceso denegado - Solo administradores, reclutadores y especialistas', status: 403 };
-  }
-
-  return { user };
-}
+import { requireRole } from '@/lib/auth';
 
 // GET - Listar documentos de un candidato
 export async function GET(
@@ -39,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAllowedUser();
+    const auth = await requireRole(['admin', 'recruiter', 'specialist']);
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -93,7 +64,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAllowedUser();
+    const auth = await requireRole(['admin', 'recruiter', 'specialist']);
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -165,7 +136,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAllowedUser();
+    const auth = await requireRole(['admin', 'recruiter', 'specialist']);
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },

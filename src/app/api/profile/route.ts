@@ -2,80 +2,54 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { requireAuth } from '@/lib/auth';
+import { normalizeUrl } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
 
-// Normalizar URLs: agregar https:// si falta
-const normalizeUrl = (url: string | undefined) => url && !url.startsWith('http') ? `https://${url}` : url;
-
-// Obtener usuario autenticado
-async function getAuthenticatedUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
-
-  if (!token) {
-    return { error: 'No autenticado', status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { error: 'Token inválido', status: 401 };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
+// Select completo para obtener datos del perfil con relaciones
+const profileSelect = {
+  id: true,
+  email: true,
+  nombre: true,
+  role: true,
+  password: true,
+  credits: true,
+  createdAt: true,
+  candidate: {
     select: {
       id: true,
-      email: true,
       nombre: true,
-      role: true,
-      password: true,
-      credits: true,
-      createdAt: true,
-      candidate: {
-        select: {
-          id: true,
-          nombre: true,
-          apellidoPaterno: true,
-          apellidoMaterno: true,
-          telefono: true,
-          fechaNacimiento: true,
-          sexo: true,
-          ciudad: true,
-          estado: true,
-          ubicacionCercana: true,
-          universidad: true,
-          carrera: true,
-          nivelEstudios: true,
-          educacion: true,
-          añosExperiencia: true,
-          profile: true,
-          seniority: true,
-          linkedinUrl: true,
-          portafolioUrl: true,
-          cvUrl: true,
-          fotoUrl: true, // FEAT-2: Foto de perfil
-          cartaPresentacion: true,
-          experiences: {
-            orderBy: { fechaInicio: 'desc' }
-          }
-        }
-      },
-      companyRequest: {
-        select: {
-          nombreEmpresa: true
-        }
+      apellidoPaterno: true,
+      apellidoMaterno: true,
+      telefono: true,
+      fechaNacimiento: true,
+      sexo: true,
+      ciudad: true,
+      estado: true,
+      ubicacionCercana: true,
+      universidad: true,
+      carrera: true,
+      nivelEstudios: true,
+      educacion: true,
+      añosExperiencia: true,
+      profile: true,
+      seniority: true,
+      linkedinUrl: true,
+      portafolioUrl: true,
+      cvUrl: true,
+      fotoUrl: true,
+      cartaPresentacion: true,
+      experiences: {
+        orderBy: { fechaInicio: 'desc' as const }
       }
     }
-  });
-
-  if (!user) {
-    return { error: 'Usuario no encontrado', status: 404 };
+  },
+  companyRequest: {
+    select: {
+      nombreEmpresa: true
+    }
   }
-
-  return { user };
-}
+};
 
 /**
  * GET /api/profile
@@ -83,7 +57,7 @@ async function getAuthenticatedUser() {
  */
 export async function GET() {
   try {
-    const auth = await getAuthenticatedUser();
+    const auth = await requireAuth();
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -91,7 +65,17 @@ export async function GET() {
       );
     }
 
-    const { user } = auth;
+    const user = await prisma.user.findUnique({
+      where: { id: auth.user.id },
+      select: profileSelect
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Usuario no encontrado' },
+        { status: 404 }
+      );
+    }
 
     // Construir respuesta según el rol
     const profileData: any = {
@@ -180,7 +164,7 @@ export async function GET() {
  */
 export async function PUT(request: Request) {
   try {
-    const auth = await getAuthenticatedUser();
+    const auth = await requireAuth();
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -188,7 +172,17 @@ export async function PUT(request: Request) {
       );
     }
 
-    const { user } = auth;
+    const user = await prisma.user.findUnique({
+      where: { id: auth.user.id },
+      select: profileSelect
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Usuario no encontrado' },
+        { status: 404 }
+      );
+    }
     const body = await request.json();
 
     // Campos que el usuario puede actualizar

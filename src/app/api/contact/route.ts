@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { applyRateLimit, CONTACT_RATE_LIMIT } from '@/lib/rate-limit';
+import { sanitizeBody } from '@/lib/sanitize';
 
 export async function POST(request: Request) {
   try {
@@ -11,7 +12,8 @@ export async function POST(request: Request) {
     if (rateLimited) return rateLimited;
 
     const body = await request.json();
-    const { nombre, email, telefono, mensaje } = body;
+    const clean = sanitizeBody(body, ['mensaje']);
+    const { nombre, email, telefono, mensaje } = clean;
 
     // Validate required fields
     if (!nombre || !email || !mensaje) {

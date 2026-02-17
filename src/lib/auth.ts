@@ -238,3 +238,87 @@ export async function isAdmin(userId: number): Promise<boolean> {
     return false;
   }
 }
+
+// =============================================
+// CENTRALIZED ROLE VERIFICATION (API Routes)
+// =============================================
+
+export interface VerifyResult {
+  user: {
+    id: number;
+    email: string;
+    nombre: string;
+    apellidoPaterno: string | null;
+    apellidoMaterno: string | null;
+    role: string;
+    isActive: boolean;
+    credits: number;
+    specialty: string | null;
+  };
+}
+
+export interface VerifyError {
+  error: string;
+  status: number;
+}
+
+/**
+ * Verifica que el usuario está autenticado (cualquier rol).
+ * Lee la cookie auth-token, verifica JWT, y retorna el user de la DB.
+ */
+export async function requireAuth(): Promise<VerifyResult | VerifyError> {
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const token = cookieStore.get('auth-token')?.value;
+
+  if (!token) {
+    return { error: 'No autenticado', status: 401 };
+  }
+
+  const payload = verifyToken(token);
+  if (!payload?.userId) {
+    return { error: 'Token inválido', status: 401 };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: {
+      id: true,
+      email: true,
+      nombre: true,
+      apellidoPaterno: true,
+      apellidoMaterno: true,
+      role: true,
+      isActive: true,
+      credits: true,
+      specialty: true,
+    }
+  });
+
+  if (!user || !user.isActive) {
+    return { error: 'Usuario no encontrado o desactivado', status: 403 };
+  }
+
+  return { user };
+}
+
+/**
+ * Verifica que el usuario tiene uno de los roles permitidos.
+ */
+export async function requireRole(
+  roles: string | string[]
+): Promise<VerifyResult | VerifyError> {
+  const auth = await requireAuth();
+
+  if ('error' in auth) {
+    return auth;
+  }
+
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
+  if (!allowedRoles.includes(auth.user.role)) {
+    return { error: 'Acceso denegado - Permisos insuficientes', status: 403 };
+  }
+
+  return auth;
+}

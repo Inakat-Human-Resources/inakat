@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { calculateJobCreditCost } from '@/lib/pricing';
+import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 
 // Función para sanitizar vacantes confidenciales en vistas públicas
 function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
@@ -86,20 +87,27 @@ export async function GET(request: Request) {
       where.profile = profile;
     }
 
-    const jobs = await prisma.job.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: { select: { applications: true } },
-        user: {
-          select: {
-            companyRequest: {
-              select: { logoUrl: true }
+    const pagination = getPaginationParams(searchParams, 20);
+
+    const [jobs, total] = await Promise.all([
+      prisma.job.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take,
+        include: {
+          _count: { select: { applications: true } },
+          user: {
+            select: {
+              companyRequest: {
+                select: { logoUrl: true }
+              }
             }
           }
         }
-      }
-    });
+      }),
+      prisma.job.count({ where })
+    ]);
 
     // Transformar para incluir logoUrl directamente y sanitizar
     // SEGURIDAD: Excluir notasInternas de la respuesta pública (solo visible en vista de propietario)
@@ -112,10 +120,11 @@ export async function GET(request: Request) {
       return sanitizeConfidentialJob(jobData, isOwnerView);
     });
 
+    const response = buildPaginatedResponse(sanitizedJobs, total, pagination);
     return NextResponse.json({
       success: true,
-      data: sanitizedJobs,
-      count: sanitizedJobs.length
+      ...response,
+      count: sanitizedJobs.length  // backward compatibility
     });
   } catch {
     return NextResponse.json(

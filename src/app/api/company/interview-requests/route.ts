@@ -2,6 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendInterviewRequestToAdmin } from '@/lib/email';
+import { sanitizeMultilineText } from '@/lib/sanitize';
 
 /**
  * POST /api/company/interview-requests
@@ -98,12 +100,34 @@ export async function POST(request: NextRequest) {
         duration: parsedDuration,
         participants: participants ? JSON.stringify(participants) : null,
         availableSlots: JSON.stringify(availableSlots),
-        message: message || null,
+        message: message ? sanitizeMultilineText(message) : null,
       }
     });
 
     // Ya NO cambiar status aquí — Admin decide cuándo mover a 'interviewed'
     // La application permanece en su status actual hasta que Admin confirme/agende
+
+    // Notificar a admins sobre la solicitud de entrevista
+    const adminUsers = await prisma.user.findMany({
+      where: { role: 'admin', isActive: true },
+      select: { email: true }
+    });
+
+    const companyRequest = await prisma.companyRequest.findFirst({
+      where: { userId: parseInt(userId) },
+      select: { nombreEmpresa: true }
+    });
+
+    for (const admin of adminUsers) {
+      sendInterviewRequestToAdmin({
+        adminEmail: admin.email,
+        companyName: companyRequest?.nombreEmpresa || 'Empresa',
+        candidateName: application.candidateName,
+        jobTitle: application.job.title,
+        interviewType: type,
+        adminUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://inakat.com'}/admin/interviews`,
+      }).catch(err => console.error('[InterviewRequest] Error sending admin email:', err));
+    }
 
     return NextResponse.json(
       {

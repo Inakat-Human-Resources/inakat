@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sanitizeMultilineText } from '@/lib/sanitize';
 
 /**
  * GET /api/evaluations/notes?applicationId=123
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
         authorId: parseInt(userId),
         authorRole: userRole,
         applicationId: parseInt(applicationId),
-        content: content.trim(),
+        content: sanitizeMultilineText(content),
         documentUrl: documentUrl || null,
         documentName: documentName || null,
         isPublic: isPublic === true,

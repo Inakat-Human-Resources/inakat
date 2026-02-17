@@ -2,34 +2,9 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { requireRole } from '@/lib/auth';
+import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 import bcrypt from 'bcryptjs';
-
-// Middleware para verificar que es admin
-async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
-
-  if (!token) {
-    return { error: 'No autenticado', status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { error: 'Token inválido', status: 401 };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId }
-  });
-
-  if (!user || user.role !== 'admin') {
-    return { error: 'Acceso denegado - Solo administradores', status: 403 };
-  }
-
-  return { user };
-}
 
 /**
  * GET /api/admin/candidates
@@ -37,7 +12,7 @@ async function verifyAdmin() {
  */
 export async function GET(request: Request) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -134,19 +109,27 @@ export async function GET(request: Request) {
       }
     }
 
-    // Ejecutar query
-    const candidates = await prisma.candidate.findMany({
-      where,
-      include: {
-        experiences: {
-          orderBy: { fechaInicio: 'desc' }
+    // Paginación
+    const pagination = getPaginationParams(searchParams, 30);
+
+    // Ejecutar query con paginación
+    const [candidates, total] = await Promise.all([
+      prisma.candidate.findMany({
+        where,
+        include: {
+          experiences: {
+            orderBy: { fechaInicio: 'desc' }
+          },
+          documents: {
+            orderBy: { createdAt: 'desc' }
+          }
         },
-        documents: {
-          orderBy: { createdAt: 'desc' }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take
+      }),
+      prisma.candidate.count({ where })
+    ]);
 
     // Calcular edad para cada candidato
     const candidatesWithAge = candidates.map((candidate) => {
@@ -166,10 +149,11 @@ export async function GET(request: Request) {
       return { ...candidate, edad };
     });
 
+    const response = buildPaginatedResponse(candidatesWithAge, total, pagination);
     return NextResponse.json({
       success: true,
-      data: candidatesWithAge,
-      count: candidatesWithAge.length
+      ...response,
+      count: candidatesWithAge.length  // backward compatibility
     });
   } catch (error) {
     console.error('Error fetching candidates:', error);
@@ -186,7 +170,7 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },

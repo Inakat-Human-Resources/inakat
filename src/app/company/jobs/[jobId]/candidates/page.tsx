@@ -387,7 +387,7 @@ export default function JobCandidatesPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-orange-50 md:bg-transparent rounded-lg p-3 md:p-0 gap-1">
+            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-orange-50 md:bg-transparent rounded-lg p-3 md:p-0 gap-2 md:gap-1 md:text-right">
               <p className="text-sm text-gray-500">Total de candidatos</p>
               <p className="text-2xl md:text-3xl font-bold text-button-orange">{applications.length}</p>
             </div>

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+import { sendPaymentConfirmation } from '@/lib/email';
 import crypto from 'crypto';
 
 const client = new MercadoPagoConfig({
@@ -211,7 +212,21 @@ export async function POST(req: NextRequest) {
         newBalance: balanceBefore + purchase.amount
       });
 
-      // TODO: Enviar email de confirmación
+      // Enviar email de confirmación (async, no bloquea respuesta)
+      const companyRequest = await prisma.companyRequest.findFirst({
+        where: { userId: purchase.userId },
+        select: { nombreEmpresa: true, correoEmpresa: true }
+      });
+
+      if (companyRequest) {
+        sendPaymentConfirmation({
+          companyEmail: companyRequest.correoEmpresa,
+          nombreEmpresa: companyRequest.nombreEmpresa,
+          credits: purchase.amount,
+          totalPrice: purchase.totalPrice,
+          newBalance: balanceBefore + purchase.amount,
+        }).catch(err => console.error('[Webhook] Error sending payment email:', err));
+      }
 
     } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
       console.warn('[Webhook] Payment rejected/cancelled:', {

@@ -2,33 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
-
-// Verificar que es admin
-async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
-
-  if (!token) {
-    return { error: 'No autenticado', status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { error: 'Token inválido', status: 401 };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId }
-  });
-
-  if (!user || user.role !== 'admin') {
-    return { error: 'Acceso denegado - Solo administradores', status: 403 };
-  }
-
-  return { user };
-}
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/admin/credit-packages/[id]
@@ -39,7 +13,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -90,7 +64,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
@@ -193,7 +167,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },

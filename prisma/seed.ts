@@ -90,7 +90,7 @@ async function main() {
 
     console.log(`✅ Usuario admin creado: ${admin.email}`);
     console.log(`   📧 Email: ${adminData.email}`);
-    console.log(`   🔑 Password: ${adminData.password}\n`);
+    console.log(`   🔑 Password: ********** (ver variables de entorno)\n`);
   }
 
   // =============================================

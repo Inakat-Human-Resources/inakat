@@ -104,16 +104,19 @@ export async function POST(request: Request) {
 
     let userId: number | null = null;
     let userRole: string = 'user';
+    let userCredits: number = 0;
 
     if (token) {
       const payload = verifyToken(token);
       if (payload?.userId) {
         const user = await prisma.user.findUnique({
-          where: { id: payload.userId }
+          where: { id: payload.userId },
+          select: { id: true, role: true, credits: true }
         });
         if (user) {
           userId = user.id;
           userRole = user.role;
+          userCredits = user.credits;
         }
       }
     }
@@ -173,15 +176,10 @@ export async function POST(request: Request) {
 
     // MEJ-002: Usar transacción para deducción de créditos (evita race conditions)
     if (publishNow && userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (user) {
-        if (user.role === 'admin') {
+        if (userRole === 'admin') {
           // Admin puede publicar sin créditos
           initialStatus = 'active';
-        } else if (user.role === 'company') {
+        } else if (userRole === 'company') {
           // Empresa necesita créditos - usar transacción para atomicidad
           try {
             await prisma.$transaction(async (tx) => {
@@ -223,7 +221,6 @@ export async function POST(request: Request) {
             throw error;
           }
         }
-      }
     }
 
     // Calcular tiempo límite para editar (4 horas desde publicación)

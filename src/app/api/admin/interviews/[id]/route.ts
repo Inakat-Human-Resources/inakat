@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { verifyToken } from '@/lib/auth';
+import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-
-async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
-  if (!token) return { error: 'No autenticado', status: 401 };
-  const payload = verifyToken(token);
-  if (!payload?.userId) return { error: 'Token inválido', status: 401 };
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (!user || user.role !== 'admin') return { error: 'Acceso denegado', status: 403 };
-  return { user };
-}
 
 const interviewInclude = {
   application: {
@@ -50,7 +38,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -89,7 +77,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyAdmin();
+    const auth = await requireRole('admin');
     if ('error' in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

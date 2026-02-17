@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 import bcrypt from 'bcryptjs';
 
 // Roles que el admin puede crear
@@ -39,37 +40,45 @@ export async function GET(request: Request) {
       ];
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        apellidoPaterno: true,
-        apellidoMaterno: true,
-        role: true,
-        specialty: true,
-        isActive: true,
-        lastLogin: true,
-        createdAt: true,
-        // Contar asignaciones para reclutadores/especialistas
-        _count: {
-          select: {
-            recruiterAssignments: true,
-            specialistAssignments: true
-          }
-        }
-      },
-      orderBy: [
-        { role: 'asc' },
-        { createdAt: 'desc' }
-      ]
-    });
+    const pagination = getPaginationParams(searchParams, 30);
 
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          apellidoPaterno: true,
+          apellidoMaterno: true,
+          role: true,
+          specialty: true,
+          isActive: true,
+          lastLogin: true,
+          createdAt: true,
+          // Contar asignaciones para reclutadores/especialistas
+          _count: {
+            select: {
+              recruiterAssignments: true,
+              specialistAssignments: true
+            }
+          }
+        },
+        orderBy: [
+          { role: 'asc' },
+          { createdAt: 'desc' }
+        ],
+        skip: pagination.skip,
+        take: pagination.take
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    const response = buildPaginatedResponse(users, total, pagination);
     return NextResponse.json({
       success: true,
-      data: users,
-      count: users.length
+      ...response,
+      count: users.length  // backward compatibility
     });
 
   } catch (error) {
