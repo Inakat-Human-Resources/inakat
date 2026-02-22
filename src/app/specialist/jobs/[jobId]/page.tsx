@@ -456,7 +456,7 @@ export default function SpecialistJobCandidates() {
 
         {/* Pestañas */}
         <div className="bg-white rounded-lg shadow-sm border mb-6">
-          <div className="flex border-b overflow-x-auto">
+          <div className="flex border-b overflow-x-auto scrollbar-hide">
             {tabs.map((tab) => {
               const count = getTabCount(tab.id);
               const isActive = activeTab === tab.id;

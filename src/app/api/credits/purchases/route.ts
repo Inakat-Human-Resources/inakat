@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
       body: paymentBody
     });
 
-    console.log('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
+    console.info('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
 
     // Registrar compra en DB (siempre como pending, se actualiza en la transacción si es approved)
     const purchase = await prisma.creditPurchase.create({
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      console.log('[Payments] Discount code applied:', { code: validDiscountCode.code, discountAmount, commissionAmount });
+      console.info('[Payments] Discount code applied:', { code: validDiscountCode.code, discountAmount, commissionAmount });
     }
 
     // MEJ-003: Si el pago fue aprobado inmediatamente, agregar créditos usando transacción
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
         return { updatedUser, updatedPurchase };
       });
 
-      console.log('[Payments] Credits added:', { credits: pkg.credits, userId: payload.userId });
+      console.info('[Payments] Credits added:', { credits: pkg.credits, userId: payload.userId });
 
       return NextResponse.json({
         success: true,

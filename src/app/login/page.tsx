@@ -159,12 +159,10 @@ export default function LoginPage() {
             {/* Olvidaste tu contraseña */}
             <p className="text-right">
               <a
-                href="https://wa.me/528116312490?text=Hola%2C%20necesito%20recuperar%20mi%20contrase%C3%B1a%20de%20INAKAT"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/forgot-password"
                 className="text-white text-sm hover:underline"
               >
-                ¿Olvidaste tu contraseña? Contáctanos
+                ¿Olvidaste tu contraseña?
               </a>
             </p>
 

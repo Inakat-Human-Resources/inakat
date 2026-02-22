@@ -66,7 +66,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
       html: params.html,
       replyTo: params.replyTo,
     });
-    console.log('[Email] Sent:', { to: params.to, subject: params.subject });
+    console.info('[Email] Sent:', { to: params.to, subject: params.subject });
     return true;
   } catch (error) {
     console.error('[Email] Failed to send:', {

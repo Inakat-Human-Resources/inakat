@@ -112,7 +112,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      console.log('[Webhook] Signature validated successfully');
     } else {
       // En desarrollo sin secret configurado, solo warning
       if (process.env.NODE_ENV === 'production') {
@@ -125,7 +124,7 @@ export async function POST(req: NextRequest) {
       console.warn('[Webhook] WARNING: MERCADOPAGO_WEBHOOK_SECRET not configured - signature validation skipped');
     }
 
-    console.log('[Webhook] Received:', { type, dataId: data?.id, requestId });
+    console.info('[Webhook] Received:', { type, dataId: data?.id, requestId });
 
     // MercadoPago envía diferentes tipos de notificaciones
     if (type !== 'payment') {
@@ -136,7 +135,7 @@ export async function POST(req: NextRequest) {
     const paymentId = data.id;
     const paymentInfo = await payment.get({ id: paymentId });
 
-    console.log('[Webhook] Payment info:', {
+    console.info('[Webhook] Payment info:', {
       id: paymentInfo.id,
       status: paymentInfo.status,
       statusDetail: paymentInfo.status_detail
@@ -164,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     // Actualizar según el estado del pago
     if (paymentInfo.status === 'approved') {
-      console.log('[Webhook] Payment approved, adding credits:', {
+      console.info('[Webhook] Payment approved, adding credits:', {
         purchaseId: purchase.id,
         userId: purchase.userId,
         amount: purchase.amount
@@ -207,7 +206,7 @@ export async function POST(req: NextRequest) {
         });
       });
 
-      console.log('[Webhook] Credits added successfully:', {
+      console.info('[Webhook] Credits added successfully:', {
         userId: purchase.userId,
         credits: purchase.amount,
         newBalance: balanceBefore + purchase.amount

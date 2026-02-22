@@ -445,8 +445,8 @@ export default function AdminDashboardPage() {
 
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Solicitudes Pendientes</p>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600 truncate">Solicitudes Pendientes</p>
                 <p className="text-3xl font-bold text-gray-900">{stats.pendingRequests}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   <Link href="/admin/requests" className="text-orange-600 hover:underline">
@@ -535,12 +535,12 @@ export default function AdminDashboardPage() {
                 <tr>
                   <SortableHeader field="title" className="text-left">Vacante</SortableHeader>
                   <SortableHeader field="company" className="text-left">Empresa</SortableHeader>
-                  <SortableHeader field="profile" className="text-left">Especialidad</SortableHeader>
-                  <SortableHeader field="location" className="text-left">Ubicación</SortableHeader>
+                  <SortableHeader field="profile" className="text-left hidden md:table-cell">Especialidad</SortableHeader>
+                  <SortableHeader field="location" className="text-left hidden lg:table-cell">Ubicación</SortableHeader>
                   <SortableHeader field="applications">Candidatos</SortableHeader>
                   <SortableHeader field="status">Estado</SortableHeader>
-                  <SortableHeader field="createdAt">Fecha</SortableHeader>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Pipeline</th>
+                  <SortableHeader field="createdAt" className="hidden md:table-cell">Fecha</SortableHeader>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 hidden lg:table-cell">Pipeline</th>
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
                 </tr>
               </thead>
@@ -571,7 +571,7 @@ export default function AdminDashboardPage() {
                       <td className="px-4 py-3">
                         <p className="text-sm text-gray-900 font-medium">{job.company}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 hidden md:table-cell">
                         {job.profile ? (
                           <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded font-medium">
                             {job.profile}
@@ -580,7 +580,7 @@ export default function AdminDashboardPage() {
                           <span className="text-xs text-gray-400">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 hidden lg:table-cell">
                         <p className="text-sm text-gray-600">{job.location}</p>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -595,7 +595,7 @@ export default function AdminDashboardPage() {
                       <td className="px-4 py-3 text-center">
                         {getStatusBadge(job.status)}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center hidden md:table-cell">
                         <div className="text-sm">
                           <p className="text-gray-700 font-medium">
                             {new Date(job.createdAt).toLocaleDateString('es-MX', {
@@ -626,7 +626,7 @@ export default function AdminDashboardPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center hidden lg:table-cell">
                         <button
                           onClick={() => fetchPipeline(job.id)}
                           className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm"
