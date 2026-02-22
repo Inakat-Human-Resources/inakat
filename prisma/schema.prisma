@@ -57,9 +57,41 @@ model User {
   // Calificaciones de habilidades (para specialists)
   skillRatings            SkillRating[] @relation("SkillRater")
 
+  // Notificaciones in-app
+  notifications           Notification[]
+
   @@index([email])
   @@index([role])
   @@index([isActive])
+}
+
+// =============================================
+// NOTIFICACIONES IN-APP
+// =============================================
+model Notification {
+  id          Int       @id @default(autoincrement())
+
+  // Destinatario
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Contenido
+  type        String    // "new_request", "request_approved", "request_rejected", "assignment", "new_application", "credits_purchased", "sent_to_specialist", "sent_to_company", "application_status", "interview_requested"
+  title       String
+  message     String
+  link        String?   // URL interna para navegar al recurso
+  metadata    String?   @db.Text  // JSON extra (jobId, applicationId, etc.)
+
+  // Estado
+  read        Boolean   @default(false)
+  readAt      DateTime?
+
+  // Timestamp
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 // =============================================

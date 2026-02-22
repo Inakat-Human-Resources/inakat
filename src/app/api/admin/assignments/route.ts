@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * GET /api/admin/assignments
@@ -261,6 +262,28 @@ export async function POST(request: Request) {
         }
       }
     });
+
+    // Notificar al reclutador y especialista asignados (fire-and-forget)
+    if (recruiterId && assignment.job) {
+      createNotification({
+        userId: recruiterId,
+        type: 'assignment',
+        title: 'Nueva vacante asignada',
+        message: `Se te asignó la vacante "${assignment.job.title}".`,
+        link: '/recruiter/dashboard',
+        metadata: { jobId: jobId, jobTitle: assignment.job.title },
+      }).catch(() => {});
+    }
+    if (specialistId && assignment.job) {
+      createNotification({
+        userId: specialistId,
+        type: 'assignment',
+        title: 'Nueva vacante asignada',
+        message: `Se te asignó la vacante "${assignment.job.title}".`,
+        link: '/specialist/dashboard',
+        metadata: { jobId: jobId, jobTitle: assignment.job.title },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

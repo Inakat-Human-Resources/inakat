@@ -6,8 +6,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, User, ChevronDown, Menu, X } from 'lucide-react';
+import { LogOut, User, ChevronDown, Menu, X, Bell } from 'lucide-react';
 import logo from '@/assets/images/logo/logo.png';
+import NotificationBell from '@/components/shared/NotificationBell';
 
 interface UserData {
   userId: number;
@@ -222,6 +223,13 @@ const Navbar = () => {
               CONTACTO
             </Link>
           </li>
+
+          {/* Campanita de Notificaciones */}
+          {user && (
+            <li>
+              <NotificationBell />
+            </li>
+          )}
 
           {/* User Menu o Login Button */}
           <li>
@@ -656,6 +664,16 @@ const Navbar = () => {
                         </p>
                       )}
                     </div>
+
+                    {/* Notificaciones (mobile) */}
+                    <Link
+                      href="/notifications"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      <Bell className="w-4 h-4" />
+                      Notificaciones
+                    </Link>
 
                     {/* Dashboard Link - No mostrar para admin porque "Vacantes" ya va a /admin */}
                     {user.role !== 'admin' && (

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sendPaymentConfirmation } from '@/lib/email';
+import { createNotification } from '@/lib/notifications';
 import crypto from 'crypto';
 
 const client = new MercadoPagoConfig({
@@ -211,6 +212,16 @@ export async function POST(req: NextRequest) {
         credits: purchase.amount,
         newBalance: balanceBefore + purchase.amount
       });
+
+      // Notificar a la empresa (fire-and-forget)
+      createNotification({
+        userId: purchase.userId,
+        type: 'credits_purchased',
+        title: 'Créditos acreditados',
+        message: `Se acreditaron ${purchase.amount} créditos a tu cuenta. Nuevo saldo: ${balanceBefore + purchase.amount}.`,
+        link: '/company/dashboard',
+        metadata: { credits: purchase.amount, newBalance: balanceBefore + purchase.amount },
+      }).catch(() => {});
 
       // Enviar email de confirmación (async, no bloquea respuesta)
       const companyRequest = await prisma.companyRequest.findFirst({

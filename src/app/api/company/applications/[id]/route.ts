@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { notifyAllAdmins } from '@/lib/notifications';
 
 // Status válidos para que la empresa actualice
 const COMPANY_ALLOWED_STATUSES = [
@@ -185,6 +186,21 @@ export async function PATCH(
       });
       jobClosed = true;
     }
+
+    // Notificar a admins sobre la decisión de la empresa (fire-and-forget)
+    const statusLabels: Record<string, string> = {
+      company_interested: 'marcó como interesado',
+      interviewed: 'marcó como entrevistado',
+      rejected: 'descartó',
+      accepted: 'aceptó para contratación',
+    };
+    notifyAllAdmins({
+      type: 'application_status',
+      title: `Empresa actualizó candidato`,
+      message: `La empresa ${statusLabels[status] || 'actualizó'} a ${updatedApplication.candidateName} en "${updatedApplication.job.title}".`,
+      link: '/admin',
+      metadata: { applicationId, status, jobId: updatedApplication.job.id },
+    }).catch(() => {});
 
     // Mensaje de éxito según la acción
     const statusMessages: Record<string, string> = {

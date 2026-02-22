@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { applyRateLimit, APPLICATION_RATE_LIMIT } from '@/lib/rate-limit';
+import { notifyAllAdmins } from '@/lib/notifications';
 
 // GET - Listar aplicaciones (filtradas por job o por usuario admin)
 export async function GET(request: Request) {
@@ -154,6 +155,15 @@ export async function POST(request: Request) {
         }
       }
     });
+
+    // Notificar a admins (fire-and-forget)
+    notifyAllAdmins({
+      type: 'new_application',
+      title: 'Nueva aplicación recibida',
+      message: `${candidateName} aplicó a "${application.job.title}".`,
+      link: '/admin',
+      metadata: { applicationId: application.id, jobId: parseInt(jobId), candidateName },
+    }).catch(() => {});
 
     return NextResponse.json(
       {

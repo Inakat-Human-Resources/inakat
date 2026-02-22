@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/notifications';
 
 // POST - Asignar candidatos a una vacante
 // Crea Applications con status "injected_by_admin"
@@ -126,6 +127,22 @@ export async function POST(request: Request) {
     });
 
     const skippedCount = candidates.length - candidatesToAssign.length;
+
+    // Notificar al reclutador asignado, si existe (fire-and-forget)
+    const jobAssignment = await prisma.jobAssignment.findUnique({
+      where: { jobId: parseInt(jobId) },
+      select: { recruiterId: true },
+    });
+    if (jobAssignment?.recruiterId) {
+      createNotification({
+        userId: jobAssignment.recruiterId,
+        type: 'new_application',
+        title: 'Candidatos inyectados',
+        message: `Se asignaron ${candidatesToAssign.length} candidato(s) a "${job.title}".`,
+        link: '/recruiter/dashboard',
+        metadata: { jobId: parseInt(jobId), count: candidatesToAssign.length },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

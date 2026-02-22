@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/notifications';
 
 // PATCH - Update company request status
 export async function PATCH(
@@ -54,6 +55,26 @@ export async function PATCH(
         approvedAt: status === 'approved' ? new Date() : null
       }
     });
+
+    // Notificar a la empresa si tiene userId asociado (fire-and-forget)
+    if (updatedRequest.userId && (status === 'approved' || status === 'rejected')) {
+      const notifType = status === 'approved' ? 'request_approved' : 'request_rejected';
+      const notifTitle = status === 'approved'
+        ? '¡Tu empresa ha sido aprobada!'
+        : 'Tu solicitud fue rechazada';
+      const notifMessage = status === 'approved'
+        ? 'Ya puedes publicar vacantes y acceder a todas las funciones.'
+        : `Motivo: ${rejectionReason || 'No especificado'}. Contacta soporte para más información.`;
+
+      createNotification({
+        userId: updatedRequest.userId,
+        type: notifType,
+        title: notifTitle,
+        message: notifMessage,
+        link: status === 'approved' ? '/company/dashboard' : undefined,
+        metadata: { requestId: updatedRequest.id },
+      }).catch(() => {});
+    }
 
     // El User ya fue creado al momento del registro, solo actualizamos el status
     const statusMessages: Record<string, string> = {

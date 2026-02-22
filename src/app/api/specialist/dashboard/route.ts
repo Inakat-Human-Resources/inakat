@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * GET /api/specialist/dashboard
@@ -322,6 +323,18 @@ export async function PUT(request: Request) {
           where: { id: hasAssignment.id },
           data: { followUpDate }
         });
+
+        // Notificar a la empresa (fire-and-forget)
+        if (application.job.userId) {
+          createNotification({
+            userId: application.job.userId,
+            type: 'sent_to_company',
+            title: 'Candidato disponible para revisión',
+            message: `Un candidato fue enviado para tu revisión en "${application.job.title}".`,
+            link: '/company/dashboard',
+            metadata: { jobId: application.jobId, applicationId: updateApplicationId },
+          }).catch(() => {});
+        }
       }
 
       return NextResponse.json({
@@ -503,6 +516,20 @@ export async function PUT(request: Request) {
           } : {})
         }
       });
+
+    }
+
+    // Notificar a la empresa si se envió a empresa (fire-and-forget)
+    if (status === 'sent_to_company' && updated.job?.userId) {
+      const count = candidateIds?.length || 1;
+      createNotification({
+        userId: updated.job.userId,
+        type: 'sent_to_company',
+        title: 'Candidatos disponibles para revisión',
+        message: `${count} candidato(s) fueron enviados para tu revisión en "${updated.job.title}".`,
+        link: '/company/dashboard',
+        metadata: { jobId: updated.jobId, count },
+      }).catch(() => {});
     }
 
     return NextResponse.json({

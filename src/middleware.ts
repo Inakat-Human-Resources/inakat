@@ -272,6 +272,8 @@ export const config = {
     '/api/interview-requests/:path*',
     '/api/credits/:path*',
     '/api/vendor/:path*',
+    '/api/notifications',
+    '/api/notifications/:path*',
     '/admin/:path*',
     '/applications/:path*',
     '/company/:path*',
@@ -280,6 +282,7 @@ export const config = {
     '/recruiter/:path*',
     '/specialist/:path*',
     '/vendor/:path*',
+    '/notifications',
     '/profile'
   ],
   runtime: 'nodejs'

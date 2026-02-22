@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { createNotification } from '@/lib/notifications';
 
 /**
  * GET /api/recruiter/dashboard
@@ -370,6 +371,18 @@ export async function PUT(request: Request) {
             specialistStatus: 'pending'
           }
         });
+
+        // Notificar al especialista (fire-and-forget)
+        if (hasAssignment.specialistId) {
+          createNotification({
+            userId: hasAssignment.specialistId,
+            type: 'sent_to_specialist',
+            title: 'Candidato enviado para evaluación',
+            message: `Un candidato fue enviado para tu evaluación en "${application.job.title}".`,
+            link: '/specialist/dashboard',
+            metadata: { jobId: application.jobId, applicationId: updateApplicationId },
+          }).catch(() => {});
+        }
       }
 
       return NextResponse.json({

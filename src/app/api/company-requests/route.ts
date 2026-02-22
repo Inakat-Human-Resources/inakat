@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { notifyAllAdmins } from "@/lib/notifications";
 
 // GET all company requests (for admin panel)
 export async function GET(request: Request) {
@@ -124,6 +125,15 @@ export async function POST(request: Request) {
 
       return { companyRequest, user };
     });
+
+    // Notificar a admins (fire-and-forget)
+    notifyAllAdmins({
+      type: 'new_request',
+      title: 'Nueva solicitud de empresa',
+      message: `${nombreEmpresa} ha enviado una solicitud de registro.`,
+      link: '/admin/requests',
+      metadata: { requestId: result.companyRequest.id, nombreEmpresa },
+    }).catch(() => {});
 
     return NextResponse.json(
       {
