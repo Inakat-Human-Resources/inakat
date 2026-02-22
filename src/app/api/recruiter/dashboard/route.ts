@@ -106,6 +106,8 @@ export async function GET(request: Request) {
             ciudad: true,
             estado: true,
             ubicacionCercana: true,
+            latitude: true,
+            longitude: true,
             source: true,
             notas: true,
             educacion: true, // FEATURE: Educación múltiple

@@ -577,6 +577,8 @@ const CreateJobForm = () => {
           salary: salaryStr,
           salaryMin: salaryMinNum,
           salaryMax: salaryMaxNum,
+          latitude: markerPosition?.lat || null,
+          longitude: markerPosition?.lng || null,
           habilidades:
             formData.habilidades.length > 0 ? JSON.stringify(formData.habilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición

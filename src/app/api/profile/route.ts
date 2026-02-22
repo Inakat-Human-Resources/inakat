@@ -27,6 +27,8 @@ const profileSelect = {
       ciudad: true,
       estado: true,
       ubicacionCercana: true,
+      latitude: true,
+      longitude: true,
       universidad: true,
       carrera: true,
       nivelEstudios: true,
@@ -128,6 +130,8 @@ export async function GET() {
         ciudad: user.candidate.ciudad,
         estado: user.candidate.estado,
         ubicacionCercana: user.candidate.ubicacionCercana,
+        latitude: user.candidate.latitude,
+        longitude: user.candidate.longitude,
         universidad: user.candidate.universidad,
         carrera: user.candidate.carrera,
         nivelEstudios: user.candidate.nivelEstudios,
@@ -251,6 +255,8 @@ export async function PUT(request: Request) {
         ciudad,
         estado,
         ubicacionCercana,
+        latitude,
+        longitude,
         universidad,
         carrera,
         nivelEstudios,
@@ -277,7 +283,8 @@ export async function PUT(request: Request) {
       if (ciudad !== undefined) updateCandidateData.ciudad = ciudad;
       if (estado !== undefined) updateCandidateData.estado = estado;
       if (ubicacionCercana !== undefined) updateCandidateData.ubicacionCercana = ubicacionCercana;
-      // TODO: Agregar latitude/longitude al schema Candidate para habilitar cálculo de distancia (E-9)
+      if (latitude !== undefined) updateCandidateData.latitude = latitude;
+      if (longitude !== undefined) updateCandidateData.longitude = longitude;
       if (universidad !== undefined) updateCandidateData.universidad = universidad;
       if (carrera !== undefined) updateCandidateData.carrera = carrera;
       if (nivelEstudios !== undefined) updateCandidateData.nivelEstudios = nivelEstudios;

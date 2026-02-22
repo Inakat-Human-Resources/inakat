@@ -132,6 +132,8 @@ model Job {
   title           String
   company         String
   location        String
+  latitude        Float?   // Coordenada latitud (de Google Maps)
+  longitude       Float?   // Coordenada longitud (de Google Maps)
   salary          String
   salaryMin       Int?      // Salario mínimo en MXN
   salaryMax       Int?      // Salario máximo en MXN (diferencia máxima: $10,000)
@@ -372,6 +374,8 @@ model Candidate {
   ciudad           String?
   estado           String?
   ubicacionCercana String?  // Colonia, zona o referencia cercana
+  latitude         Float?   // Coordenada latitud (de Google Maps)
+  longitude        Float?   // Coordenada longitud (de Google Maps)
 
   // Educación (campos legacy para compatibilidad)
   universidad     String?

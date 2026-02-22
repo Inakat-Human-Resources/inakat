@@ -309,7 +309,6 @@ export default function ProfilePage() {
           ciudad: ciudad || null,
           estado: estado || null,
           ubicacionCercana: ubicacionCercana || null,
-          // TODO: latitude/longitude se envían pero requieren migración Prisma para persistir
           latitude: candidateLatitude,
           longitude: candidateLongitude,
           añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,

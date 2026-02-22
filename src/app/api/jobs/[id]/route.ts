@@ -269,8 +269,8 @@ export async function PATCH(
 
     // Whitelist de campos permitidos (previene inyección de userId, creditCost, editableUntil)
     const allowedPatchFields = ['status', 'closedReason', 'title', 'company', 'location',
-      'salary', 'salaryMin', 'salaryMax', 'jobType', 'workMode', 'description',
-      'requirements', 'companyRating', 'profile', 'subcategory', 'seniority',
+      'latitude', 'longitude', 'salary', 'salaryMin', 'salaryMax', 'jobType', 'workMode',
+      'description', 'requirements', 'companyRating', 'profile', 'subcategory', 'seniority',
       'educationLevel', 'habilidades', 'responsabilidades', 'resultadosEsperados',
       'valoresActitudes', 'informacionAdicional', 'notasInternas', 'isConfidential'];
     const updateData: Record<string, any> = {};
