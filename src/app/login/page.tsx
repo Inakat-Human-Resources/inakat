@@ -5,7 +5,6 @@
 import React, { useState, FormEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Facebook, Linkedin } from 'lucide-react';
 import ErrorToast from '@/components/shared/ErrorToast';
 import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
@@ -159,12 +158,14 @@ export default function LoginPage() {
 
             {/* Olvidaste tu contraseña */}
             <p className="text-right">
-              <Link
-                href="/forgot-password"
+              <a
+                href="https://wa.me/528116312490?text=Hola%2C%20necesito%20recuperar%20mi%20contrase%C3%B1a%20de%20INAKAT"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-white text-sm hover:underline"
               >
-                ¿Olvidaste tu contraseña?
-              </Link>
+                ¿Olvidaste tu contraseña? Contáctanos
+              </a>
             </p>
 
             {/* Botón Ingresar */}
@@ -178,53 +179,26 @@ export default function LoginPage() {
           </form>
 
           <div className="w-full max-w-xs space-y-4">
-            {/* Divider */}
-            <div className="flex items-center justify-center mt-4">
-              <hr className="w-1/4 border-white" />
-              <span className="text-white px-2 text-sm">Inicia sesión con</span>
-              <hr className="w-1/4 border-white" />
-            </div>
-
-            {/* Redes Sociales */}
-            <div className="flex justify-center gap-4 mt-4">
-              <button
-                type="button"
-                className="w-12 h-12 bg-custom-beige rounded-full flex items-center justify-center hover:bg-gray-200 transition"
-              >
-                <Facebook className="text-button-green text-2xl" />
-              </button>
-              <button
-                type="button"
-                className="w-12 h-12 bg-custom-beige rounded-full flex items-center justify-center hover:bg-gray-200 transition"
-              >
-                <Linkedin className="text-button-green text-2xl" />
-              </button>
-            </div>
-
-            {/* Registrarse - ACTUALIZADO con dos opciones */}
+            {/* Registrarse */}
             <div className="text-center mt-4 w-full space-y-3">
               <p className="text-white text-sm font-semibold">
                 ¿No tienes una cuenta?
               </p>
 
               {/* Registro Candidato */}
-              <Link href="/register" className="w-full flex justify-center">
-                <button
-                  type="button"
-                  className="w-full bg-button-green text-white font-bold py-3 rounded-full hover:bg-green-700 transition"
-                >
-                  REGISTRARSE COMO CANDIDATO →
-                </button>
+              <Link
+                href="/register"
+                className="block w-full bg-button-green text-white font-bold py-3 rounded-full hover:bg-green-700 transition text-center"
+              >
+                REGISTRARSE COMO CANDIDATO →
               </Link>
 
               {/* Registro Empresa - BUG-012 FIX: Ancla al formulario */}
-              <Link href="/companies#formulario-registro" className="w-full flex justify-center">
-                <button
-                  type="button"
-                  className="w-full bg-button-orange text-white font-bold py-3 rounded-full hover:bg-orange-700 transition"
-                >
-                  REGISTRAR EMPRESA →
-                </button>
+              <Link
+                href="/companies#formulario-registro"
+                className="block w-full bg-button-orange text-white font-bold py-3 rounded-full hover:bg-orange-700 transition text-center"
+              >
+                REGISTRAR EMPRESA →
               </Link>
             </div>
           </div>

@@ -1375,13 +1375,11 @@ export default function RegisterPage() {
           {/* Footer */}
           <div className="text-center mt-4 pt-4 border-t border-white/20">
             <p className="text-white text-sm">¿Ya tienes una cuenta?</p>
-            <Link href="/login">
-              <button
-                type="button"
-                className="w-full max-w-xs bg-button-orange text-white font-bold py-2 rounded-full mt-2 hover:bg-orange-700 transition"
-              >
-                INICIAR SESIÓN
-              </button>
+            <Link
+              href="/login"
+              className="block w-full max-w-xs bg-button-orange text-white font-bold py-2 rounded-full mt-2 hover:bg-orange-700 transition text-center"
+            >
+              INICIAR SESIÓN
             </Link>
           </div>
         </div>

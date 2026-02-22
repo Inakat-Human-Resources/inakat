@@ -58,6 +58,11 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 4rem;
+  }
+
   * {
     @apply border-border;
   }
@@ -67,15 +72,11 @@
     margin: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding-top: 5rem; /* Mobile: navbar compacto */
+    /* padding-top handled by layout.tsx pt-14 */
     overflow-x: hidden; /* Prevenir scroll horizontal */
   }
 
-  @media (min-width: 768px) {
-    body {
-      padding-top: 8em; /* Desktop: espacio completo para navbar */
-    }
-  }
+  /* Desktop navbar spacing handled by layout.tsx */
 
   code {
     font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',

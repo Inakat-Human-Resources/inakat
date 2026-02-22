@@ -29,16 +29,18 @@ function UnauthorizedContent() {
         </p>
 
         <div className="space-y-3">
-          <Link href="/login">
-            <button className="w-full bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 font-medium">
-              Iniciar Sesión
-            </button>
+          <Link
+            href="/login"
+            className="block w-full bg-button-orange text-white py-3 px-6 rounded-lg hover:bg-orange-700 font-medium text-center"
+          >
+            Iniciar Sesión
           </Link>
 
-          <Link href="/">
-            <button className="w-full bg-gray-200 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-300 font-medium">
-              Ir al inicio
-            </button>
+          <Link
+            href="/"
+            className="block w-full bg-gray-200 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-300 font-medium text-center"
+          >
+            Ir al inicio
           </Link>
         </div>
       </div>

@@ -35,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${outfit.variable} ${dmSans.variable}`}>
-      <body className="font-body antialiased">
+      <body className="font-body antialiased pt-14">
         <Navbar />
         {children}
       </body>
