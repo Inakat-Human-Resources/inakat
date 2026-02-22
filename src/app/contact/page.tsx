@@ -76,7 +76,7 @@ export default function ContactPage() {
   };
 
   return (
-    <>
+    <main className="min-h-screen">
       <section
         ref={ref as React.RefObject<HTMLDivElement>}
         className="bg-custom-beige py-16 md:py-24"
@@ -315,6 +315,6 @@ export default function ContactPage() {
       </section>
 
       <Footer />
-    </>
+    </main>
   );
 }
