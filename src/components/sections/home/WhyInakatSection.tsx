@@ -1,97 +1,99 @@
-"use client";
+// RUTA: src/components/sections/home/WhyInakatSection.tsx
+'use client';
 
-import React from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import semicircleImage from "@/assets/images/1-home/6.png";
+import { useInView } from '@/hooks/useInView';
+import { Brain, Microscope, Bot, Eye, BarChart3, MapPin } from 'lucide-react';
+
+const features = [
+  {
+    icon: Brain,
+    title: 'Psicólogos expertos',
+    description:
+      'Evalúan actitud, valores y fit cultural. Cada candidato es analizado por profesionales de psicología organizacional.',
+    iconColor: 'text-button-orange',
+  },
+  {
+    icon: Microscope,
+    title: 'Especialistas técnicos',
+    description:
+      'Validan que el candidato domina su disciplina. Líderes de industria evalúan las competencias reales.',
+    iconColor: 'text-soft-green',
+  },
+  {
+    icon: Bot,
+    title: 'IA responsable',
+    description:
+      'No decide. Señala. Usamos inteligencia artificial como apoyo estratégico. El criterio siempre es humano.',
+    iconColor: 'text-button-orange',
+  },
+  {
+    icon: Eye,
+    title: 'Transparencia total',
+    description:
+      'Ves cada paso del proceso en tiempo real. Sin sorpresas, sin cajas negras. Información clara desde el día uno.',
+    iconColor: 'text-soft-green',
+  },
+  {
+    icon: BarChart3,
+    title: 'Reportes detallados',
+    description:
+      'Cada candidato viene con evaluación completa: perfil psicológico, competencias técnicas y recomendaciones.',
+    iconColor: 'text-button-orange',
+  },
+  {
+    icon: MapPin,
+    title: 'Presencia nacional',
+    description:
+      'Conocemos el talento local de cada región de México. Conexiones estratégicas en las principales ciudades.',
+    iconColor: 'text-soft-green',
+  },
+];
 
 const WhyInakatSection = () => {
-  const router = useRouter();
+  const { ref, isInView } = useInView(0.1);
 
   return (
-    <section className="bg-soft-green text-white overflow-hidden">
-      <div className="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="relative w-full h-full min-h-[250px] md:min-h-[400px] hidden md:block">
-          <Image
-            src={semicircleImage}
-            alt="Por qué INAKAT"
-            className="absolute w-full h-full object-cover left-0 md:left-[-4em]"
-            fill
-          />
-        </div>
-        <div className="w-full flex flex-wrap justify-center md:justify-start gap-4 mt-6 mb-16 md:mt-0 pt-8 md:pt-16 px-4 md:px-0">
-          <h2 className="text-3xl font-bold mb-6 text-primary-blue">
-            ¿Por qué INAKAT?
-          </h2>
-          <p className="text-lg leading-relaxed mb-6">
-            En INAKAT, las personas son el centro de todo.
-            <br />
-            Cada perfil pasa por dos filtros fundamentales:
-            <ul className="list-disc pl-6">
-              <li>
-                Psicólogos expertos en reclutamiento, que evalúan actitud,
-                compromiso, valores y compatibilidad con tu cultura.
-              </li>
-              <li>
-                Especialistas líderes en cada disciplina —ingeniería,
-                tecnología, finanzas, educación, salud— que no solo validan que
-                el candidato puede hacer el trabajo, sino que lo hace de forma
-                destacada.
-              </li>
-            </ul>
-          </p>
-          <p className="text-lg leading-relaxed mb-6">
-            Complementamos este proceso con inteligencia artificial usada de
-            forma responsable.
-            <br />
-            No decide por nosotros, pero{" "}
-            <strong>nos brinda señales valiosas </strong>como:
-            <br />
-            &quot;fíjate en esto&quot;, &quot;esto destaca&quot;, &quot;esto
-            puede ser un riesgo&quot;.
-            <br />
-            <strong>
-              Nos ayuda a ver mejor, pero nunca a sustituir el criterio humano.
-            </strong>
-          </p>
-          <p className="text-lg leading-relaxed mb-6">
-            Todo esto ocurre en una plataforma que{" "}
-            <strong>
-              nace de la visión de psicólogos especializados en selección
-            </strong>
-            <br />y ha sido diseñada por{" "}
-            <strong>ingenieros y creativos pensando en ti:</strong>
-            <br />
-            para que tengas claridad, confianza y{" "}
-            <strong> transparencia total en cada paso del proceso.</strong>
-          </p>
-          <p className="text-lg leading-relaxed mb-6">
-            Además,{" "}
-            <strong>
-              contamos con presencia activa en diversas ciudades clave de
-              México,
-            </strong>
-            <br />
-            lo que nos permite conocer a fondo el talento local y conectar a
-            cada empresa con profesionales calificados,
-            <br />
-            <strong>
-              acorde a su región, su industria y su cultura organizacional.
-            </strong>
-          </p>
-          <p className="text-lg leading-relaxed mb-6">
-            Porque no se trata solo de filtrar perfiles.
-            <br />
-            <strong>
-              Se trata de encontrar a quienes realmente hacen la diferencia.
-            </strong>
-          </p>
-          <button
-            onClick={() => router.push("/about")}
-            className="mt-6 bg-lemon-green text-white py-2 px-6 rounded-full hover:bg-title-dark font-bold"
-          >
-            CONOCE NUESTRO PROCESO →
-          </button>
+    <section
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="bg-custom-beige py-16 md:py-24"
+    >
+      <div className="container mx-auto px-4">
+        {/* Section title */}
+        <h2
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-4`}
+        >
+          ¿Por qué las empresas eligen INAKAT?
+        </h2>
+        <p
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-text-black/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
+          style={{ transitionDelay: '100ms' }}
+        >
+          Una combinación única de expertise humano y tecnología para encontrar
+          al candidato ideal.
+        </p>
+
+        {/* Feature grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+          {features.map((feature, index) => {
+            const Icon = feature.icon;
+            return (
+              <div
+                key={index}
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-xl p-8 shadow-sm hover:shadow-md hover:border-b-4 hover:border-button-orange transition-all duration-300 group`}
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
+                <Icon
+                  className={`w-12 h-12 ${feature.iconColor} mb-4 group-hover:scale-110 transition-transform duration-300`}
+                />
+                <h3 className="font-display text-xl font-bold text-title-dark mb-3">
+                  {feature.title}
+                </h3>
+                <p className="text-text-black/70 text-base leading-relaxed">
+                  {feature.description}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

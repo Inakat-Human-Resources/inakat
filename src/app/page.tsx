@@ -1,20 +1,31 @@
-import HeroHomeSection from "@/components/sections/home/HeroHomeSection";
-import BusinessTalentSection from "@/components/sections/home/BusinessTalentSection";
-import SpecialtiesSection from "@/components/sections/home/SpecialtiesSection";
+// RUTA: src/app/page.tsx
+import HeroSection from "@/components/sections/home/HeroSection";
+import SocialProofBar from "@/components/sections/home/SocialProofBar";
+import HowItWorksSection from "@/components/sections/home/HowItWorksSection";
+import DualCTASection from "@/components/sections/home/DualCTASection";
 import WhyInakatSection from "@/components/sections/home/WhyInakatSection";
-import MapContactSection from "@/components/sections/home/MapContactSection";
-import NewsletterSection from "@/components/sections/home/NewsletterSection";
+import SpecialtiesSection from "@/components/sections/home/SpecialtiesSection";
+import StatsSection from "@/components/sections/home/StatsSection";
+import TestimonialsSection from "@/components/sections/home/TestimonialsSection";
+import CoverageMapSection from "@/components/sections/home/CoverageMapSection";
+import FAQSection from "@/components/sections/home/FAQSection";
+import CTAFinalSection from "@/components/sections/home/CTAFinalSection";
 import Footer from "@/components/commons/Footer";
 
 export default function Home() {
   return (
     <main className="min-h-screen">
-      <HeroHomeSection />
-      <BusinessTalentSection />
-      <SpecialtiesSection />
+      <HeroSection />
+      <SocialProofBar />
+      <HowItWorksSection />
+      <DualCTASection />
       <WhyInakatSection />
-      <MapContactSection />
-      <NewsletterSection />
+      <SpecialtiesSection />
+      <StatsSection />
+      <TestimonialsSection />
+      <CoverageMapSection />
+      <FAQSection />
+      <CTAFinalSection />
       <Footer />
     </main>
   );

@@ -1,71 +1,146 @@
-"use client";
+// RUTA: src/components/sections/home/SpecialtiesSection.tsx
+'use client';
 
-import React from "react";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import semicircleImage from "@/assets/images/1-home/5.png";
+import { useState } from 'react';
+import { useInView } from '@/hooks/useInView';
+
+const specialties = [
+  {
+    name: 'Psicología, Educación y Ciencias Humanas',
+    subs: [
+      'Psicología clínica y organizacional',
+      'Pedagogía',
+      'Trabajo social',
+      'Investigación educativa',
+    ],
+  },
+  {
+    name: 'Tecnologías de la Información',
+    subs: [
+      'Desarrollo de software',
+      'Ciberseguridad',
+      'Data Science',
+      'DevOps',
+      'Soporte TI',
+    ],
+  },
+  {
+    name: 'Ingeniería y Tecnología Avanzada',
+    subs: [
+      'Mecatrónica',
+      'Industrial',
+      'Civil',
+      'Electrónica',
+      'Manufactura',
+    ],
+  },
+  {
+    name: 'Negocios, Administración y Finanzas',
+    subs: [
+      'Contabilidad',
+      'Finanzas',
+      'Administración',
+      'Comercio exterior',
+    ],
+  },
+  {
+    name: 'Marketing, Comunicación y Diseño',
+    subs: [
+      'Marketing digital',
+      'Diseño gráfico y UX',
+      'Comunicación corporativa',
+      'Publicidad',
+    ],
+  },
+  {
+    name: 'Talento, Gestión y Operación de Oficinas',
+    subs: [
+      'Recursos Humanos',
+      'Administración de oficinas',
+      'Asistentes ejecutivos',
+      'Logística',
+    ],
+  },
+  {
+    name: 'Salud y Bienestar',
+    subs: [
+      'Medicina',
+      'Enfermería',
+      'Nutrición',
+      'Salud ocupacional',
+    ],
+  },
+];
 
 const SpecialtiesSection = () => {
-  const router = useRouter();
-
-  // List of specialties - Solo 7 categorías principales
-  const specialties = [
-    "Psicología, Educación y Ciencias Humanas",
-    "Tecnologías de la Información",
-    "Ingeniería y Tecnología Avanzada",
-    "Negocios, Administración y Finanzas",
-    "Marketing, Comunicación y Diseño",
-    "Talento, Gestión y Operación de Oficinas",
-    "Salud y Bienestar",
-  ];
+  const { ref, isInView } = useInView(0.15);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   return (
-    <section className="relative w-full bg-custom-beige py-16 overflow-hidden">
-      {/* Left semicircle image - solo desktop */}
-      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1/2 hidden md:block">
-        <Image
-          src={semicircleImage}
-          alt="Decoración derecha"
-          className="absolute left-[-6em] top-1/2 transform -translate-y-1/2 w-32 md:w-40 lg:w-48"
-          style={{ clipPath: "inset(0 0 0 50%)" }}
-        />
-      </div>
-      {/* Right image - solo desktop */}
-      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2 hidden md:block">
-        <Image
-          src={semicircleImage}
-          alt="Decoración izquierda"
-          className="absolute right-[-6em] top-1/2 transform -translate-y-1/2 w-32 md:w-40 lg:w-48"
-          style={{ clipPath: "inset(0 50% 0 0)" }}
-        />
-      </div>
+    <section
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="bg-title-dark py-16 md:py-24"
+    >
+      <div className="container mx-auto px-4">
+        {/* Section title */}
+        <h2
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-4`}
+        >
+          Especialistas en{' '}
+          <span className="text-button-green">7 áreas clave</span>
+        </h2>
+        <p
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-white/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
+          style={{ transitionDelay: '100ms' }}
+        >
+          Nuestros evaluadores son líderes en su campo. Selecciona una
+          especialidad para ver las subcategorías.
+        </p>
 
-      {/* Main content */}
-      <div className="container mx-auto px-8 md:px-16 flex flex-col md:flex-row items-center justify-between">
-        {/* Column 1: Title and button */}
-        <div className="md:w-1/3 text-center md:text-left">
-          <h2 className="text-3xl font-bold text-title-dark">
-            NUESTRAS ÁREAS DE ESPECIALIDAD
-          </h2>
-          <button
-            onClick={() => router.push("/about")}
-            className="mt-6 bg-button-orange text-white py-2 px-6 rounded-full hover:bg-orange-700"
-          >
-            DESCUBRE MÁS →
-          </button>
-        </div>
-
-        {/* Column 2: Specialties */}
-        <div className="md:w-2/3 flex flex-wrap justify-center md:justify-start gap-4 mt-6 md:mt-0">
+        {/* Pills grid */}
+        <div className="flex flex-wrap justify-center gap-4 max-w-4xl mx-auto">
           {specialties.map((specialty, index) => (
-            <span
+            <div
               key={index}
-              className="bg-button-green text-white py-2 px-4 rounded-full shadow-md text-lg"
+              className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
+              style={{ transitionDelay: `${index * 80}ms` }}
             >
-              #{specialty}
-            </span>
+              <button
+                onClick={() =>
+                  setExpandedIndex(expandedIndex === index ? null : index)
+                }
+                className={`px-6 py-3 rounded-full border-2 font-medium text-sm md:text-base transition-all duration-300 ${
+                  expandedIndex === index
+                    ? 'bg-button-green border-button-green text-white scale-105'
+                    : 'border-button-green/60 text-white hover:border-button-green hover:bg-button-green/10'
+                }`}
+              >
+                {specialty.name}
+              </button>
+            </div>
           ))}
         </div>
+
+        {/* Expanded subcategories */}
+        {expandedIndex !== null && (
+          <div className="mt-8 max-w-3xl mx-auto">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 md:p-8">
+              <h3 className="font-display text-lg font-semibold text-button-green mb-4">
+                {specialties[expandedIndex].name}
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {specialties[expandedIndex].subs.map((sub, i) => (
+                  <span
+                    key={i}
+                    className="px-4 py-2 bg-white/10 rounded-lg text-white/90 text-sm"
+                  >
+                    {sub}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

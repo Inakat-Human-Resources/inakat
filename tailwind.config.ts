@@ -16,6 +16,10 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        display: ['var(--font-outfit)', 'sans-serif'],
+        body: ['var(--font-dm-sans)', 'sans-serif'],
+      },
       colors: {
         // Custom brand colors
         "primary-dark-green": "#657F33",

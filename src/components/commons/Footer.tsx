@@ -1,189 +1,159 @@
+// RUTA: src/components/commons/Footer.tsx
 'use client';
 
 import React from 'react';
-import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import logoFooter from '@/assets/images/logo/logo-footer.png';
-import { Facebook, Linkedin, Instagram, MessageCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Instagram, MessageCircle } from 'lucide-react';
 
 const Footer = () => {
-  const pathname = usePathname();
-
-  const isHome = pathname === '/';
-  const isTalents = pathname === '/talents';
-  const isAbout = pathname === '/about';
-
-  const footerBg = isAbout
-    ? 'bg-title-dark'
-    : isHome || isTalents
-    ? 'bg-title-dark'
-    : 'bg-number-green';
-
-  const iconBg = isAbout
-    ? 'bg-button-green'
-    : isHome || isTalents
-    ? 'bg-custom-beige'
-    : 'bg-custom-beige';
-
-  const iconText = isAbout
-    ? ''
-    : isHome
-    ? 'text-button-green'
-    : 'text-button-green';
-
   return (
-    <footer className={cn(footerBg, 'text-white')}>
-      {/* Social Media Bar */}
-      <div className="relative">
-        <div className="absolute top-[-1.5rem] left-1/2 transform -translate-x-1/2 flex gap-4">
-          <div className="flex gap-4">
-            <a
-              href="https://wa.me/528116312490"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-button-green"
-            >
-              <div
-                className={cn(
-                  iconBg,
-                  'rounded-full p-3',
-                  iconText,
-                  'hover:bg-button-green hover:text-white transition'
-                )}
+    <footer className="bg-title-dark text-white">
+      {/* Main Footer Content */}
+      <div className="container mx-auto px-4 py-12 md:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-8">
+          {/* Column 1: Logo + Description */}
+          <div className="md:col-span-1">
+            <Image
+              src={logoFooter}
+              alt="INAKAT Logo"
+              className="w-28 mb-4"
+            />
+            <p className="text-white/60 text-sm leading-relaxed">
+              Talento evaluado por expertos reales. Psicólogos + especialistas
+              técnicos + IA responsable.
+            </p>
+          </div>
+
+          {/* Column 2: Navigation */}
+          <div>
+            <h4 className="text-button-green font-display font-bold text-sm uppercase tracking-wider mb-4">
+              Navegación
+            </h4>
+            <ul className="space-y-2">
+              <li>
+                <Link
+                  href="/"
+                  className="text-white/70 hover:text-white transition-colors text-sm"
+                >
+                  Inicio
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/about"
+                  className="text-white/70 hover:text-white transition-colors text-sm"
+                >
+                  Sobre Nosotros
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/companies"
+                  className="text-white/70 hover:text-white transition-colors text-sm"
+                >
+                  Empresas
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/talents"
+                  className="text-white/70 hover:text-white transition-colors text-sm"
+                >
+                  Candidatos
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contact"
+                  className="text-white/70 hover:text-white transition-colors text-sm"
+                >
+                  Contacto
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Column 3: Contact */}
+          <div>
+            <h4 className="text-button-green font-display font-bold text-sm uppercase tracking-wider mb-4">
+              Contacto
+            </h4>
+            <ul className="space-y-3 text-sm">
+              <li>
+                <p className="text-white/50 text-xs uppercase tracking-wider">
+                  Email
+                </p>
+                <a
+                  href="mailto:info@inakat.com"
+                  className="text-white/70 hover:text-white transition-colors"
+                >
+                  info@inakat.com
+                </a>
+              </li>
+              <li>
+                <p className="text-white/50 text-xs uppercase tracking-wider">
+                  Teléfono
+                </p>
+                <a
+                  href="tel:+528116312490"
+                  className="text-white/70 hover:text-white transition-colors"
+                >
+                  +52 811 631 2490
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Column 4: Social + Legal */}
+          <div>
+            <h4 className="text-button-green font-display font-bold text-sm uppercase tracking-wider mb-4">
+              Síguenos
+            </h4>
+            <div className="flex gap-3 mb-6">
+              <a
+                href="https://wa.me/528116312490"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
+                aria-label="WhatsApp"
               >
-                <MessageCircle className="text-xl" />
-              </div>
-            </a>
-            <a
-              href="#"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-button-green opacity-50 cursor-not-allowed"
-              title="Próximamente"
-            >
-              <div
-                className={cn(
-                  iconBg,
-                  'rounded-full p-3',
-                  iconText,
-                  'hover:bg-button-green hover:text-white transition'
-                )}
+                <MessageCircle className="w-5 h-5" />
+              </a>
+              <a
+                href="https://www.instagram.com/inakatmx/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
+                aria-label="Instagram"
               >
-                <Linkedin className="text-xl" />
-              </div>
-            </a>
-            <a
-              href="https://www.instagram.com/inakatmx/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-button-green"
-            >
-              <div
-                className={cn(
-                  iconBg,
-                  'rounded-full p-3',
-                  iconText,
-                  'hover:bg-button-green hover:text-white transition'
-                )}
+                <Instagram className="w-5 h-5" />
+              </a>
+            </div>
+
+            <div className="space-y-1 text-sm">
+              <Link
+                href="/terms"
+                className="block text-white/50 hover:text-white/70 transition-colors"
               >
-                <Instagram className="text-xl" />
-              </div>
-            </a>
-            <a
-              href="#"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-button-green opacity-50 cursor-not-allowed"
-              title="Próximamente"
-            >
-              <div
-                className={cn(
-                  iconBg,
-                  'rounded-full p-3',
-                  iconText,
-                  'hover:bg-button-green hover:text-white transition'
-                )}
+                Términos y Condiciones
+              </Link>
+              <Link
+                href="/privacy"
+                className="block text-white/50 hover:text-white/70 transition-colors"
               >
-                <Facebook className="text-xl" />
-              </div>
-            </a>
+                Políticas de Privacidad
+              </Link>
+            </div>
           </div>
         </div>
       </div>
 
-      <div>
-        <br />
-        <br />
-        {/* CONTACT Title Row */}
-        <div className="container mx-auto mb-6">
-          <h3 className="text-xl font-bold">CONTACTO</h3>
-        </div>
-
-        {/* Grid Content */}
-        <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 text-sm">
-          {/* Column 1: Offices */}
-          <div className="pr-4">
-            <div
-              className="border-white h-full pr-4"
-              style={{ borderRightWidth: '1px' }}
-            >
-              <p className="text-button-green font-bold mb-2">OFICINAS</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="mt-1">
-                    <span className="font-bold">GUADALAJARA</span>
-                    <br />
-                    Lorem Ipsum Dolor
-                    <br />
-                    Sit Amet
-                  </p>
-                  <p className="mt-4">
-                    <span className="font-bold">MONTERREY</span>
-                    <br />
-                    Lorem Ipsum Dolor
-                    <br />
-                    Sit Amet
-                  </p>
-                </div>
-                <div>
-                  <p className="mt-1">
-                    <span className="font-bold">CDMX</span>
-                    <br />
-                    Lorem Ipsum Dolor
-                    <br />
-                    Sit Amet
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* Column 2: Email / Phone */}
-          <div className="pr-4">
-            <div
-              className="border-white h-full pr-4"
-              style={{ borderRightWidth: '1px' }}
-            >
-              <p className="text-button-green font-bold">EMAIL</p>
-              <p className="mt-1">info@inakat.com</p>
-              <p className="text-button-green font-bold mt-4">TELÉFONO</p>
-              <p className="mt-1">+52 811 631 2490</p>
-            </div>
-          </div>
-          {/* Column 3: Info */}
-          <div className="px-4">
-            <p className="text-button-green font-bold">INFO</p>
-            <p className="mt-1">TÉRMINOS Y CONDICIONES</p>
-            <p className="mt-1">POLÍTICAS DE PRIVACIDAD</p>
-          </div>
-          {/* Column 4: Logo */}
-          <div className="flex justify-center md:justify-end items-start">
-            <Image src={logoFooter} alt="INAKAT Logo" className="w-24" />
-          </div>
-        </div>
-        {/* Copyright */}
-        <div className="text-center text-sm mt-6 pt-4">
-          <p>
+      {/* Copyright Bar */}
+      <div className="border-t border-white/10">
+        <div className="container mx-auto px-4 py-4">
+          <p className="text-center text-white/40 text-sm">
             © {new Date().getFullYear()} INAKAT. Todos los derechos reservados.
           </p>
         </div>

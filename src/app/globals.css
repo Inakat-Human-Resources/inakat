@@ -65,13 +65,10 @@
   body {
     @apply bg-custom-beige text-text-black;
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
-      'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
-      'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    padding-top: 5rem; /* Mobile: navbar más compacto */
-    overflow-x: hidden; /* CRÍTICO: Prevenir scroll horizontal */
+    padding-top: 5rem; /* Mobile: navbar compacto */
+    overflow-x: hidden; /* Prevenir scroll horizontal */
   }
 
   @media (min-width: 768px) {
@@ -90,4 +87,107 @@
   .input-field {
     text-indent: 5px;
   }
+}
+
+/* ============================================
+   LANDING PAGE ANIMATIONS
+   ============================================ */
+
+/* Scroll-triggered animations */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.animate-on-scroll.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Staggered children */
+.stagger-children > *:nth-child(1) { transition-delay: 0ms; }
+.stagger-children > *:nth-child(2) { transition-delay: 100ms; }
+.stagger-children > *:nth-child(3) { transition-delay: 200ms; }
+.stagger-children > *:nth-child(4) { transition-delay: 300ms; }
+.stagger-children > *:nth-child(5) { transition-delay: 400ms; }
+.stagger-children > *:nth-child(6) { transition-delay: 500ms; }
+
+/* Hero animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-headline {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.hero-sub {
+  animation: fadeInUp 0.8s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.hero-cta {
+  animation: fadeInUp 0.8s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+.hero-image {
+  animation: fadeInUp 1s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+/* Floating decoration */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-15px) rotate(3deg); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 6s ease-in-out 2s infinite;
+}
+
+/* Pulse for map dots */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.7; }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #2b5d62 0%, #9fbb2f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Line draw animation */
+@keyframes drawLine {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+.animate-draw-line {
+  animation: drawLine 1.5s ease-out forwards;
+}
+
+/* Scale pop */
+@keyframes scalePop {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Smooth section transitions */
+section {
+  position: relative;
+  overflow: hidden;
 }
