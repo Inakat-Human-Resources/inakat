@@ -140,20 +140,18 @@ export default function AdminDashboardPage() {
     setError(null);
 
     try {
-      // Fetch múltiples endpoints en paralelo
-      const [jobsRes, requestsRes, candidatesRes, applicationsRes] = await Promise.all([
-        fetch('/api/jobs'),
-        fetch('/api/company-requests'),
-        fetch('/api/admin/candidates'),
-        fetch('/api/applications')
+      // Fetch múltiples endpoints en paralelo (allSettled para resiliencia)
+      const results = await Promise.allSettled([
+        fetch('/api/jobs').then(r => r.json()),
+        fetch('/api/company-requests').then(r => r.json()),
+        fetch('/api/admin/candidates').then(r => r.json()),
+        fetch('/api/applications').then(r => r.json())
       ]);
 
-      const [jobsData, requestsData, candidatesData, applicationsData] = await Promise.all([
-        jobsRes.json(),
-        requestsRes.json(),
-        candidatesRes.json(),
-        applicationsRes.json()
-      ]);
+      const jobsData = results[0].status === 'fulfilled' ? results[0].value : { success: false };
+      const requestsData = results[1].status === 'fulfilled' ? results[1].value : { success: false };
+      const candidatesData = results[2].status === 'fulfilled' ? results[2].value : { success: false };
+      const applicationsData = results[3].status === 'fulfilled' ? results[3].value : { success: false };
 
       // Procesar vacantes
       if (jobsData.success) {

@@ -568,6 +568,7 @@ const FormRegisterForQuotationSection = () => {
                         name="departamento"
                         value={formData.departamento}
                         onChange={handleInputChange}
+                        autoComplete="organization-title"
                         placeholder="Departamento de la empresa (ej: Recursos Humanos)"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       />
@@ -852,7 +853,7 @@ const FormRegisterForQuotationSection = () => {
                           onPlaceChanged={onPlaceChanged}
                           options={{
                             componentRestrictions: { country: 'mx' },
-                            types: ['address']
+                            types: ['geocode', 'establishment']
                           }}
                         >
                           <input
