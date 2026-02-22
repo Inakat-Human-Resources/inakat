@@ -277,6 +277,7 @@ export async function PUT(request: Request) {
       if (ciudad !== undefined) updateCandidateData.ciudad = ciudad;
       if (estado !== undefined) updateCandidateData.estado = estado;
       if (ubicacionCercana !== undefined) updateCandidateData.ubicacionCercana = ubicacionCercana;
+      // TODO: Agregar latitude/longitude al schema Candidate para habilitar cálculo de distancia (E-9)
       if (universidad !== undefined) updateCandidateData.universidad = universidad;
       if (carrera !== undefined) updateCandidateData.carrera = carrera;
       if (nivelEstudios !== undefined) updateCandidateData.nivelEstudios = nivelEstudios;

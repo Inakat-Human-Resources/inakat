@@ -451,9 +451,9 @@ const SearchPositionsSection = () => {
 
         {/* Lista y Detalle */}
         {!isLoading && filteredJobs.length > 0 && (
-          <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex flex-col md:flex-row gap-6 md:h-[calc(100vh-220px)]">
             {/* Columna Izquierda: Lista */}
-            <div className="w-full md:w-1/2 space-y-4">
+            <div className="w-full md:w-1/2 space-y-4 md:overflow-y-auto md:pr-2">
               {filteredJobs.map((job) => (
                 <div
                   key={job.id}
@@ -508,9 +508,9 @@ const SearchPositionsSection = () => {
             </div>
 
             {/* Columna Derecha: Detalle */}
-            <div className="w-full md:w-1/2">
+            <div className="w-full md:w-1/2 md:overflow-y-auto md:pl-2">
               {selectedJob && (
-                <div className="bg-white p-6 rounded-lg shadow-lg sticky top-4 relative">
+                <div className="bg-white p-6 rounded-lg shadow-lg relative">
                   {/* Solo mostrar iconos de guardar/menú para candidatos */}
                   {user && user.role === 'candidate' && (
                     <div className="absolute top-4 right-4 flex gap-2">

@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   User,
@@ -26,7 +26,11 @@ import {
   GraduationCap
 } from 'lucide-react';
 
+import { useLoadScript, Autocomplete } from '@react-google-maps/api';
+
 const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+
+const MAPS_LIBRARIES: ('places')[] = ['places'];
 
 interface Experience {
   id: number;
@@ -113,6 +117,9 @@ export default function ProfilePage() {
   const [ciudad, setCiudad] = useState('');
   const [estado, setEstado] = useState('');
   const [ubicacionCercana, setUbicacionCercana] = useState('');
+  const [candidateLatitude, setCandidateLatitude] = useState<number | null>(null);
+  const [candidateLongitude, setCandidateLongitude] = useState<number | null>(null);
+  const [locationAutocomplete, setLocationAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   // FEAT-2: Foto de perfil
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -167,6 +174,29 @@ export default function ProfilePage() {
   const [savingDoc, setSavingDoc] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
 
+  // Google Maps para ubicación del candidato
+  const { isLoaded: isMapsLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries: MAPS_LIBRARIES,
+  });
+
+  const onLocationAutocompleteLoad = useCallback((auto: google.maps.places.Autocomplete) => {
+    setLocationAutocomplete(auto);
+  }, []);
+
+  const onLocationPlaceChanged = useCallback(() => {
+    if (locationAutocomplete) {
+      const place = locationAutocomplete.getPlace();
+      if (place.formatted_address) {
+        setUbicacionCercana(place.formatted_address);
+      }
+      if (place.geometry?.location) {
+        setCandidateLatitude(place.geometry.location.lat());
+        setCandidateLongitude(place.geometry.location.lng());
+      }
+    }
+  }, [locationAutocomplete]);
+
   useEffect(() => {
     fetchProfile();
     fetchDocuments();
@@ -213,6 +243,8 @@ export default function ProfilePage() {
           setCiudad(c.ciudad || '');
           setEstado(c.estado || '');
           setUbicacionCercana(c.ubicacionCercana || '');
+          setCandidateLatitude(c.latitude || null);
+          setCandidateLongitude(c.longitude || null);
           setAñosExperiencia(c.añosExperiencia ?? '');
           setProfileField(c.profile || '');
           setSeniority(c.seniority || '');
@@ -277,6 +309,9 @@ export default function ProfilePage() {
           ciudad: ciudad || null,
           estado: estado || null,
           ubicacionCercana: ubicacionCercana || null,
+          // TODO: latitude/longitude se envían pero requieren migración Prisma para persistir
+          latitude: candidateLatitude,
+          longitude: candidateLongitude,
           añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,
           profile: profileField,
           seniority,
@@ -978,13 +1013,32 @@ export default function ProfilePage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Ubicación cercana
                   </label>
-                  <input
-                    type="text"
-                    value={ubicacionCercana}
-                    onChange={(e) => setUbicacionCercana(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
-                    placeholder="Colonia, zona o referencia"
-                  />
+                  {isMapsLoaded ? (
+                    <Autocomplete
+                      onLoad={onLocationAutocompleteLoad}
+                      onPlaceChanged={onLocationPlaceChanged}
+                      options={{
+                        componentRestrictions: { country: 'mx' },
+                        types: ['geocode', 'establishment']
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={ubicacionCercana}
+                        onChange={(e) => setUbicacionCercana(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                        placeholder="Busca tu colonia, zona o referencia..."
+                      />
+                    </Autocomplete>
+                  ) : (
+                    <input
+                      type="text"
+                      value={ubicacionCercana}
+                      onChange={(e) => setUbicacionCercana(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
+                      placeholder="Colonia, zona o referencia"
+                    />
+                  )}
                   <p className="text-gray-400 text-xs mt-1">
                     Indica una ubicación cercana o de referencia (por ejemplo, tu colonia o zona). No es necesario que sea exacta. Esta información sólo se utiliza para ofrecerte oportunidades cercanas a ti.
                   </p>
