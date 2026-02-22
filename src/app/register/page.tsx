@@ -272,18 +272,35 @@ export default function RegisterPage() {
     const updated = [...documents];
 
     if (field === 'file' && value instanceof File) {
+      const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+      if (value.size > MAX_SIZE) {
+        alert(`El archivo "${value.name}" excede el tamaño máximo de 5MB (${(value.size / (1024 * 1024)).toFixed(1)}MB)`);
+        return;
+      }
+
       updated[index].uploading = true;
-      setDocuments(updated);
+      setDocuments([...updated]);
 
       try {
-        const url = await uploadFile(value);
+        const uploadPromise = uploadFile(value);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Tiempo de espera agotado. Intenta con un archivo más pequeño.')), 30000)
+        );
+
+        const url = await Promise.race([uploadPromise, timeoutPromise]);
         updated[index].file = value;
         updated[index].fileUrl = url;
         updated[index].uploading = false;
       } catch (error) {
         console.error('Error uploading document:', error);
         updated[index].uploading = false;
+        updated[index].file = null;
+        updated[index].fileUrl = '';
+        const errorMsg = error instanceof Error ? error.message : 'Error al subir archivo';
+        alert(`Error al subir "${value.name}": ${errorMsg}`);
       }
+
+      setDocuments([...updated]);
     } else {
       updated[index] = { ...updated[index], [field]: value };
     }
@@ -1261,16 +1278,22 @@ export default function RegisterPage() {
 
                             <div>
                               <label className="block text-white text-xs mb-1">Archivo *</label>
-                              <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/20 text-white rounded-lg cursor-pointer hover:bg-white/30">
+                              <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg ${
+                                doc.uploading
+                                  ? 'bg-teal-700/50 text-teal-200 cursor-wait'
+                                  : doc.fileUrl
+                                  ? 'bg-green-700/50 text-green-200 cursor-pointer hover:bg-green-700/60'
+                                  : 'bg-white/20 text-white cursor-pointer hover:bg-white/30'
+                              }`}>
                                 {doc.uploading ? (
                                   <>
-                                    <Loader2 className="animate-spin" size={18} />
-                                    Subiendo...
+                                    <div className="w-5 h-5 border-2 border-teal-200 border-t-transparent rounded-full animate-spin" />
+                                    Subiendo{doc.file?.name ? ` "${doc.file.name}"` : ''}...
                                   </>
                                 ) : doc.fileUrl ? (
                                   <>
                                     <Check size={18} className="text-green-400" />
-                                    {doc.file?.name || 'Archivo subido'}
+                                    <span className="truncate max-w-[200px]">{doc.file?.name || 'Archivo subido'}</span>
                                   </>
                                 ) : (
                                   <>

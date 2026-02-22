@@ -79,6 +79,7 @@ const ApplyJobModal = ({
   // Estados de carga
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [applicationSent, setApplicationSent] = useState(false);
 
   // Formulario manual (para usuarios no logueados que eligen aplicar sin cuenta)
   const [showManualForm, setShowManualForm] = useState(false);
@@ -101,6 +102,7 @@ const ApplyJobModal = ({
       setExistingApplication(null);
       setMissingFields([]);
       setError('');
+      setApplicationSent(false);
       setShowManualForm(false);
       setFormData({
         candidateName: '',
@@ -225,8 +227,11 @@ const ApplyJobModal = ({
       const data = await response.json();
 
       if (data.success) {
+        setApplicationSent(true);
         onSuccess();
-        onClose();
+        setTimeout(() => {
+          onClose();
+        }, 2500);
       } else {
         if (response.status === 409) {
           setError('Ya has aplicado a esta vacante anteriormente.');
@@ -295,8 +300,11 @@ const ApplyJobModal = ({
       const data = await response.json();
 
       if (data.success) {
+        setApplicationSent(true);
         onSuccess();
-        onClose();
+        setTimeout(() => {
+          onClose();
+        }, 2500);
       } else {
         if (response.status === 409) {
           setError('Ya has aplicado a esta vacante con este email.');
@@ -351,8 +359,28 @@ const ApplyJobModal = ({
 
         {/* Content */}
         <div className="p-6">
+          {/* Vista: Aplicación enviada exitosamente */}
+          {applicationSent && (
+            <div className="text-center py-8">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-10 h-10 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                ¡Aplicación Enviada!
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Tu postulación fue enviada exitosamente. El reclutador revisará tu perfil pronto.
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-800 text-sm font-medium">
+                  Puedes revisar el estado de tus aplicaciones en &quot;Mis Aplicaciones&quot;
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Vista: Cargando */}
-          {view === 'loading' && (
+          {!applicationSent && view === 'loading' && (
             <div className="text-center py-8">
               <Loader2 className="w-12 h-12 animate-spin text-button-orange mx-auto mb-4" />
               <p className="text-gray-600">Verificando tu perfil...</p>
@@ -360,7 +388,7 @@ const ApplyJobModal = ({
           )}
 
           {/* Vista: No logueado */}
-          {view === 'not_logged_in' && !showManualForm && (
+          {!applicationSent && view === 'not_logged_in' && !showManualForm && (
             <div className="text-center py-6">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <User className="w-8 h-8 text-gray-400" />
@@ -412,7 +440,7 @@ const ApplyJobModal = ({
           )}
 
           {/* Vista: Perfil incompleto */}
-          {view === 'profile_incomplete' && (
+          {!applicationSent && view === 'profile_incomplete' && (
             <div className="text-center py-6">
               <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-yellow-600" />
@@ -450,7 +478,7 @@ const ApplyJobModal = ({
           )}
 
           {/* Vista: Ya aplicó */}
-          {view === 'already_applied' && existingApplication && (
+          {!applicationSent && view === 'already_applied' && existingApplication && (
             <div className="text-center py-6">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Briefcase className="w-8 h-8 text-blue-600" />
@@ -487,7 +515,7 @@ const ApplyJobModal = ({
           )}
 
           {/* Vista: Confirmar postulación (perfil completo) */}
-          {view === 'confirm_apply' && profile?.candidate && (
+          {!applicationSent && view === 'confirm_apply' && profile?.candidate && (
             <div className="py-4">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -582,7 +610,7 @@ const ApplyJobModal = ({
           )}
 
           {/* Vista: Formulario manual */}
-          {view === 'manual_form' && (
+          {!applicationSent && view === 'manual_form' && (
             <form onSubmit={handleManualSubmit} className="py-2">
               {error && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">

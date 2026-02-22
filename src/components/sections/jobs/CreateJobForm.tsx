@@ -1618,18 +1618,25 @@ const CreateJobForm = () => {
                 .
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => setShowInsufficientCreditsModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  onClick={async () => {
+                    setShowInsufficientCreditsModal(false);
+                    await handleSubmit(
+                      new Event('submit') as unknown as React.FormEvent,
+                      false
+                    );
+                    router.push('/credits/purchase');
+                  }}
+                  className="w-full px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 font-semibold"
                 >
-                  Cancelar
+                  Guardar Borrador y Comprar Créditos
                 </button>
                 <button
-                  onClick={() => router.push('/credits/purchase')}
-                  className="flex-1 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 font-semibold"
+                  onClick={() => setShowInsufficientCreditsModal(false)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
                 >
-                  Comprar Créditos
+                  Cancelar
                 </button>
               </div>
             </div>
