@@ -1,94 +1,183 @@
-import React from "react";
-import Image, { StaticImageData } from "next/image";
-import step1 from "@/assets/images/2-about/17.png";
-import step2 from "@/assets/images/2-about/18.png";
-import step3 from "@/assets/images/2-about/19.png";
-import step4 from "@/assets/images/2-about/20.png";
-import step5 from "@/assets/images/2-about/24.png";
-import step6 from "@/assets/images/2-about/23.png";
-import step7 from "@/assets/images/2-about/21.png";
-import step8 from "@/assets/images/2-about/22.png";
-import step9 from "@/assets/images/2-about/25.png";
-import step10 from "@/assets/images/2-about/26.png";
+// RUTA: src/components/sections/aboutus/SelectionProcessSection.tsx
+'use client';
 
-interface Step {
-  number: number;
-  title: string;
-  image: StaticImageData;
-}
+import { useInView } from '@/hooks/useInView';
+import {
+  FileText,
+  Users,
+  Search,
+  ClipboardCheck,
+  ShieldCheck,
+  UserCheck,
+  Send,
+  Handshake,
+  CheckCircle,
+  HeartPulse,
+  TrendingUp,
+} from 'lucide-react';
 
-const steps: Step[] = [
+const mainSteps = [
   {
     number: 1,
-    title: "DEFINICIÓN DEL PERFIL DEL CANDIDATO - 1 día",
-    image: step1,
+    title: 'Definición del perfil',
+    duration: '1 día',
+    icon: FileText,
   },
   {
     number: 2,
-    title: "REUNIÓN INICIAL CON EL CLIENTE - 1 día (Opcional)",
-    image: step2,
+    title: 'Reunión inicial con el cliente',
+    duration: '1 día (Opcional)',
+    icon: Users,
   },
-  { number: 3, title: "BÚSQUEDA ACTIVA DE CANDIDATOS - 5 días", image: step3 },
-  { number: 4, title: "EVALUACIÓN DE CURRÍCULOS - 3 días", image: step4 },
+  {
+    number: 3,
+    title: 'Búsqueda activa de candidatos',
+    duration: '5 días',
+    icon: Search,
+  },
+  {
+    number: 4,
+    title: 'Evaluación de currículos',
+    duration: '3 días',
+    icon: ClipboardCheck,
+  },
   {
     number: 5,
-    title: "REFERENCIAS Y VERIFICACIÓN DE DOCUMENTOS - 4 días",
-    image: step5,
+    title: 'Referencias y verificación',
+    duration: '4 días',
+    icon: ShieldCheck,
   },
   {
     number: 6,
-    title: "ENTREVISTAS CON ESPECIALISTAS, PRUEBAS TÉCNICAS Y EVALUACIÓN - 4 días",
-    image: step6,
+    title: 'Entrevistas + pruebas técnicas + evaluación',
+    duration: '4 días',
+    icon: UserCheck,
   },
-  { number: 7, title: "PRESENTACIÓN DE CANDIDATOS - 1 día", image: step7 },
-  { number: 8, title: "ENTREVISTAS CON EL CLIENTE - 4 días", image: step8 },
-  { number: 9, title: "CIERRE DE ENTREVISTAS - 1 día", image: step9 },
-  { number: 10, title: "SEGUIMIENTO POST CONTRATACIÓN", image: step9 },
-  { number: 11, title: "EVALUACIÓN CONTINUA", image: step10 },
+  {
+    number: 7,
+    title: 'Presentación de candidatos',
+    duration: '1 día',
+    icon: Send,
+  },
+  {
+    number: 8,
+    title: 'Entrevistas con el cliente',
+    duration: '4 días',
+    icon: Handshake,
+  },
+  {
+    number: 9,
+    title: 'Cierre de entrevistas',
+    duration: '1 día',
+    icon: CheckCircle,
+  },
+];
+
+const postSteps = [
+  {
+    number: 10,
+    title: 'Seguimiento post contratación',
+    icon: HeartPulse,
+  },
+  {
+    number: 11,
+    title: 'Evaluación continua',
+    icon: TrendingUp,
+  },
 ];
 
 const SelectionProcessSection = () => {
+  const { ref, isInView } = useInView(0.1);
+
   return (
-    <section className="bg-custom-beige text-black py-20">
-      <div className="container mx-auto text-center">
+    <section
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="bg-title-dark py-16 md:py-24"
+    >
+      <div className="container mx-auto px-4">
         {/* Title */}
-        <h2 className="text-3xl font-bold mb-6">
-          NUESTRO PROCESO DE SELECCIÓN
+        <h2
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-14`}
+        >
+          Nuestro Proceso de Selección
         </h2>
 
-        {/* Grid Layout */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-          {steps.map((step, index) => (
-            <div
-              key={index}
-              className="bg-lemon-green p-4 rounded-lg shadow-lg flex flex-col items-center text-center relative"
-            >
-              {/* Step Number */}
-              <div className="absolute -top-4 bg-orange-500 text-white w-10 h-10 flex items-center justify-center rounded-full font-bold text-lg">
-                {step.number}
-              </div>
+        {/* Main 9 steps grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+          {mainSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <div
+                key={step.number}
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} flex items-start gap-4 bg-white/5 rounded-xl p-5 hover:bg-white/10 transition-colors`}
+                style={{ transitionDelay: `${index * 80}ms` }}
+              >
+                {/* Number circle */}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-button-orange flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">
+                    {step.number}
+                  </span>
+                </div>
 
-              {/* Step Title */}
-              <h3 className="text-sm font-bold mt-6 text-white">
-                {step.title}
-              </h3>
-
-              {/* Step Image with Circular Background */}
-              <div className="w-20 h-20 bg-custom-beige rounded-full flex items-center justify-center p-3 mt-4">
-                <Image
-                  src={step.image}
-                  alt={step.title}
-                  className="w-12 h-12"
-                />
+                {/* Content */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className="w-4 h-4 text-button-green" />
+                    <h3 className="font-display text-white font-semibold text-sm">
+                      {step.title}
+                    </h3>
+                  </div>
+                  <span className="inline-block px-2 py-0.5 bg-button-green/20 text-button-green text-xs rounded-full">
+                    {step.duration}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Closing Text with Larger Font Size */}
-        <p className="mt-8 font-bold text-2xl">
-          Delega el proceso de reclutamiento en expertos, <br />
-          liberando a tu equipo para centrarse en objetivos clave.
+        {/* Divider */}
+        <div className="max-w-5xl mx-auto my-10 flex items-center gap-4">
+          <div className="flex-1 h-px bg-white/20" />
+          <span className="text-white/40 text-sm font-medium uppercase tracking-wider">
+            Post contratación
+          </span>
+          <div className="flex-1 h-px bg-white/20" />
+        </div>
+
+        {/* Post-hire steps */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
+          {postSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <div
+                key={step.number}
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} flex items-center gap-4 bg-button-green/10 rounded-xl p-5 border border-button-green/20`}
+                style={{ transitionDelay: `${(index + 9) * 80}ms` }}
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-button-green flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">
+                    {step.number}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Icon className="w-4 h-4 text-button-green" />
+                  <h3 className="font-display text-white font-semibold text-sm">
+                    {step.title}
+                  </h3>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Closing text */}
+        <p
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-button-green font-semibold text-lg md:text-xl text-center mt-14 max-w-3xl mx-auto`}
+          style={{ transitionDelay: '900ms' }}
+        >
+          Delega el proceso de reclutamiento en expertos, liberando a tu equipo
+          para centrarse en objetivos clave.
         </p>
       </div>
     </section>

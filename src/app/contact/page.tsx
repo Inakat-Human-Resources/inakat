@@ -1,8 +1,10 @@
-"use client";
+// RUTA: src/app/contact/page.tsx
+'use client';
 
-import React, { useState, FormEvent } from "react";
-import SocialLinks from "@/components/commons/SocialLinks";
-import Footer from "@/components/commons/Footer";
+import React, { useState, FormEvent } from 'react';
+import { useInView } from '@/hooks/useInView';
+import { Mail, Phone, MessageCircle, Instagram } from 'lucide-react';
+import Footer from '@/components/commons/Footer';
 
 interface FormData {
   nombre: string;
@@ -12,18 +14,20 @@ interface FormData {
 }
 
 export default function ContactPage() {
+  const { ref, isInView } = useInView(0.1);
+
   const [formData, setFormData] = useState<FormData>({
-    nombre: "",
-    email: "",
-    telefono: "",
-    mensaje: "",
+    nombre: '',
+    email: '',
+    telefono: '',
+    mensaje: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
-    type: "success" | "error" | null;
+    type: 'success' | 'error' | null;
     message: string;
-  }>({ type: null, message: "" });
+  }>({ type: null, message: '' });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -35,13 +39,13 @@ export default function ContactPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitStatus({ type: null, message: "" });
+    setSubmitStatus({ type: null, message: '' });
 
     try {
-      const response = await fetch("/api/contact", {
-        method: "POST",
+      const response = await fetch('/api/contact', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
       });
@@ -50,28 +54,21 @@ export default function ContactPage() {
 
       if (response.ok) {
         setSubmitStatus({
-          type: "success",
+          type: 'success',
           message:
-            "¡Mensaje enviado exitosamente! Nos contactaremos contigo pronto.",
+            '¡Mensaje enviado exitosamente! Nos contactaremos contigo pronto.',
         });
-
-        // Reset form
-        setFormData({
-          nombre: "",
-          email: "",
-          telefono: "",
-          mensaje: "",
-        });
+        setFormData({ nombre: '', email: '', telefono: '', mensaje: '' });
       } else {
-        throw new Error(data.error || "Error al enviar el mensaje");
+        throw new Error(data.error || 'Error al enviar el mensaje');
       }
     } catch (error) {
       setSubmitStatus({
-        type: "error",
+        type: 'error',
         message:
           error instanceof Error
             ? error.message
-            : "Error al enviar el mensaje. Por favor, intenta de nuevo.",
+            : 'Error al enviar el mensaje. Por favor, intenta de nuevo.',
       });
     } finally {
       setIsSubmitting(false);
@@ -80,134 +77,239 @@ export default function ContactPage() {
 
   return (
     <>
-      <section className="bg-custom-beige py-20">
-        <div className="container mx-auto flex flex-col md:flex-row justify-center gap-8">
-          {/* Bloque Izquierdo: Información de Contacto */}
-          <div className="bg-title-dark text-white p-10 pl-9 pr-9 rounded-xl shadow-lg w-full md:w-1/2">
-            <h2 className="text-2xl font-bold">CONTACTO</h2>
-            <p className="mt-2">
-              Síguenos en todas nuestras redes y mantente al tanto de cualquier
-              información.
-            </p>
+      <section
+        ref={ref as React.RefObject<HTMLDivElement>}
+        className="bg-custom-beige py-16 md:py-24"
+      >
+        <div className="container mx-auto px-4">
+          {/* Section title */}
+          <h1
+            className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-4`}
+          >
+            Contáctanos
+          </h1>
+          <p
+            className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-text-black/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
+            style={{ transitionDelay: '100ms' }}
+          >
+            ¿Tienes preguntas sobre nuestros servicios? Escríbenos y te
+            responderemos lo antes posible.
+          </p>
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-bold text-button-green">
-                  OFICINAS
-                </h3>
-                <p className="mt-1">
-                  GUADALAJARA
-                  <br />
-                  Lorem Ipsum Dolor
-                  <br />
-                  Sit Amet
-                </p>
-                <p className="mt-4">
-                  MONTERREY
-                  <br />
-                  Lorem Ipsum Dolor
-                  <br />
-                  Sit Amet
-                </p>
-                <p className="mt-4">
-                  CDMX
-                  <br />
-                  Lorem Ipsum Dolor
-                  <br />
-                  Sit Amet
-                </p>
+          {/* Two-column layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {/* Left column: Contact info */}
+            <div
+              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-title-dark rounded-2xl p-8 md:p-10`}
+              style={{ transitionDelay: '150ms' }}
+            >
+              <h2 className="font-display text-2xl font-bold text-white mb-8">
+                Información de Contacto
+              </h2>
+
+              <div className="space-y-6">
+                {/* Email */}
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-5 h-5 text-button-green" />
+                  </div>
+                  <div>
+                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
+                      Email
+                    </p>
+                    <a
+                      href="mailto:info@inakat.com"
+                      className="text-white hover:text-button-green transition-colors"
+                    >
+                      info@inakat.com
+                    </a>
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-5 h-5 text-button-green" />
+                  </div>
+                  <div>
+                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
+                      Teléfono
+                    </p>
+                    <a
+                      href="tel:+528116312490"
+                      className="text-white hover:text-button-green transition-colors"
+                    >
+                      +52 811 631 2490
+                    </a>
+                  </div>
+                </div>
+
+                {/* WhatsApp */}
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="w-5 h-5 text-button-green" />
+                  </div>
+                  <div>
+                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
+                      WhatsApp
+                    </p>
+                    <a
+                      href="https://wa.me/528116312490"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white hover:text-button-green transition-colors"
+                    >
+                      Enviar mensaje
+                    </a>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-bold text-button-green">EMAIL</h3>
-                <p className="mt-1">info@inakat.com</p>
-
-                <h3 className="text-lg font-bold text-button-green mt-4">
-                  TELÉFONO
-                </h3>
-                <p className="mt-1">+52 00 00 00 00</p>
+              {/* Social icons */}
+              <div className="mt-10 pt-8 border-t border-white/10">
+                <p className="text-white/50 text-xs uppercase tracking-wider mb-4">
+                  Síguenos
+                </p>
+                <div className="flex gap-3">
+                  <a
+                    href="https://wa.me/528116312490"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
+                    aria-label="WhatsApp"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://www.instagram.com/inakatmx/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
+                    aria-label="Instagram"
+                  >
+                    <Instagram className="w-5 h-5" />
+                  </a>
+                </div>
               </div>
             </div>
 
-            <div className="mt-6">
-              <SocialLinks />
-            </div>
-          </div>
-
-          {/* Bloque Derecho: Formulario */}
-          <div className="bg-button-green text-white p-10 pl-9 pr-9 rounded-xl shadow-lg w-full md:w-1/2">
-            <h2 className="text-2xl font-bold">ESCRÍBENOS</h2>
-            <p className="mt-2">
-              Contáctanos para impulsar el futuro de tu empresa con talento
-              altamente calificado.
-            </p>
-
-            {submitStatus.type && (
-              <div
-                className={`mt-4 p-4 rounded-lg ${
-                  submitStatus.type === "success"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-red-100 text-red-800"
-                }`}
-              >
-                {submitStatus.message}
-              </div>
-            )}
-
-            {/* Formulario */}
-            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <input
-                type="text"
-                name="nombre"
-                value={formData.nombre}
-                onChange={handleChange}
-                placeholder="Nombre"
-                className="w-full p-3 pr-6 bg-white text-black border border-gray-300 rounded-full input-field"
-                required
-              />
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="E-mail"
-                className="w-full p-3 pr-6 bg-white text-black border border-gray-300 rounded-full input-field"
-                required
-              />
-              <input
-                type="tel"
-                name="telefono"
-                value={formData.telefono}
-                onChange={handleChange}
-                placeholder="Teléfono"
-                className="w-full p-3 pr-6 bg-white text-black border border-gray-300 rounded-full input-field"
-              />
-              <textarea
-                name="mensaje"
-                value={formData.mensaje}
-                onChange={handleChange}
-                placeholder="Escribe tu mensaje..."
-                className="w-full p-3 pr-6 bg-white text-black border border-gray-300 rounded-lg input-field"
-                rows={4}
-                required
-              />
-
-              <p className="text-sm mt-2">
-                *Al dar click en el botón, aceptas nuestros términos y
-                condiciones y política de privacidad.
+            {/* Right column: Form */}
+            <div
+              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-2xl p-8 md:p-10 shadow-sm`}
+              style={{ transitionDelay: '300ms' }}
+            >
+              <h2 className="font-display text-2xl font-bold text-title-dark mb-2">
+                Escríbenos
+              </h2>
+              <p className="text-text-black/60 text-sm mb-6">
+                Contáctanos para impulsar el futuro de tu empresa con talento
+                altamente calificado.
               </p>
 
-              {/* Botón Enviar */}
-              <div className="flex justify-center">
+              {/* Status message */}
+              {submitStatus.type && (
+                <div
+                  className={`mb-6 p-4 rounded-lg text-sm ${
+                    submitStatus.type === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}
+                >
+                  {submitStatus.message}
+                </div>
+              )}
+
+              {/* Form */}
+              <form className="space-y-5" onSubmit={handleSubmit}>
+                <div>
+                  <label
+                    htmlFor="nombre"
+                    className="block text-sm font-semibold text-title-dark mb-1.5"
+                  >
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    id="nombre"
+                    name="nombre"
+                    value={formData.nombre}
+                    onChange={handleChange}
+                    placeholder="Tu nombre completo"
+                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-semibold text-title-dark mb-1.5"
+                  >
+                    E-mail
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="tu@email.com"
+                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="telefono"
+                    className="block text-sm font-semibold text-title-dark mb-1.5"
+                  >
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    id="telefono"
+                    name="telefono"
+                    value={formData.telefono}
+                    onChange={handleChange}
+                    placeholder="+52 000 000 0000"
+                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="mensaje"
+                    className="block text-sm font-semibold text-title-dark mb-1.5"
+                  >
+                    Mensaje
+                  </label>
+                  <textarea
+                    id="mensaje"
+                    name="mensaje"
+                    value={formData.mensaje}
+                    onChange={handleChange}
+                    placeholder="Escribe tu mensaje..."
+                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
+                    rows={4}
+                    required
+                  />
+                </div>
+
+                <p className="text-xs text-text-black/50">
+                  *Al dar click en el botón, aceptas nuestros términos y
+                  condiciones y política de privacidad.
+                </p>
+
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-button-dark-green text-white font-bold py-3 px-6 rounded-full hover:bg-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-button-orange text-white font-semibold py-4 rounded-full hover:scale-105 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  {isSubmitting ? "ENVIANDO..." : "ENVIAR →"}
+                  {isSubmitting ? 'Enviando...' : 'Enviar Mensaje'}
                 </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       </section>

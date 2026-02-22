@@ -1,14 +1,16 @@
-import React from "react";
-import Image, { StaticImageData } from "next/image";
-import expert1 from "@/assets/images/2-about/9.png";
-import expert2 from "@/assets/images/2-about/10.png";
-import expert3 from "@/assets/images/2-about/11.png";
-import expert4 from "@/assets/images/2-about/12.png";
-import expert5 from "@/assets/images/2-about/13.png";
-import expert6 from "@/assets/images/2-about/14.png";
-import expert7 from "@/assets/images/2-about/15.png";
-import expert8 from "@/assets/images/2-about/16.png";
-import fondo from "@/assets/images/2-about/fondo.png";
+// RUTA: src/components/sections/aboutus/ExpertsSection.tsx
+'use client';
+
+import Image, { StaticImageData } from 'next/image';
+import { useInView } from '@/hooks/useInView';
+import expert1 from '@/assets/images/2-about/9.png';
+import expert2 from '@/assets/images/2-about/10.png';
+import expert3 from '@/assets/images/2-about/11.png';
+import expert4 from '@/assets/images/2-about/12.png';
+import expert5 from '@/assets/images/2-about/13.png';
+import expert6 from '@/assets/images/2-about/14.png';
+import expert7 from '@/assets/images/2-about/15.png';
+import expert8 from '@/assets/images/2-about/16.png';
 
 interface Expert {
   name: string;
@@ -17,55 +19,59 @@ interface Expert {
 }
 
 const experts: Expert[] = [
-  { name: "DENISSE TAMEZ", role: "Diseñadora Industrial", image: expert1 },
-  { name: "JAVIER MARTÍNEZ", role: "Marketing", image: expert2 },
-  { name: "SOFÍA GUTIÉRREZ", role: "Productora Audiovisual", image: expert3 },
-  { name: "DIEGO TORRES", role: "Programador", image: expert4 },
-  { name: "LAURA PÉREZ", role: "Diseñadora Web", image: expert5 },
-  { name: "MARCOS RODRÍGUEZ", role: "Psicólogo Clínico", image: expert6 },
-  { name: "MARTHA LÓPEZ", role: "Project Manager", image: expert7 },
-  { name: "DAVID BISBAL", role: "Recursos Humanos", image: expert8 },
+  { name: 'Denisse Tamez', role: 'Diseñadora Industrial', image: expert1 },
+  { name: 'Javier Martínez', role: 'Marketing', image: expert2 },
+  { name: 'Sofía Gutiérrez', role: 'Productora Audiovisual', image: expert3 },
+  { name: 'Diego Torres', role: 'Programador', image: expert4 },
+  { name: 'Laura Pérez', role: 'Diseñadora Web', image: expert5 },
+  { name: 'Marcos Rodríguez', role: 'Psicólogo Clínico', image: expert6 },
+  { name: 'Martha López', role: 'Project Manager', image: expert7 },
+  { name: 'David Bisbal', role: 'Recursos Humanos', image: expert8 },
 ];
 
 const ExpertsSection = () => {
+  const { ref, isInView } = useInView(0.1);
+
   return (
     <section
-      className="bg-soft-green text-black py-20 relative"
-      style={{
-        backgroundImage: `url(${fondo.src})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="bg-custom-beige py-16 md:py-24"
     >
-      <div className="container mx-auto grid grid-cols-1 md:grid-cols-6 gap-8 items-stretch">
-        {/* Left Section: Title and Description */}
-        <div className="md:col-span-2 bg-button-orange p-6 rounded-lg text-white flex flex-col justify-start h-full">
-          <h2 className="text-3xl font-bold mb-4">CONOCE A LOS EXPERTOS</h2>
-          <p className="text-lg text-justify">
-            Nuestro equipo de profesionales de reclutamiento está dedicado a
-            comprender las necesidades específicas de nuestros clientes y a
-            identificar candidatos que no solo cumplan con los requisitos
-            técnicos, sino que también encajen en la cultura y los valores de
-            la empresa.
-          </p>
-          <p className="text-lg mt-4 text-justify">
-            Valoramos la excelencia, la ética de trabajo y la pasión por la
-            industria, y nos esforzamos por garantizar que cada contratación sea
-            una inversión valiosa.
-          </p>
-        </div>
+      <div className="container mx-auto px-4">
+        {/* Section title */}
+        <h2
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-4`}
+        >
+          Conoce a los Expertos
+        </h2>
+        <p
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-text-black/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
+          style={{ transitionDelay: '100ms' }}
+        >
+          Profesionales dedicados a encontrar el talento que tu empresa
+          necesita.
+        </p>
 
-        {/* Right Section: Grid of Experts */}
-        <div className="md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-6">
+        {/* Experts grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 max-w-5xl mx-auto">
           {experts.map((expert, index) => (
-            <div key={index} className="p-2 flex flex-col items-start">
-              <Image
-                src={expert.image}
-                alt={expert.name}
-                className="w-30 h-30 rounded-lg shadow-lg mb-2 bg-custom-beige"
-              />
-              <h3 className="text-lg text-white font-bold">{expert.name}</h3>
-              <p className="text-sm text-lemon-green">{expert.role}</p>
+            <div
+              key={index}
+              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow text-center`}
+              style={{ transitionDelay: `${index * 80}ms` }}
+            >
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
+                <Image
+                  src={expert.image}
+                  alt={expert.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <h3 className="font-display font-bold text-title-dark text-sm md:text-base">
+                {expert.name}
+              </h3>
+              <p className="text-button-green text-sm mt-1">{expert.role}</p>
             </div>
           ))}
         </div>

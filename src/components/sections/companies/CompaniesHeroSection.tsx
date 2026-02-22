@@ -1,18 +1,18 @@
-// RUTA: src/components/sections/talents/HeroTalentSection.tsx
+// RUTA: src/components/sections/companies/CompaniesHeroSection.tsx
 'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
-import talentsImage from '@/assets/images/4-talent/1.png';
+import heroImage from '@/assets/images/3-companies/1.png';
 import { CheckCircle } from 'lucide-react';
 
 const bullets = [
-  'Evaluación que resalta tu talento',
-  'Empresas verificadas en todo México',
-  'Proceso transparente en cada paso',
+  'Evaluación psicológica por expertos',
+  'Validación técnica por especialistas',
+  'Candidatos evaluados en 2-4 semanas',
 ];
 
-const HeroTalentSection = () => {
+const CompaniesHeroSection = () => {
   return (
     <section className="bg-custom-beige py-12 md:py-20 lg:py-24">
       <div className="container mx-auto px-4">
@@ -20,13 +20,13 @@ const HeroTalentSection = () => {
           {/* Text Column */}
           <div className="order-1">
             <h1 className="hero-headline font-display text-4xl sm:text-5xl md:text-6xl font-bold text-title-dark leading-tight">
-              Tu próximo gran paso profesional{' '}
-              <span className="gradient-text">empieza aquí.</span>
+              Encuentra al talento que tu empresa{' '}
+              <span className="gradient-text">merece.</span>
             </h1>
 
             <p className="hero-sub mt-6 text-lg md:text-xl text-text-black/70 max-w-lg leading-relaxed">
-              Regístrate, crea tu perfil y conecta con las mejores empresas de
-              México.
+              Publica tu vacante, nosotros nos encargamos del proceso de
+              evaluación completo.
             </p>
 
             {/* Bullet points */}
@@ -41,27 +41,27 @@ const HeroTalentSection = () => {
 
             <div className="hero-cta mt-8 flex flex-col sm:flex-row gap-4">
               <Link
-                href="/register"
-                className="inline-flex items-center justify-center bg-button-green text-white font-semibold px-8 py-4 rounded-full text-lg hover:scale-105 hover:shadow-lg transition-all duration-300"
+                href="#register"
+                className="inline-flex items-center justify-center bg-button-orange text-white font-semibold px-8 py-4 rounded-full text-lg hover:scale-105 hover:shadow-lg transition-all duration-300"
               >
-                Regístrate Ahora
+                Registra tu Empresa
               </Link>
-              <a
-                href="#vacantes"
-                className="inline-flex items-center justify-center text-button-dark-green font-semibold text-lg hover:text-button-orange transition-colors"
+              <Link
+                href="#register"
+                className="inline-flex items-center justify-center border-2 border-button-green text-button-dark-green font-semibold px-8 py-4 rounded-full text-lg hover:bg-button-green hover:text-white transition-all duration-300"
               >
-                Ver vacantes &darr;
-              </a>
+                Cotiza en tiempo real
+              </Link>
             </div>
           </div>
 
           {/* Image Column */}
           <div className="hero-image order-2">
             <Image
-              src={talentsImage}
-              alt="Candidatos profesionales buscando empleo en México"
+              src={heroImage}
+              alt="Empresas que confían en INAKAT para encontrar talento"
               width={600}
-              height={400}
+              height={450}
               className="w-full h-auto rounded-2xl shadow-2xl object-cover"
               priority
             />
@@ -72,4 +72,4 @@ const HeroTalentSection = () => {
   );
 };
 
-export default HeroTalentSection;
+export default CompaniesHeroSection;
