@@ -1,3 +1,19 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /company/
+Disallow: /recruiter/
+Disallow: /specialist/
+Disallow: /profile
+Disallow: /login
+Disallow: /register
+Disallow: /unauthorized
+Disallow: /candidate/
+Disallow: /create-job
+Disallow: /credits/
+Disallow: /my-applications
+Disallow: /applications
+Disallow: /vendor/
+
+Sitemap: https://inakat.com/sitemap.xml
