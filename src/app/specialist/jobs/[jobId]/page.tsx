@@ -81,6 +81,8 @@ interface JobData {
   title: string;
   company: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   workMode: string;
   profile: string;
   seniority: string;
@@ -510,8 +512,11 @@ export default function SpecialistJobCandidates() {
                   >
                     {/* Tooltip de información rápida */}
                     {hoveredAppId === app.id && app.candidateProfile && (
-                      <div className="absolute left-4 top-0 -translate-y-full z-20 pointer-events-none mb-2">
-                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg max-w-xs">
+                      <div className="absolute right-4 top-2 z-30 pointer-events-none">
+                        <div className="absolute right-8 top-0 -translate-y-full">
+                          <div className="border-8 border-transparent border-b-gray-900"></div>
+                        </div>
+                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl max-w-[280px] border border-gray-700">
                           <p className="font-semibold mb-2 text-sm">{app.candidateName}</p>
                           <div className="space-y-1">
                             {app.candidateProfile.universidad && (
@@ -535,9 +540,6 @@ export default function SpecialistJobCandidates() {
                             {app.candidateProfile.source && (
                               <p><span className="text-gray-400">Fuente:</span> {app.candidateProfile.source}</p>
                             )}
-                          </div>
-                          <div className="absolute left-4 bottom-0 translate-y-full">
-                            <div className="border-8 border-transparent border-t-gray-900"></div>
                           </div>
                         </div>
                       </div>
@@ -794,6 +796,8 @@ export default function SpecialistJobCandidates() {
         onDocumentsUpdated={fetchJobData}
         userRole="specialist"
         jobHabilidades={assignment.job.habilidades}
+        jobLatitude={assignment.job.latitude}
+        jobLongitude={assignment.job.longitude}
       />
     </div>
   );

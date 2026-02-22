@@ -268,3 +268,51 @@ describe('Profile API should save and return coordinates', () => {
     expect(content).toMatch(/updateCandidateData\.longitude/);
   });
 });
+
+// ============================================================
+// BUG-4 (post-fix): Specialist tooltip positioning
+// ============================================================
+
+describe('BUG-4: Specialist tooltip should not clip above container', () => {
+  it('should NOT use -translate-y-full positioning on tooltip container', () => {
+    const content = readFile('src/app/specialist/jobs/[jobId]/page.tsx');
+    const tooltipSection = content.match(/Tooltip de información rápida[\s\S]*?pointer-events-none/);
+    if (tooltipSection) {
+      expect(tooltipSection[0]).not.toContain('-translate-y-full');
+    }
+  });
+});
+
+// ============================================================
+// BUG-6 (post-fix): Recruiter dashboard should have CandidateProfileModal
+// ============================================================
+
+describe('BUG-6: Recruiter dashboard should allow viewing candidate profile', () => {
+  it('should import CandidateProfileModal in recruiter dashboard', () => {
+    const content = readFile('src/app/recruiter/dashboard/page.tsx');
+    expect(content).toContain('CandidateProfileModal');
+  });
+
+  it('should have click handler on sent candidates', () => {
+    const content = readFile('src/app/recruiter/dashboard/page.tsx');
+    expect(content).toMatch(/cursor-pointer/);
+    expect(content).toMatch(/openCandidateProfile/);
+  });
+});
+
+// ============================================================
+// DistanceBadge component exists
+// ============================================================
+
+describe('DistanceBadge component should exist', () => {
+  it('should have DistanceBadge component file', () => {
+    const filePath = path.join(process.cwd(), 'src/components/shared/DistanceBadge.tsx');
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+
+  it('should import getDistanceInfo from distance utility', () => {
+    const content = readFile('src/components/shared/DistanceBadge.tsx');
+    expect(content).toContain('getDistanceInfo');
+    expect(content).toContain('@/lib/distance');
+  });
+});

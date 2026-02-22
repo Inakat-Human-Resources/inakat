@@ -7,6 +7,7 @@ const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url
 
 import { useState, useRef, useEffect } from 'react';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
+import DistanceBadge from '@/components/shared/DistanceBadge';
 import {
   X,
   Mail,
@@ -98,6 +99,8 @@ interface CandidateProfile {
   ciudad?: string;
   estado?: string;
   ubicacionCercana?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   source?: string;
   notas?: string;
   fotoUrl?: string; // FEAT-2: Foto de perfil
@@ -143,6 +146,8 @@ interface BankCandidate {
   ciudad?: string | null;
   estado?: string | null;
   ubicacionCercana?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   source?: string | null;
   notas?: string | null;
   fotoUrl?: string | null; // FEAT-2: Foto de perfil
@@ -173,6 +178,9 @@ interface CandidateProfileModalProps {
   userRole?: string; // Para saber si puede agregar notas
   // Habilidades del job (JSON string o array) para evaluación
   jobHabilidades?: string | null;
+  // Coordenadas de la vacante para badge de distancia
+  jobLatitude?: number | null;
+  jobLongitude?: number | null;
 }
 
 export default function CandidateProfileModal({
@@ -189,7 +197,9 @@ export default function CandidateProfileModal({
   canAddDocuments = false,
   onDocumentsUpdated,
   userRole,
-  jobHabilidades
+  jobHabilidades,
+  jobLatitude,
+  jobLongitude
 }: CandidateProfileModalProps) {
   // Estados para agregar documento
   const [showAddDocModal, setShowAddDocModal] = useState(false);
@@ -407,6 +417,8 @@ export default function CandidateProfileModal({
         ciudad: application.candidateProfile?.ciudad,
         estado: application.candidateProfile?.estado,
         ubicacionCercana: application.candidateProfile?.ubicacionCercana,
+        latitude: application.candidateProfile?.latitude,
+        longitude: application.candidateProfile?.longitude,
         source: application.candidateProfile?.source,
         adminNotas: application.candidateProfile?.notas,
         fotoUrl: application.candidateProfile?.fotoUrl, // FEAT-2: Foto de perfil
@@ -439,6 +451,8 @@ export default function CandidateProfileModal({
         ciudad: candidate!.ciudad,
         estado: candidate!.estado,
         ubicacionCercana: candidate!.ubicacionCercana,
+        latitude: candidate!.latitude,
+        longitude: candidate!.longitude,
         source: candidate!.source,
         adminNotas: candidate!.notas,
         fotoUrl: candidate!.fotoUrl, // FEAT-2: Foto de perfil
@@ -763,6 +777,12 @@ export default function CandidateProfileModal({
                   {data.ubicacionCercana && (
                     <p className="text-xs text-gray-500 mt-0.5">{data.ubicacionCercana}</p>
                   )}
+                  <DistanceBadge
+                    candidateLat={data.latitude}
+                    candidateLng={data.longitude}
+                    jobLat={jobLatitude}
+                    jobLng={jobLongitude}
+                  />
                 </div>
               </div>
             )}

@@ -18,6 +18,7 @@ import {
   UserCheck,
   XCircle
 } from 'lucide-react';
+import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_recruiter';
@@ -76,6 +77,7 @@ interface SentApplication {
   jobTitle: string;
   company: string;
   updatedAt: string;
+  candidateProfile?: any;
 }
 
 interface Stats {
@@ -95,6 +97,26 @@ export default function RecruiterDashboard() {
   const [activeTab, setActiveTab] = useState<'vacantes' | 'enviados'>('vacantes');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal de perfil de candidato
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<any>(null);
+
+  const openCandidateProfile = (app: SentApplication) => {
+    setSelectedApplication({
+      id: app.id,
+      candidateName: app.candidateName,
+      candidateEmail: app.candidateEmail,
+      status: app.status,
+      candidateProfile: app.candidateProfile || null,
+    });
+    setProfileModalOpen(true);
+  };
+
+  const closeCandidateProfile = () => {
+    setProfileModalOpen(false);
+    setSelectedApplication(null);
+  };
 
   useEffect(() => {
     fetchDashboard();
@@ -415,7 +437,7 @@ export default function RecruiterDashboard() {
                 </p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+              <div className="bg-white rounded-lg shadow-sm border">
                 <div className="px-4 py-3 bg-gray-50 border-b">
                   <p className="text-sm font-medium text-gray-700">
                     Candidatos enviados ({sentApplications.length})
@@ -428,7 +450,8 @@ export default function RecruiterDashboard() {
                   {sentApplications.map((app) => (
                     <div
                       key={app.id}
-                      className="p-4 hover:bg-gray-50 transition-colors"
+                      className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => openCandidateProfile(app)}
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -455,6 +478,9 @@ export default function RecruiterDashboard() {
                             </span>
                           </div>
                         </div>
+                        <div className="flex-shrink-0 text-gray-300 hover:text-green-500 transition-colors">
+                          <ChevronRight size={20} />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -464,6 +490,16 @@ export default function RecruiterDashboard() {
           </>
         )}
       </div>
+
+      {/* Modal de perfil de candidato */}
+      <CandidateProfileModal
+        application={selectedApplication}
+        candidate={null}
+        isOpen={profileModalOpen}
+        onClose={closeCandidateProfile}
+        showRecruiterNotes={false}
+        userRole="recruiter"
+      />
     </div>
   );
 }

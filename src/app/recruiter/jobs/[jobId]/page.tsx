@@ -75,6 +75,8 @@ interface JobData {
   title: string;
   company: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   workMode: string;
   profile: string;
   seniority: string;
@@ -755,6 +757,8 @@ export default function RecruiterJobCandidates() {
         canAddDocuments={true}
         onDocumentsUpdated={fetchJobData}
         userRole="recruiter"
+        jobLatitude={job?.latitude}
+        jobLongitude={job?.longitude}
       />
     </div>
   );
