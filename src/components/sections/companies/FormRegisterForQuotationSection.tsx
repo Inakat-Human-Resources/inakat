@@ -583,7 +583,7 @@ const FormRegisterForQuotationSection = () => {
                         ref={fileInputIdRef}
                         onChange={(e) => handleFileChange(e, 'identificacion')}
                         className="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
                       />
                       <button
                         type="button"
@@ -903,7 +903,7 @@ const FormRegisterForQuotationSection = () => {
                         handleFileChange(e, 'documentosConstitucion')
                       }
                       className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
                     />
                     <button
                       type="button"

@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import heroImage from '@/assets/images/1-home/1.png';
+import heroImage from '@/assets/images/1-home/hero-inakat.jpg';
 import iconK from '@/assets/images/1-home/2.png';
 import circleTeal from '@/assets/images/1-home/5.png';
 

@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      interviews,
+      success: true,
+      data: interviews,
       pagination: {
         total,
         page,

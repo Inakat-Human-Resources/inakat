@@ -7,21 +7,21 @@ import { useInView } from '@/hooks/useInView';
 const testimonials = [
   {
     quote:
-      'En INAKAT creemos que contratar bien es el primer paso para transformar empresas.',
-    author: 'Equipo INAKAT',
-    role: 'Fundadores',
+      'Conozco de muchos años la forma de trabajo de Inakat y he podido constatar su profesionalismo, claridad estratégica y capacidad para conectar a las organizaciones con talento altamente especializado.',
+    author: 'Mayela Sánchez',
+    role: 'Directora de Marketing · Grupo 4S',
   },
   {
     quote:
-      'La evaluación dual garantiza que cada candidato no solo sabe, sino que también encaja.',
-    author: 'Equipo INAKAT',
-    role: 'Filosofía de trabajo',
+      'Llevo años trabajando con distintos especialistas de Inakat. En todos los casos, sin excepción, he encontrado profesionales de primer nivel; verdaderos cracks en sus respectivos ramos.',
+    author: 'Adrian Cuadros',
+    role: 'Co-Founder & CPO · Reserhub',
   },
   {
     quote:
-      'La tecnología potencia, pero son las personas quienes deciden. Así trabajamos.',
-    author: 'Equipo INAKAT',
-    role: 'Nuestro enfoque',
+      'Un claro reflejo de la capacidad de Inakat para identificar y conectar el mejor talento especializado de alto nivel en equipos de producto, tecnología y operación.',
+    author: 'Adrian Cuadros',
+    role: 'Co-Founder & CPO · Reserhub',
   },
 ];
 

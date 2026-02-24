@@ -13,11 +13,17 @@ const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/jpg',
-  'image/webp'
+  'image/webp',
+  // Documentos Word
+  'application/msword',                                                        // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',   // .docx
+  // Documentos Excel
+  'application/vnd.ms-excel',                                                  // .xls
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',         // .xlsx
 ];
 
 // Extensiones permitidas como fallback
-const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.xls', '.xlsx'];
 
 // Verificar si el token de Vercel Blob está configurado
 function isBlobConfigured(): boolean {
@@ -69,7 +75,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: `Tipo de archivo no permitido (${file.type || fileExtension}). Solo se aceptan: PDF, JPG, PNG, WEBP`
+          error: `Tipo de archivo no permitido (${file.type || fileExtension}). Solo se aceptan: PDF, JPG, PNG, WEBP, DOC, DOCX, XLS, XLSX`
         },
         { status: 400 }
       );

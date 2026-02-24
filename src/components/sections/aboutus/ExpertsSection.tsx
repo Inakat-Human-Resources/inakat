@@ -3,14 +3,14 @@
 
 import Image, { StaticImageData } from 'next/image';
 import { useInView } from '@/hooks/useInView';
-import expert1 from '@/assets/images/2-about/9.png';
-import expert2 from '@/assets/images/2-about/10.png';
-import expert3 from '@/assets/images/2-about/11.png';
-import expert4 from '@/assets/images/2-about/12.png';
-import expert5 from '@/assets/images/2-about/13.png';
-import expert6 from '@/assets/images/2-about/14.png';
-import expert7 from '@/assets/images/2-about/15.png';
-import expert8 from '@/assets/images/2-about/16.png';
+import imgGuillermo from '@/assets/images/2-about/guillermo-sanchez.png';
+import imgAlexandra from '@/assets/images/2-about/alexandra-fetisova.png';
+import imgOmar from '@/assets/images/2-about/omar-garcia.jpeg';
+import imgAndrea from '@/assets/images/2-about/andrea-avalos.jpeg';
+import imgSofia from '@/assets/images/2-about/sofia-deleon.jpeg';
+import imgErnesto from '@/assets/images/2-about/ernesto-zapata.jpeg';
+import imgAndre from '@/assets/images/2-about/andre-gracia.jpeg';
+import imgAlejandro from '@/assets/images/2-about/alejandro-martinez.jpeg';
 
 interface Expert {
   name: string;
@@ -19,14 +19,14 @@ interface Expert {
 }
 
 const experts: Expert[] = [
-  { name: 'Denisse Tamez', role: 'Diseñadora Industrial', image: expert1 },
-  { name: 'Javier Martínez', role: 'Marketing', image: expert2 },
-  { name: 'Sofía Gutiérrez', role: 'Productora Audiovisual', image: expert3 },
-  { name: 'Diego Torres', role: 'Programador', image: expert4 },
-  { name: 'Laura Pérez', role: 'Diseñadora Web', image: expert5 },
-  { name: 'Marcos Rodríguez', role: 'Psicólogo Clínico', image: expert6 },
-  { name: 'Martha López', role: 'Project Manager', image: expert7 },
-  { name: 'David Bisbal', role: 'Recursos Humanos', image: expert8 },
+  { name: 'Guillermo Sánchez', role: 'Fundador & CEO', image: imgGuillermo },
+  { name: 'Alexandra Fetisova', role: 'Especialista', image: imgAlexandra },
+  { name: 'Omar García Jane', role: 'Doctor en Psicología', image: imgOmar },
+  { name: 'Andrea Avalos', role: 'Ingeniera en Sistemas · Product Owner', image: imgAndrea },
+  { name: 'Sofía de León', role: 'Coordinadora de Eventos', image: imgSofia },
+  { name: 'Ernesto Zapata', role: 'Consultor en Finanzas · CONOCER', image: imgErnesto },
+  { name: 'André Gracia', role: 'Productor Audiovisual', image: imgAndre },
+  { name: 'Alejandro Martínez', role: 'Ing. Electrónico · Sistemas Embebidos', image: imgAlejandro },
 ];
 
 const ExpertsSection = () => {
