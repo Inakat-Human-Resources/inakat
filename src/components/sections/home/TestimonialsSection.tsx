@@ -2,26 +2,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image, { StaticImageData } from 'next/image';
 import { useInView } from '@/hooks/useInView';
+import imgMayela from '@/assets/images/testimonials/mayela-sanchez.jpeg';
+import imgAdrian from '@/assets/images/testimonials/adrian-cuadros.jpeg';
 
-const testimonials = [
+interface Testimonial {
+  quote: string;
+  author: string;
+  role: string;
+  image: StaticImageData;
+}
+
+const testimonials: Testimonial[] = [
   {
     quote:
       'Conozco de muchos años la forma de trabajo de Inakat y he podido constatar su profesionalismo, claridad estratégica y capacidad para conectar a las organizaciones con talento altamente especializado.',
     author: 'Mayela Sánchez',
     role: 'Directora de Marketing · Grupo 4S',
+    image: imgMayela,
   },
   {
     quote:
       'Llevo años trabajando con distintos especialistas de Inakat. En todos los casos, sin excepción, he encontrado profesionales de primer nivel; verdaderos cracks en sus respectivos ramos.',
     author: 'Adrian Cuadros',
     role: 'Co-Founder & CPO · Reserhub',
+    image: imgAdrian,
   },
   {
     quote:
       'Un claro reflejo de la capacidad de Inakat para identificar y conectar el mejor talento especializado de alto nivel en equipos de producto, tecnología y operación.',
     author: 'Adrian Cuadros',
     role: 'Co-Founder & CPO · Reserhub',
+    image: imgAdrian,
   },
 ];
 
@@ -68,13 +81,23 @@ const TestimonialsSection = () => {
                 <blockquote className="text-white text-2xl md:text-3xl lg:text-4xl font-light italic leading-relaxed">
                   {testimonial.quote}
                 </blockquote>
-                <div className="mt-8">
-                  <p className="text-white font-semibold text-lg">
-                    — {testimonial.author}
-                  </p>
-                  <p className="text-white/60 text-sm mt-1">
-                    {testimonial.role}
-                  </p>
+                <div className="mt-8 flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/30">
+                    <Image
+                      src={testimonial.image}
+                      alt={testimonial.author}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-white font-semibold text-lg">
+                      — {testimonial.author}
+                    </p>
+                    <p className="text-white/60 text-sm mt-1">
+                      {testimonial.role}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
