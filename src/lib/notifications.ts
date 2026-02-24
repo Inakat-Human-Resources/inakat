@@ -65,6 +65,8 @@ export async function notifyAllAdmins(
     select: { id: true },
   });
 
+  console.log('[NOTIF] notifyAllAdmins called:', params.type, '| Admins encontrados:', admins.length, admins.map(a => a.id));
+
   if (admins.length === 0) return;
 
   await prisma.notification.createMany({

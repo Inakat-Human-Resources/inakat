@@ -597,7 +597,7 @@ const Navbar = () => {
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-custom-beige shadow-lg border-t border-gray-200">
+        <div className="md:hidden absolute top-full left-0 w-full bg-custom-beige shadow-lg border-t border-gray-200 max-h-[80vh] overflow-y-auto">
           <div className="container mx-auto px-4 py-4">
             <ul className="flex flex-col space-y-2">
               <li>
@@ -695,6 +695,68 @@ const Navbar = () => {
                     >
                       Mi Perfil
                     </Link>
+
+                    {/* Admin specific links (mobile) */}
+                    {user.role === 'admin' && (
+                      <>
+                        <div className="border-t border-gray-200 my-2"></div>
+                        <p className="px-4 py-1 text-xs font-semibold text-gray-400 uppercase">Reclutamiento</p>
+                        <Link href="/admin" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Vacantes
+                        </Link>
+                        <Link href="/admin/assignments" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Asignar Equipo
+                        </Link>
+                        <Link href="/admin/assign-candidates" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Asignar Candidatos
+                        </Link>
+                        <Link href="/admin/interviews" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Gestión Entrevistas
+                        </Link>
+                        <Link href="/admin/direct-applications" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Candidatos Interesados
+                        </Link>
+
+                        <div className="border-t border-gray-100 my-1"></div>
+                        <p className="px-4 py-1 text-xs font-semibold text-gray-400 uppercase">Empresas</p>
+                        <Link href="/admin/requests" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Empresas
+                        </Link>
+                        <Link href="/admin/vendors" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Vendedores
+                        </Link>
+                        <Link href="/admin/credit-packages" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Paquetes de Créditos
+                        </Link>
+                        <Link href="/admin/pricing" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Precios
+                        </Link>
+
+                        <div className="border-t border-gray-100 my-1"></div>
+                        <p className="px-4 py-1 text-xs font-semibold text-gray-400 uppercase">Sistema</p>
+                        <Link href="/admin/candidates" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Candidatos
+                        </Link>
+                        <Link href="/admin/users" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Usuarios
+                        </Link>
+                        <Link href="/admin/specialties" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Especialidades
+                        </Link>
+                      </>
+                    )}
 
                     {/* Company specific links */}
                     {user.role === 'company' && (

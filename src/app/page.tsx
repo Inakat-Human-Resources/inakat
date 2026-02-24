@@ -1,7 +1,7 @@
 // RUTA: src/app/page.tsx
 import HeroSection from "@/components/sections/home/HeroSection";
 import SocialProofBar from "@/components/sections/home/SocialProofBar";
-import HowItWorksSection from "@/components/sections/home/HowItWorksSection";
+import SelectionProcessSection from "@/components/sections/aboutus/SelectionProcessSection";
 import DualCTASection from "@/components/sections/home/DualCTASection";
 import WhyInakatSection from "@/components/sections/home/WhyInakatSection";
 import SpecialtiesSection from "@/components/sections/home/SpecialtiesSection";
@@ -17,7 +17,7 @@ export default function Home() {
     <main className="min-h-screen">
       <HeroSection />
       <SocialProofBar />
-      <HowItWorksSection />
+      <SelectionProcessSection />
       <DualCTASection />
       <WhyInakatSection />
       <SpecialtiesSection />

@@ -14,7 +14,7 @@ const faqs = [
   {
     question: '¿Cuánto tarda el proceso?',
     answer:
-      'Dependiendo del perfil, entre 2 y 4 semanas desde la publicación de la vacante hasta la entrega de candidatos evaluados.',
+      'Nuestro proceso completo tiene 11 etapas y toma en promedio entre 3 y 4 semanas desde la definición del perfil hasta el cierre, más seguimiento post-contratación y evaluación continua.',
   },
   {
     question: '¿Qué tipo de perfiles manejan?',
@@ -34,7 +34,7 @@ const faqs = [
   {
     question: '¿Cuánto cuesta el servicio?',
     answer:
-      'Trabajamos con un modelo de créditos flexible. Contacta a nuestro equipo comercial para una cotización personalizada.',
+      'Trabajamos con un modelo de créditos. Cada vacante tiene un costo en créditos que varía según el perfil, seniority, modalidad y ubicación. Puedes comprar paquetes de créditos desde nuestra plataforma. Contacta a nuestro equipo comercial para una cotización personalizada.',
   },
 ];
 
