@@ -5,10 +5,10 @@ import { useInView } from '@/hooks/useInView';
 import { useCountUp } from '@/hooks/useCountUp';
 
 const stats = [
-  { value: 11, suffix: '', label: 'pasos de evaluación', sublabel: 'antes de presentar candidatos' },
-  { value: 7, suffix: '+', label: 'áreas de especialidad', sublabel: 'cubiertas por expertos' },
-  { value: 2, suffix: '', label: 'filtros de evaluación', sublabel: 'psicológico + técnico' },
-  { value: 24, suffix: '', label: 'días hábiles promedio', sublabel: 'del proceso completo' },
+  { value: 100, suffix: '%', label: 'evaluados por humanos', sublabel: 'cero decisiones de IA' },
+  { value: 150, suffix: '+', label: 'especialistas en la red', sublabel: 'psicólogos + técnicos' },
+  { value: 15, suffix: '+', label: 'estados con presencia', sublabel: 'en toda la república' },
+  { value: 11, suffix: '', label: 'etapas de evaluación', sublabel: 'antes de presentar candidatos' },
 ];
 
 const StatItem = ({

@@ -36,27 +36,27 @@ const AboutUsSection = () => {
             </h2>
 
             <div className="space-y-4">
-              <p
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-lg text-text-black/80 leading-relaxed`}
+              {/* Callout principal: origen del nombre */}
+              <div
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-soft-green/10 border-l-4 border-button-orange rounded-r-lg p-5 mb-6`}
                 style={{ transitionDelay: '100ms' }}
               >
-                En INAKAT entendemos que reclutar no es solo cubrir un puesto.
-                Es encontrar a la persona adecuada{' '}
-                <strong>
-                  para el rol, la cultura y las condiciones reales de tu
-                  empresa.
-                </strong>
-              </p>
+                <p className="text-text-black/80 italic leading-relaxed text-lg">
+                  <strong>INAKAT</strong> proviene de la palabra &quot;talento&quot; en lengua
+                  wayuu, una comunidad que honra las habilidades únicas de cada
+                  persona. Ese principio es el corazón de todo lo que hacemos.
+                </p>
+              </div>
 
               <p
                 className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-lg text-text-black/80 leading-relaxed`}
                 style={{ transitionDelay: '200ms' }}
               >
-                Sabemos que{' '}
+                Somos una empresa mexicana de reclutamiento especializado que nació
+                con una convicción clara:{' '}
                 <strong>
-                  un candidato no es solo lo que sabe hacer, sino cómo se
-                  comporta, cómo se comunica, cómo se adapta, cuánto le importa
-                  el puesto y si realmente puede sostenerlo en el tiempo.
+                  las mejores contrataciones no las hace un algoritmo, las hacen
+                  personas que entienden a personas.
                 </strong>
               </p>
 
@@ -64,29 +64,26 @@ const AboutUsSection = () => {
                 className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-lg text-text-black/80 leading-relaxed`}
                 style={{ transitionDelay: '300ms' }}
               >
-                Por eso,{' '}
-                <strong>
-                  no elegimos solo por currículum, elegimos por compatibilidad,
-                  compromiso, ubicación, cultura y realidad humana.
-                </strong>
+                Nuestro modelo combina{' '}
+                <strong>psicólogos organizacionales</strong> que evalúan actitud,
+                valores y compatibilidad cultural, con{' '}
+                <strong>especialistas técnicos líderes en su industria</strong> que
+                validan que el candidato realmente domina su disciplina. Dos filtros
+                humanos, cero decisiones automatizadas.
               </p>
 
-              {/* Callout box for wayuu origin */}
-              <div
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-soft-green/10 border-l-4 border-button-orange rounded-r-lg p-5 mt-6`}
+              <p
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-lg text-text-black/80 leading-relaxed`}
                 style={{ transitionDelay: '400ms' }}
               >
-                <p className="text-text-black/80 italic leading-relaxed">
-                  El nombre <strong>INAKAT</strong> proviene de la palabra
-                  &quot;talento&quot; en lengua wayuu, una comunidad que honra
-                  las habilidades únicas de cada persona. Eso nos inspira a ver
-                  más allá de lo obvio y conectar a las empresas con quienes{' '}
-                  <strong>
-                    de verdad pueden aportar a su equipo, su operación y sus
-                    metas.
-                  </strong>
-                </p>
-              </div>
+                Con presencia activa en las principales ciudades de México — CDMX,
+                Monterrey, Guadalajara, Puebla, Querétaro, León y Mérida —
+                conocemos el talento local de cada región y conectamos a las empresas
+                con profesionales que{' '}
+                <strong>
+                  de verdad pueden aportar a su equipo, su operación y sus metas.
+                </strong>
+              </p>
             </div>
           </div>
         </div>

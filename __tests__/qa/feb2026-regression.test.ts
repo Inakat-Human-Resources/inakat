@@ -346,23 +346,28 @@ describe('P3-ed9: notifyAllAdmins has debug logging', () => {
 // P4 (ed93ef8): StatsSection — updated metrics
 // ============================================================
 
-describe('P4-ed9: StatsSection has updated wow metrics', () => {
+describe('P4-ed9: StatsSection has impressive metrics', () => {
   const content = readFile('src/components/sections/home/StatsSection.tsx');
 
-  it('should show 11 (pasos)', () => {
+  it('should show 100% (evaluados por humanos)', () => {
+    expect(content).toMatch(/value:\s*100/);
+  });
+
+  it('should show 150+ (especialistas)', () => {
+    expect(content).toMatch(/value:\s*150/);
+  });
+
+  it('should show 15+ (estados)', () => {
+    expect(content).toMatch(/value:\s*15\b/);
+  });
+
+  it('should show 11 (etapas)', () => {
     expect(content).toMatch(/value:\s*11/);
   });
 
-  it('should show 7+ (áreas)', () => {
-    expect(content).toMatch(/value:\s*7/);
-  });
-
-  it('should show 24 (días hábiles)', () => {
-    expect(content).toMatch(/value:\s*24/);
-  });
-
-  it('should NOT still show 100% transparencia (old metric)', () => {
-    expect(content).not.toMatch(/value:\s*100/);
+  it('should NOT have small numbers like value: 2 or value: 7', () => {
+    expect(content).not.toMatch(/value:\s*2[,\s]/);
+    expect(content).not.toMatch(/value:\s*7[,\s]/);
   });
 });
 
