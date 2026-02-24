@@ -5,12 +5,13 @@ import Image, { StaticImageData } from 'next/image';
 import { useInView } from '@/hooks/useInView';
 import imgGuillermo from '@/assets/images/2-about/guillermo-sanchez.png';
 import imgAlexandra from '@/assets/images/2-about/alexandra-fetisova.png';
-import imgOmar from '@/assets/images/2-about/omar-garcia.jpeg';
-import imgAndrea from '@/assets/images/2-about/andrea-avalos.jpeg';
-import imgSofia from '@/assets/images/2-about/sofia-deleon.jpeg';
-import imgErnesto from '@/assets/images/2-about/ernesto-zapata.jpeg';
-import imgAndre from '@/assets/images/2-about/andre-gracia.jpeg';
-import imgAlejandro from '@/assets/images/2-about/alejandro-martinez.jpeg';
+import imgOmar from '@/assets/images/2-about/omar-garcia.png';
+import imgAndrea from '@/assets/images/2-about/andrea-avalos.png';
+import imgSofia from '@/assets/images/2-about/sofia-deleon.png';
+import imgErnesto from '@/assets/images/2-about/ernesto-zapata.png';
+import imgAndre from '@/assets/images/2-about/andre-gracia.png';
+import imgAlejandro from '@/assets/images/2-about/alejandro-martinez.png';
+import imgDenisse from '@/assets/images/2-about/denisse.png';
 
 interface Expert {
   name: string;
@@ -27,6 +28,7 @@ const experts: Expert[] = [
   { name: 'Ernesto Zapata', role: 'Consultor en Finanzas · CONOCER', image: imgErnesto },
   { name: 'André Gracia', role: 'Productor Audiovisual', image: imgAndre },
   { name: 'Alejandro Martínez', role: 'Ing. Electrónico · Sistemas Embebidos', image: imgAlejandro },
+  { name: 'Denisse Tamez Escamilla', role: 'Especialista', image: imgDenisse },
 ];
 
 const ExpertsSection = () => {
