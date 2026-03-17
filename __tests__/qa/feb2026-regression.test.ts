@@ -118,8 +118,8 @@ describe('P3-09a: ExpertsSection uses real team profiles', () => {
     expect(content).toMatch(/Omar García/);
   });
 
-  it('should have Andrea Avalos', () => {
-    expect(content).toContain('Andrea Avalos');
+  it('should have Andrea Ávalos', () => {
+    expect(content).toContain('Andrea Ávalos');
   });
 
   it('should have Sofía de León', () => {
@@ -375,23 +375,24 @@ describe('P4-ed9: StatsSection has impressive metrics', () => {
 // P5 (ed93ef8): FAQ updated
 // ============================================================
 
-describe('P5-ed9: FAQ has updated answers', () => {
+describe('P5-ed9: FAQ has updated answers (replaced March 2026)', () => {
   const content = readFile('src/components/sections/home/FAQSection.tsx');
 
-  it('FAQ about duration should mention 11 etapas', () => {
-    expect(content).toMatch(/11\s*etapas/);
+  it('FAQ should have 9 questions', () => {
+    const questions = content.match(/question:/g) || [];
+    expect(questions.length).toBe(9);
   });
 
-  it('FAQ about duration should mention 3-4 semanas', () => {
-    expect(content).toMatch(/3\s*(y|a|-)\s*4\s*semanas/);
+  it('FAQ should mention evaluación humana especializada', () => {
+    expect(content).toContain('evaluación humana especializada');
   });
 
-  it('FAQ about pricing should mention créditos model', () => {
-    expect(content).toMatch(/modelo\s*de\s*créditos/i);
+  it('FAQ about pricing should mention calculadora de costo', () => {
+    expect(content).toContain('calculadora de costo');
   });
 
-  it('FAQ about pricing should mention paquetes or cotización', () => {
-    expect(content).toMatch(/paquetes|cotización/i);
+  it('FAQ should have transparency question', () => {
+    expect(content).toContain('transparente');
   });
 });
 

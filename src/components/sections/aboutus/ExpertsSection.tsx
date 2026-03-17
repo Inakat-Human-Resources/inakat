@@ -26,57 +26,57 @@ interface Expert {
 const experts: Expert[] = [
   {
     name: 'Guillermo Sánchez',
-    role: 'Fundador & CEO',
+    role: 'Especialista en Arquitectura de Software y Plataformas Tecnológicas',
     image: imgGuillermo,
-    bio: 'Fundador de INAKAT, con amplia experiencia en reclutamiento especializado y construcción de equipos de alto rendimiento. Apasionado por conectar talento excepcional con las empresas que más lo necesitan.',
+    bio: 'Guillermo Sánchez es graduado del Tecnológico de Monterrey, donde obtuvo primer lugar de su generación. Es Full Stack Developer y especialista en arquitectura de software, desarrollo de plataformas digitales y sistemas tecnológicos complejos. Ha desarrollado soluciones tecnológicas para empresas en México y Canadá, integrando tecnología con procesos organizacionales y plataformas digitales de alto desempeño. En INAKAT participa evaluando perfiles relacionados con ingeniería de software, desarrollo tecnológico y arquitectura de sistemas.',
   },
   {
     name: 'Alexandra Fetisova',
-    role: 'Especialista en Reclutamiento Internacional',
+    role: 'Especialista en Algoritmos Predictivos y Ciencia de Datos',
     image: imgAlexandra,
-    bio: 'Especialista con experiencia en reclutamiento internacional y búsqueda de talento multicultural. Conecta profesionales de distintas latitudes con oportunidades en México.',
+    bio: 'Alexandra Fetisova es Maestra en Matemáticas por Stanford University, con especialización en desarrollo de modelos matemáticos, algoritmos predictivos e infraestructura de datos. Ha trabajado en entornos tecnológicos avanzados diseñando sistemas de análisis y optimización algorítmica utilizados en plataformas de gran escala, comparables con las utilizadas por empresas tecnológicas globales como Amazon. En INAKAT participa en la evaluación de perfiles relacionados con ciencia de datos, inteligencia artificial y desarrollo algorítmico.',
   },
   {
     name: 'Omar García Jane',
-    role: 'Doctor en Psicología',
+    role: 'Especialista en Psicología del Talento y Evaluación Socioemocional',
     image: imgOmar,
-    bio: 'Doctor en Psicología con enfoque en evaluación de competencias y selección de personal. Lidera los procesos de evaluación psicométrica y entrevistas por competencias en INAKAT.',
+    bio: 'Omar García es Doctor en Psicología y Maestro en Educación por el Tecnológico de Monterrey. Ha participado como consejero y líder de proyectos académicos y de desarrollo humano en colaboración con organismos como Naciones Unidas, el Instituto Nacional Electoral y el Consejo de la Judicatura Federal, entre otros. Su trabajo se centra en evaluación del talento, orientación socioemocional, liderazgo y desarrollo humano. En INAKAT participa evaluando perfiles desde la perspectiva psicológica, humana y de desarrollo profesional.',
   },
   {
-    name: 'Andrea Avalos',
-    role: 'Ingeniera en Sistemas · Product Owner',
+    name: 'Andrea Ávalos',
+    role: 'Especialista en Tecnología y Gestión de Productos Digitales',
     image: imgAndrea,
-    bio: 'Ingeniera en Sistemas con experiencia como Product Owner. Evalúa perfiles técnicos de TI y asegura que cada candidato cumpla con los estándares de calidad que las empresas requieren.',
+    bio: 'Andrea Ávalos es Ingeniera en Tecnologías Computacionales y Maestra en Administración por EGADE Business School del Tecnológico de Monterrey. Cuenta con experiencia liderando proyectos tecnológicos y desarrollo de productos digitales, integrando equipos multidisciplinarios de ingeniería, negocio y operación. Se ha desempeñado como Product Owner en distintos proyectos que requieren coordinación entre tecnología y estrategia organizacional. En INAKAT participa evaluando perfiles relacionados con gestión tecnológica, desarrollo de producto y liderazgo en proyectos digitales.',
   },
   {
     name: 'Sofía de León',
-    role: 'Coordinadora de Eventos y Operaciones',
+    role: 'Especialista en Operación de Proyectos y Eventos',
     image: imgSofia,
-    bio: 'Coordinadora de Eventos y Operaciones con habilidad para gestionar procesos complejos. Asegura que cada etapa del proceso de selección se ejecute con precisión y puntualidad.',
+    bio: 'Sofía de León es Licenciada en Creación y Desarrollo de Empresas. Cuenta con experiencia en la organización, coordinación y operación de eventos deportivos, sociales y empresariales, gestionando logística, equipos de trabajo y experiencias para públicos diversos. Su enfoque combina visión empresarial con ejecución operativa, permitiendo evaluar perfiles relacionados con gestión de proyectos, coordinación operativa y organización de eventos.',
   },
   {
     name: 'Ernesto Zapata',
-    role: 'Consultor en Finanzas · Certificado CONOCER',
+    role: 'Especialista en Finanzas y Evaluación Financiera de Proyectos',
     image: imgErnesto,
-    bio: 'Consultor en Finanzas certificado por CONOCER. Evalúa perfiles de contaduría, finanzas y administración, garantizando candidatos con sólidas competencias técnicas y estratégicas.',
+    bio: 'Ernesto Zapata es Licenciado en Finanzas por la Universidad Autónoma de Nuevo León y Maestro en Educación y Finanzas por la UNID. Ha participado como consultor financiero y consejero en múltiples organizaciones, apoyando en análisis financiero, planeación estratégica y sostenibilidad de proyectos. En INAKAT participa evaluando perfiles relacionados con finanzas, administración y toma de decisiones financieras.',
   },
   {
     name: 'André Gracia',
-    role: 'Productor Audiovisual',
+    role: 'Especialista en Producción Audiovisual y Narrativa Multimedia',
     image: imgAndre,
-    bio: 'Productor Audiovisual que captura la esencia de INAKAT a través de contenido visual. Responsable de la imagen de marca y la comunicación audiovisual del equipo.',
+    bio: 'André Gracia es Licenciado en Producción Musical Digital por el Tecnológico de Monterrey. Se especializa en producción audiovisual, narrativa multimedia y desarrollo de contenido creativo, colaborando con organizaciones deportivas, sociales y empresariales. Ha participado en la creación de proyectos audiovisuales que integran comunicación, tecnología y storytelling visual. En INAKAT participa evaluando perfiles relacionados con producción audiovisual, medios digitales y comunicación creativa.',
   },
   {
     name: 'Alejandro Martínez',
     role: 'Ing. Electrónico · Sistemas Embebidos',
     image: imgAlejandro,
-    bio: 'Ingeniero Electrónico especializado en Sistemas Embebidos. Evalúa perfiles técnicos de ingeniería y tecnología, desde firmware hasta hardware y automatización industrial.',
+    bio: '',
   },
   {
     name: 'Denisse Tamez Escamilla',
-    role: 'Especialista en Atracción de Talento',
+    role: 'Especialista',
     image: imgDenisse,
-    bio: 'Especialista en Atracción de Talento con enfoque en hunting y sourcing de candidatos. Identifica y contacta perfiles de alto nivel para posiciones estratégicas.',
+    bio: '',
   },
 ];
 
@@ -153,10 +153,13 @@ const ExpertsSection = () => {
 
             {/* Expert info */}
             <div className="flex flex-col items-center text-center">
-              <div className="w-24 h-24 rounded-full overflow-hidden bg-custom-beige mb-4">
+              <div className="w-32 h-32 rounded-full overflow-hidden bg-custom-beige mb-4">
                 <Image
                   src={selectedExpert.image}
                   alt={selectedExpert.name}
+                  width={128}
+                  height={128}
+                  quality={90}
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -167,7 +170,7 @@ const ExpertsSection = () => {
                 {selectedExpert.role}
               </p>
               <p className="text-text-black/70 leading-relaxed mb-6">
-                {selectedExpert.bio}
+                {selectedExpert.bio || 'Descripción próximamente.'}
               </p>
 
               {/* Video button */}

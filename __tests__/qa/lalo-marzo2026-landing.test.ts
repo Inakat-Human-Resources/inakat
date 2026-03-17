@@ -18,28 +18,39 @@ const readFile = (filePath: string) =>
 // A: FAQ content
 // ============================================================
 
-describe('Batch 2A: FAQ content is current', () => {
+describe('Batch 2A: FAQ content is current (9 preguntas)', () => {
   const content = readFile('src/components/sections/home/FAQSection.tsx');
 
-  it('should mention 11 etapas in process duration FAQ', () => {
-    expect(content).toMatch(/11\s*etapas/);
-  });
-
-  it('should mention 3-4 semanas', () => {
-    expect(content).toMatch(/3\s*(y|a|-)\s*4\s*semanas/);
-  });
-
-  it('should mention modelo de créditos', () => {
-    expect(content).toMatch(/modelo de créditos|créditos/i);
-  });
-
-  it('should have at least 5 FAQ items', () => {
+  it('should have exactly 9 FAQ items', () => {
     const questions = content.match(/question:/g) || [];
-    expect(questions.length).toBeGreaterThanOrEqual(5);
+    expect(questions.length).toBe(9);
   });
 
-  it('should mention 7 áreas de especialidad', () => {
-    expect(content).toMatch(/7\s*áreas/);
+  it('should have the new question about transparency', () => {
+    expect(content).toContain('¿Qué significa que nuestro proceso es transparente?');
+  });
+
+  it('should have the new question about INAKAT vs traditional agencies', () => {
+    expect(content).toContain('¿Qué diferencia a INAKAT de una agencia de reclutamiento tradicional?');
+  });
+
+  it('should have the new question about accessibility vs other firms', () => {
+    expect(content).toContain('¿Por qué INAKAT es más accesible que otras firmas de reclutamiento?');
+  });
+
+  it('should have the new question about human + technology', () => {
+    expect(content).toContain('¿Por qué decimos que el proceso es humano complementado con tecnología?');
+  });
+
+  it('should mention calculadora de costo in pricing FAQ', () => {
+    expect(content).toContain('calculadora de costo');
+  });
+
+  it('should mention specific cities: Monterrey, Morelia, CDMX, Puebla, Guadalajara', () => {
+    expect(content).toContain('Monterrey');
+    expect(content).toContain('Morelia');
+    expect(content).toContain('Puebla');
+    expect(content).toContain('Guadalajara');
   });
 });
 

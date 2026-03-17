@@ -32,9 +32,28 @@ describe('Batch 3: Expert cards data and modal', () => {
     expect(nameMatches.length).toBeGreaterThanOrEqual(9);
   });
 
-  it('every expert should have a bio', () => {
+  it('every expert should have a bio field', () => {
     const bioMatches = content.match(/bio:\s*'/g) || [];
     expect(bioMatches.length).toBeGreaterThanOrEqual(9);
+  });
+
+  it('experts with empty bio should show fallback text in modal', () => {
+    expect(content).toContain("selectedExpert.bio || 'Descripción próximamente.'");
+  });
+
+  it('Guillermo should have Stanford-related bio for Alexandra', () => {
+    expect(content).toContain('Stanford University');
+  });
+
+  it('Omar should mention Naciones Unidas', () => {
+    expect(content).toContain('Naciones Unidas');
+  });
+
+  it('modal photo should be w-32 h-32 with quality={90}', () => {
+    expect(content).toMatch(/w-32\s+h-32/);
+    expect(content).toContain('quality={90}');
+    expect(content).toContain('width={128}');
+    expect(content).toContain('height={128}');
   });
 
   // -- Real team members still present --
@@ -51,8 +70,8 @@ describe('Batch 3: Expert cards data and modal', () => {
     expect(content).toMatch(/Omar García/);
   });
 
-  it('should have Andrea Avalos', () => {
-    expect(content).toContain('Andrea Avalos');
+  it('should have Andrea Ávalos', () => {
+    expect(content).toContain('Andrea Ávalos');
   });
 
   it('should have Sofía de León', () => {
