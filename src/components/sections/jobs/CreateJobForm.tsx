@@ -125,6 +125,7 @@ const CreateJobForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] =
     useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | 'draft' | null;
     message: string;
@@ -182,8 +183,11 @@ const CreateJobForm = () => {
           }
         });
 
-        // Usar la dirección completa de Google Maps para mayor precisión
-        const locationStr = place.formatted_address || `${ciudad}, ${estado}`;
+        // Si es un establecimiento, mostrar nombre + dirección
+        const hasName = place.name && !place.name.match(/^\d/); // nombre real, no un número de calle
+        const locationStr = hasName
+          ? `${place.name}, ${place.formatted_address || `${ciudad}, ${estado}`}`
+          : place.formatted_address || `${ciudad}, ${estado}`;
 
         setFormData(prev => ({
           ...prev,
@@ -512,7 +516,7 @@ const CreateJobForm = () => {
   const handleSubmit = async (
     e: React.FormEvent,
     publishNow: boolean = false
-  ) => {
+  ): Promise<boolean> => {
     e.preventDefault();
 
     // Limpiar errores previos
@@ -520,7 +524,7 @@ const CreateJobForm = () => {
 
     // Validar formulario primero (BUG-02)
     if (!validateForm()) {
-      return;
+      return false;
     }
 
     // Validar salarios
@@ -529,23 +533,23 @@ const CreateJobForm = () => {
 
     if (!salaryMinNum || !salaryMaxNum) {
       setSalaryError('Debes ingresar el salario mínimo y máximo');
-      return;
+      return false;
     }
 
     if (salaryMinNum > salaryMaxNum) {
       setSalaryError('El salario mínimo no puede ser mayor al máximo');
-      return;
+      return false;
     }
 
     if (salaryMaxNum - salaryMinNum > 10000) {
       setSalaryError('La diferencia máxima permitida es $10,000 MXN');
-      return;
+      return false;
     }
 
     // Validar salario mínimo requerido para la especialidad
     if (minSalaryRequired && salaryMinNum < minSalaryRequired) {
       setSalaryError(`El salario mínimo debe ser al menos $${minSalaryRequired.toLocaleString('es-MX')} MXN para esta especialidad`);
-      return;
+      return false;
     }
 
     setSalaryError(null);
@@ -554,7 +558,7 @@ const CreateJobForm = () => {
     if (!isEditing && publishNow && userInfo && userInfo.role !== 'admin') {
       if (userInfo.credits < calculatedCost) {
         setShowInsufficientCreditsModal(true);
-        return;
+        return false;
       }
     }
 
@@ -590,7 +594,7 @@ const CreateJobForm = () => {
       if (response.status === 402) {
         // Créditos insuficientes
         setShowInsufficientCreditsModal(true);
-        return;
+        return false;
       }
 
       if (response.status === 403) {
@@ -598,7 +602,7 @@ const CreateJobForm = () => {
           type: 'error',
           message: 'No tienes permiso para editar esta vacante.'
         });
-        return;
+        return false;
       }
 
       if (data.success) {
@@ -618,7 +622,7 @@ const CreateJobForm = () => {
             });
           }
         } else {
-          // Borrador guardado - redirigir directamente
+          // Borrador guardado
           setSubmitStatus({
             type: 'draft',
             message: 'Vacante guardada como borrador. Redirigiendo...'
@@ -627,6 +631,7 @@ const CreateJobForm = () => {
             router.push('/company/dashboard');
           }, 1500);
         }
+        return true;
       } else {
         throw new Error(
           data.error || `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
@@ -640,6 +645,7 @@ const CreateJobForm = () => {
             ? error.message
             : `Error al ${isEditing ? 'actualizar' : 'crear'} vacante`
       });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -903,7 +909,8 @@ const CreateJobForm = () => {
                   }}
                   options={{
                     componentRestrictions: { country: 'mx' },
-                    types: ['address']
+                    types: ['geocode', 'establishment'],
+                    fields: ['formatted_address', 'geometry', 'address_components', 'name', 'place_id']
                   }}
                 >
                   <div className="relative">
@@ -1622,21 +1629,39 @@ const CreateJobForm = () => {
 
               <div className="flex flex-col gap-3">
                 <button
+                  disabled={isSavingDraft}
                   onClick={async () => {
-                    setShowInsufficientCreditsModal(false);
-                    await handleSubmit(
+                    setIsSavingDraft(true);
+                    const saved = await handleSubmit(
                       new Event('submit') as unknown as React.FormEvent,
                       false
                     );
-                    router.push('/credits/purchase');
+                    setIsSavingDraft(false);
+                    if (saved) {
+                      setShowInsufficientCreditsModal(false);
+                      router.push('/credits/purchase');
+                    } else {
+                      setShowInsufficientCreditsModal(false);
+                    }
                   }}
-                  className="w-full px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 font-semibold"
+                  className="w-full px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Guardar Borrador y Comprar Créditos
+                  {isSavingDraft ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Guardando borrador...
+                    </>
+                  ) : (
+                    'Comprar Créditos y Guardar en Borrador'
+                  )}
                 </button>
                 <button
                   onClick={() => setShowInsufficientCreditsModal(false)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                  disabled={isSavingDraft}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 disabled:opacity-50"
                 >
                   Cancelar
                 </button>

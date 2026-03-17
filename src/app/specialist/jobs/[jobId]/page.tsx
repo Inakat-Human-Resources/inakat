@@ -34,6 +34,7 @@ import {
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 import CompanyLogo from '@/components/shared/CompanyLogo';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
+import DistanceBadge from '@/components/shared/DistanceBadge';
 
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_specialist';
@@ -61,6 +62,8 @@ interface CandidateProfile {
   educacion?: string;
   subcategory?: string;
   documents?: any[];
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface Application {
@@ -610,6 +613,13 @@ export default function SpecialistJobCandidates() {
                                 {app.candidateProfile.seniority}
                               </span>
                             )}
+                            <DistanceBadge
+                              candidateLat={app.candidateProfile.latitude}
+                              candidateLng={app.candidateProfile.longitude}
+                              jobLat={assignment?.job.latitude}
+                              jobLng={assignment?.job.longitude}
+                              compact
+                            />
                           </div>
                         )}
 

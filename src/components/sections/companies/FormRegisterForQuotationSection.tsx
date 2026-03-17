@@ -563,12 +563,16 @@ const FormRegisterForQuotationSection = () => {
                     </div>
 
                     <div>
+                      {/* Hidden dummy input to absorb browser autofill */}
+                      <input type="text" name="fakeField" style={{ display: 'none' }} tabIndex={-1} autoComplete="organization-title" />
                       <input
                         type="text"
                         name="departamento"
+                        id="company-dept-input"
                         value={formData.departamento}
                         onChange={handleInputChange}
-                        autoComplete="organization-title"
+                        autoComplete="one-time-code"
+                        role="presentation"
                         placeholder="Departamento de la empresa (ej: Recursos Humanos)"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       />

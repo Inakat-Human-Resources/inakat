@@ -1,7 +1,6 @@
 // RUTA: src/app/companies/page.tsx
 import CompaniesHeroSection from "@/components/sections/companies/CompaniesHeroSection";
 import CompanyBenefitsSection from "@/components/sections/companies/CompanyBenefitsSection";
-import CompanyTestimonialsSection from "@/components/sections/companies/CompanyTestimonialsSection";
 import FormRegisterForQuotationSection from "@/components/sections/companies/FormRegisterForQuotationSection";
 import Footer from "@/components/commons/Footer";
 
@@ -10,7 +9,7 @@ export default function CompaniesPage() {
     <main className="min-h-screen">
       <CompaniesHeroSection />
       <CompanyBenefitsSection />
-      <CompanyTestimonialsSection />
+      {/* CompanyTestimonialsSection removed — testimonials used placeholder data */}
       {/* Form section header */}
       <section id="register" className="bg-soft-beige pt-16 md:pt-24 pb-0">
         <div className="container mx-auto px-4 text-center">

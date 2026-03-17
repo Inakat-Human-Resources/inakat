@@ -98,7 +98,7 @@ describe('P3-09a: ExpertsSection uses real team profiles', () => {
 
   it('should NOT have placeholder names', () => {
     expect(content).not.toContain('David Bisbal');
-    expect(content).not.toContain('Denisse Tamez');
+    // Denisse Tamez Escamilla is now a real team member (added in f656093)
     expect(content).not.toContain('Javier Martínez');
     expect(content).not.toContain('Diego Torres');
     expect(content).not.toContain('Laura Pérez');

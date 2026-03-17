@@ -1,7 +1,6 @@
 // RUTA: src/components/sections/home/TestimonialsSection.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
 import Image, { StaticImageData } from 'next/image';
 import { useInView } from '@/hooks/useInView';
 import imgMayela from '@/assets/images/testimonials/mayela-sanchez.jpeg';
@@ -39,15 +38,7 @@ const testimonials: Testimonial[] = [
 ];
 
 const TestimonialsSection = () => {
-  const { ref, isInView } = useInView(0.2);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % testimonials.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, []);
+  const { ref, isInView } = useInView(0.1);
 
   return (
     <section
@@ -59,65 +50,55 @@ const TestimonialsSection = () => {
       }}
     >
       <div className="container mx-auto px-4">
-        <div
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} max-w-4xl mx-auto text-center`}
+        {/* Section title */}
+        <h2
+          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-14`}
         >
-          {/* Decorative quote */}
-          <span className="text-button-green text-8xl md:text-9xl font-display leading-none select-none">
-            &ldquo;
-          </span>
+          Lo que dicen nuestros clientes
+        </h2>
 
-          {/* Quote */}
-          <div className="relative -mt-12 md:-mt-16">
-            {testimonials.map((testimonial, index) => (
-              <div
-                key={index}
-                className={`transition-opacity duration-700 ${
-                  index === currentIndex
-                    ? 'opacity-100'
-                    : 'opacity-0 absolute inset-0'
-                }`}
-              >
-                <blockquote className="text-white text-2xl md:text-3xl lg:text-4xl font-light italic leading-relaxed">
-                  {testimonial.quote}
-                </blockquote>
-                <div className="mt-8 flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/30">
-                    <Image
-                      src={testimonial.image}
-                      alt={testimonial.author}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold text-lg">
-                      — {testimonial.author}
-                    </p>
-                    <p className="text-white/60 text-sm mt-1">
-                      {testimonial.role}
-                    </p>
-                  </div>
+        {/* Card grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {testimonials.map((testimonial, index) => (
+            <div
+              key={index}
+              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/15 transition-colors`}
+              style={{ transitionDelay: `${index * 150}ms` }}
+            >
+              {/* Decorative quote */}
+              <span className="text-button-green text-6xl font-display leading-none select-none">
+                &ldquo;
+              </span>
+
+              {/* Quote */}
+              <blockquote className="text-white/90 italic leading-relaxed -mt-4 mb-6 text-base">
+                {testimonial.quote}
+              </blockquote>
+
+              {/* Separator */}
+              <div className="h-px bg-white/10 mb-4" />
+
+              {/* Author */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30">
+                  <Image
+                    src={testimonial.image}
+                    alt={testimonial.author}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+                <div>
+                  <p className="font-display font-bold text-white text-sm">
+                    {testimonial.author}
+                  </p>
+                  <p className="text-white/60 text-xs">
+                    {testimonial.role}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Dots */}
-          <div className="flex justify-center gap-3 mt-10">
-            {testimonials.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentIndex(index)}
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  index === currentIndex
-                    ? 'bg-button-green scale-125'
-                    : 'bg-white/30 hover:bg-white/50'
-                }`}
-                aria-label={`Testimonial ${index + 1}`}
-              />
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

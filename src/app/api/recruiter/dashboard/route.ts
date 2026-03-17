@@ -165,6 +165,8 @@ export async function GET(request: Request) {
       company: string;
       updatedAt: Date;
       candidateProfile: unknown;
+      jobLatitude: number | null;
+      jobLongitude: number | null;
     }> = [];
 
     for (const assignment of enrichedAssignments) {
@@ -184,7 +186,9 @@ export async function GET(request: Request) {
             jobTitle: assignment.job.title,
             company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
             updatedAt: app.updatedAt,
-            candidateProfile: app.candidateProfile
+            candidateProfile: app.candidateProfile,
+            jobLatitude: assignment.job.latitude ?? null,
+            jobLongitude: assignment.job.longitude ?? null
           });
         } else if (app.status === 'evaluating') {
           evaluatingCount++;
@@ -197,7 +201,9 @@ export async function GET(request: Request) {
             jobTitle: assignment.job.title,
             company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
             updatedAt: app.updatedAt,
-            candidateProfile: app.candidateProfile
+            candidateProfile: app.candidateProfile,
+            jobLatitude: assignment.job.latitude ?? null,
+            jobLongitude: assignment.job.longitude ?? null
           });
         } else if (app.status === 'sent_to_company') {
           sentToCompanyCount++;
@@ -210,7 +216,9 @@ export async function GET(request: Request) {
             jobTitle: assignment.job.title,
             company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
             updatedAt: app.updatedAt,
-            candidateProfile: app.candidateProfile
+            candidateProfile: app.candidateProfile,
+            jobLatitude: assignment.job.latitude ?? null,
+            jobLongitude: assignment.job.longitude ?? null
           });
         } else if (app.status === 'hired' || app.status === 'accepted') {
           hiredCount++;
@@ -223,7 +231,9 @@ export async function GET(request: Request) {
             jobTitle: assignment.job.title,
             company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
             updatedAt: app.updatedAt,
-            candidateProfile: app.candidateProfile
+            candidateProfile: app.candidateProfile,
+            jobLatitude: assignment.job.latitude ?? null,
+            jobLongitude: assignment.job.longitude ?? null
           });
         } else if (app.status === 'rejected' || app.status === 'company_rejected') {
           rejectedCount++;
@@ -236,7 +246,9 @@ export async function GET(request: Request) {
             jobTitle: assignment.job.title,
             company: assignment.job.user?.companyRequest?.nombreEmpresa || assignment.job.company,
             updatedAt: app.updatedAt,
-            candidateProfile: app.candidateProfile
+            candidateProfile: app.candidateProfile,
+            jobLatitude: assignment.job.latitude ?? null,
+            jobLongitude: assignment.job.longitude ?? null
           });
         } else if (app.status === 'discarded') {
           discardedCount++;

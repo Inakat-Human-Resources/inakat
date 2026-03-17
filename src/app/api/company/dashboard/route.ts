@@ -116,7 +116,9 @@ export async function GET(request: Request) {
             id: true,
             title: true,
             location: true,
-            status: true
+            status: true,
+            latitude: true,
+            longitude: true
           }
         }
       },
@@ -190,7 +192,9 @@ export async function GET(request: Request) {
               linkedinUrl: candidate.linkedinUrl,
               portafolioUrl: candidate.portafolioUrl,
               notas: candidate.notas,
-              educacion: candidate.educacion // FEATURE: Educación múltiple
+              educacion: candidate.educacion, // FEATURE: Educación múltiple
+              latitude: candidate.latitude,
+              longitude: candidate.longitude
             }
           : null,
         recruiterNotes: notes?.recruiterNotes || null,

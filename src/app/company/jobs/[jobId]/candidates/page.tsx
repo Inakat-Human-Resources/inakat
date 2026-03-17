@@ -25,6 +25,7 @@ import {
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 import InterviewRequestModal from '@/components/company/InterviewRequestModal'; // FEAT-6: Solicitud de entrevista
+import DistanceBadge from '@/components/shared/DistanceBadge';
 
 // Tipos
 interface Job {
@@ -32,6 +33,8 @@ interface Job {
   title: string;
   company: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   salary: string;
   status: string;
   profile?: string;
@@ -62,6 +65,8 @@ interface Application {
     fotoUrl?: string; // FEAT-2: Foto de perfil
     experiences?: any[];
     documents?: any[];
+    latitude?: number | null;
+    longitude?: number | null;
   };
 }
 
@@ -511,6 +516,13 @@ export default function JobCandidatesPage() {
                                 {app.candidateProfile.universidad}
                               </span>
                             )}
+                            <DistanceBadge
+                              candidateLat={app.candidateProfile?.latitude}
+                              candidateLng={app.candidateProfile?.longitude}
+                              jobLat={job?.latitude}
+                              jobLng={job?.longitude}
+                              compact
+                            />
                           </div>
                         </div>
                       </div>

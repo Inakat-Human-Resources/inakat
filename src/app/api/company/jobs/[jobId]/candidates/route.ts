@@ -57,7 +57,9 @@ export async function GET(
         seniority: true,
         createdAt: true,
         userId: true,
-        habilidades: true
+        habilidades: true,
+        latitude: true,
+        longitude: true
       }
     });
 
@@ -168,7 +170,9 @@ export async function GET(
                 fotoUrl: candidate.fotoUrl, // FEAT-2: Foto de perfil
                 cartaPresentacion: candidate.cartaPresentacion || null,
                 experiences: candidate.experiences,
-                documents: candidate.documents
+                documents: candidate.documents,
+                latitude: candidate.latitude,
+                longitude: candidate.longitude
               }
             : null
         };

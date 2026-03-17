@@ -18,6 +18,7 @@ import {
   UserCheck,
   XCircle
 } from 'lucide-react';
+import DistanceBadge from '@/components/shared/DistanceBadge';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 
 // Key para localStorage de candidatos vistos
@@ -78,6 +79,8 @@ interface SentApplication {
   company: string;
   updatedAt: string;
   candidateProfile?: any;
+  jobLatitude?: number | null;
+  jobLongitude?: number | null;
 }
 
 interface Stats {
@@ -473,6 +476,13 @@ export default function RecruiterDashboard() {
                               <Building2 size={12} />
                               {app.company}
                             </span>
+                            <DistanceBadge
+                              candidateLat={app.candidateProfile?.latitude}
+                              candidateLng={app.candidateProfile?.longitude}
+                              jobLat={app.jobLatitude}
+                              jobLng={app.jobLongitude}
+                              compact
+                            />
                             <span>
                               Actualizado: {formatDate(app.updatedAt)}
                             </span>
