@@ -174,7 +174,7 @@ const ExpertsSection = () => {
               </p>
 
               {/* Video button */}
-              {selectedExpert.videoUrl && (
+              {selectedExpert.videoUrl ? (
                 <a
                   href={selectedExpert.videoUrl}
                   target="_blank"
@@ -184,6 +184,14 @@ const ExpertsSection = () => {
                   <Play className="w-4 h-4" />
                   Ver video
                 </a>
+              ) : (
+                <button
+                  disabled
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed"
+                >
+                  <Play className="w-4 h-4" />
+                  Video próximamente
+                </button>
               )}
             </div>
           </div>
