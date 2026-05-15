@@ -38,6 +38,16 @@ jest.mock('@/lib/prisma', () => ({
   prisma: mockPrisma
 }));
 
+// Mock de requireRole para defense-in-depth: por defecto devuelve éxito.
+// Los tests que esperan rechazo por permisos lo reemplazan vía mockResolvedValueOnce.
+jest.mock('@/lib/auth', () => ({
+  requireRole: jest.fn(),
+  requireAuth: jest.fn(),
+}));
+
+import { requireRole } from '@/lib/auth';
+const mockRequireRole = requireRole as jest.Mock;
+
 // Helper para crear requests con headers de autenticación
 function createMockRequest(options: {
   userId?: number;
@@ -54,6 +64,30 @@ function createMockRequest(options: {
     headers.set('x-user-role', options.userRole);
   }
 
+  // Sincronizar el mock de requireRole con el rol del request:
+  // - userRole='admin' → success
+  // - otro rol → 401 No autorizado (mismo status que el header check actual)
+  if (options.userRole === 'admin') {
+    mockRequireRole.mockResolvedValueOnce({
+      user: {
+        id: options.userId || 1,
+        email: 'admin@test.com',
+        nombre: 'Admin',
+        apellidoPaterno: null,
+        apellidoMaterno: null,
+        role: 'admin',
+        isActive: true,
+        credits: 0,
+        specialty: null,
+      },
+    });
+  } else {
+    mockRequireRole.mockResolvedValueOnce({
+      error: 'Acceso denegado - Permisos insuficientes',
+      status: 401,
+    });
+  }
+
   return {
     headers: {
       get: (name: string) => headers.get(name) || null
@@ -66,6 +100,8 @@ function createMockRequest(options: {
 describe('Sistema de Vendedores', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks no limpia la cola de mockResolvedValueOnce, así que la vaciamos
+    mockRequireRole.mockReset();
   });
 
   // =============================================

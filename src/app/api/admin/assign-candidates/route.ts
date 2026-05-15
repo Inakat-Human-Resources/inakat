@@ -3,11 +3,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createNotification } from '@/lib/notifications';
+import { requireRole } from '@/lib/auth';
 
 // POST - Asignar candidatos a una vacante
 // Crea Applications con status "injected_by_admin"
 export async function POST(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const body = await request.json();
     const { jobId, candidateIds } = body;
 
@@ -166,6 +176,15 @@ export async function POST(request: Request) {
 // GET - Obtener candidatos ya asignados a una vacante con datos del pipeline
 export async function GET(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
 

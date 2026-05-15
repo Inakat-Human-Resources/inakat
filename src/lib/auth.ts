@@ -7,13 +7,21 @@ import { prisma } from './prisma';
 // CONFIGURACIÓN
 // =============================================
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || 'fallback-secret-CHANGE-IN-PRODUCTION';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-
+// Validación estricta al cargar el módulo
 if (!process.env.JWT_SECRET) {
-  console.warn('[Auth] WARNING: JWT_SECRET not set. Using fallback secret.');
+  throw new Error(
+    '[Auth] FATAL: JWT_SECRET no está configurado. Configura la variable de entorno antes de iniciar la aplicación.'
+  );
 }
+
+if (process.env.JWT_SECRET.length < 32) {
+  throw new Error(
+    '[Auth] FATAL: JWT_SECRET debe tener al menos 32 caracteres por seguridad.'
+  );
+}
+
+const JWT_SECRET: string = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // =============================================
 // TYPES
@@ -105,6 +113,11 @@ export function verifyToken(token: string): JWTPayload | null {
 // AUTHENTICATION
 // =============================================
 
+// Hash bcrypt válido (cost=10) de un password aleatorio para comparar contra él
+// cuando el usuario no existe. Mantiene un tiempo de respuesta constante para
+// evitar que un atacante enumere emails registrados midiendo latencias.
+const DUMMY_HASH = '$2b$10$24SukS9M6uGGx6ejw6/v3eBEAE5OL6Whbwfj6ma.9/b6ekdNXJnGq';
+
 /**
  * Autentica un usuario con email y contraseña
  * @param email - Email del usuario
@@ -131,8 +144,9 @@ export async function authenticateUser(
       }
     });
 
-    // Usuario no encontrado
+    // Usuario no encontrado: hacer bcrypt dummy para mantener timing constante
     if (!user) {
+      await bcrypt.compare(password, DUMMY_HASH);
       return {
         success: false,
         error: 'Credenciales inválidas'
@@ -183,7 +197,8 @@ export async function authenticateUser(
       },
       token
     };
-  } catch {
+  } catch (error) {
+    console.error('[Auth] Error en authenticateUser:', error instanceof Error ? error.message : 'Unknown');
     return {
       success: false,
       error: 'Error al autenticar. Intenta de nuevo.'

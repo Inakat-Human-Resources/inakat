@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
+import { requireRole } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
 // Roles que el admin puede crear
@@ -11,6 +12,15 @@ const ALLOWED_ROLES = ['admin', 'recruiter', 'specialist'];
 // GET - Listar usuarios (filtrados por rol)
 export async function GET(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
     const search = searchParams.get('search');
@@ -93,6 +103,15 @@ export async function GET(request: Request) {
 // POST - Crear nuevo usuario
 export async function POST(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const body = await request.json();
     const {
       email,
@@ -194,6 +213,15 @@ export async function POST(request: Request) {
 // PUT - Actualizar usuario
 export async function PUT(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const body = await request.json();
     const {
       id,
@@ -292,6 +320,15 @@ export async function PUT(request: Request) {
 // DELETE - Desactivar usuario (soft delete)
 export async function DELETE(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

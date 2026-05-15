@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth';
 
 // Helper para obtener info de usuario de los headers (agregados por middleware)
 function getAuthFromHeaders(request: NextRequest): { userId: number; role: string } | null {
@@ -14,6 +15,15 @@ function getAuthFromHeaders(request: NextRequest): { userId: number; role: strin
 // GET - Listar todas las comisiones (filtrable por status)
 export async function GET(request: NextRequest) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const roleCheck = await requireRole('admin');
+    if ('error' in roleCheck) {
+      return NextResponse.json(
+        { success: false, error: roleCheck.error },
+        { status: roleCheck.status }
+      );
+    }
+
     const auth = getAuthFromHeaders(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json(

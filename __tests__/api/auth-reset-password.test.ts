@@ -268,9 +268,11 @@ describe('Console cleanup', () => {
     expect(content).toContain("console.info('[Email] Sent:'");
   });
 
-  it('3D: auth lib should keep console.warn', () => {
+  it('3D: auth lib should throw if JWT_SECRET is missing or weak', () => {
     const content = readFile('src/lib/auth.ts');
-    expect(content).toContain('console.warn');
+    expect(content).toContain('JWT_SECRET no está configurado');
+    expect(content).toContain('al menos 32 caracteres');
+    expect(content).not.toContain('fallback-secret-CHANGE-IN-PRODUCTION');
   });
 });
 

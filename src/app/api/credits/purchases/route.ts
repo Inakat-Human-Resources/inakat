@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '@/lib/auth';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 // Helper para calcular fecha de vencimiento de comisión (4 meses)
@@ -35,7 +35,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const payload = verifyToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: 'Token inválido o expirado' }, { status: 401 });
+    }
     if (payload.role !== 'company') {
       return NextResponse.json({ error: 'Solo empresas' }, { status: 403 });
     }

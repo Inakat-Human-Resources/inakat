@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth';
 
 /**
  * GET /api/admin/direct-applications
@@ -10,6 +11,15 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     // Verificar que es admin (el middleware ya valida esto)
     const userRole = request.headers.get('x-user-role');
 
@@ -79,6 +89,15 @@ export async function GET(request: Request) {
  */
 export async function PUT(request: Request) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     // Verificar que es admin
     const userRole = request.headers.get('x-user-role');
 

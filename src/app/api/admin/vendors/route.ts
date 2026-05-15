@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
 // Helper para obtener info de usuario de los headers (agregados por middleware)
@@ -15,6 +16,15 @@ function getAuthFromHeaders(request: NextRequest): { userId: number; role: strin
 // GET - Listar todos los vendedores con sus códigos
 export async function GET(request: NextRequest) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const roleCheck = await requireRole('admin');
+    if ('error' in roleCheck) {
+      return NextResponse.json(
+        { success: false, error: roleCheck.error },
+        { status: roleCheck.status }
+      );
+    }
+
     const auth = getAuthFromHeaders(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json(
@@ -151,6 +161,15 @@ export async function GET(request: NextRequest) {
 // POST - Crear nuevo vendedor (User + DiscountCode)
 export async function POST(request: NextRequest) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const roleCheck = await requireRole('admin');
+    if ('error' in roleCheck) {
+      return NextResponse.json(
+        { success: false, error: roleCheck.error },
+        { status: roleCheck.status }
+      );
+    }
+
     const auth = getAuthFromHeaders(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json(

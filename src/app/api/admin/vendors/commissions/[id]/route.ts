@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -18,6 +19,15 @@ function getAuthFromHeaders(request: NextRequest): { userId: number; role: strin
 // PUT - Actualizar estado de comisión
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const roleCheck = await requireRole('admin');
+    if ('error' in roleCheck) {
+      return NextResponse.json(
+        { success: false, error: roleCheck.error },
+        { status: roleCheck.status }
+      );
+    }
+
     const auth = getAuthFromHeaders(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json(
@@ -157,6 +167,15 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // GET - Obtener detalle de una comisión específica
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    // Defense-in-depth: verificar rol además del middleware
+    const roleCheck = await requireRole('admin');
+    if ('error' in roleCheck) {
+      return NextResponse.json(
+        { success: false, error: roleCheck.error },
+        { status: roleCheck.status }
+      );
+    }
+
     const auth = getAuthFromHeaders(request);
     if (!auth || auth.role !== 'admin') {
       return NextResponse.json(

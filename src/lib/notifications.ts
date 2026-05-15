@@ -65,7 +65,9 @@ export async function notifyAllAdmins(
     select: { id: true },
   });
 
-  console.log('[NOTIF] notifyAllAdmins called:', params.type, '| Admins encontrados:', admins.length, admins.map(a => a.id));
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[NOTIF] notifyAllAdmins called:', params.type, '| Admins:', admins.length);
+  }
 
   if (admins.length === 0) return;
 
