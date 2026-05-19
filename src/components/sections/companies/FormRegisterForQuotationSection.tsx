@@ -505,7 +505,13 @@ const FormRegisterForQuotationSection = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} suppressHydrationWarning>
+          <form onSubmit={handleSubmit} autoComplete="off" suppressHydrationWarning>
+            {/* Honeypots ocultos: absorben el autofill agresivo de Chrome
+                (recuerda credenciales de admin de sesiones anteriores). */}
+            <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+              <input type="text" name="username" tabIndex={-1} autoComplete="username" />
+              <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
                 <div className="mb-8">
@@ -519,6 +525,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Nombre *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                       {errors.nombre && (
@@ -536,6 +543,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Apellido Paterno *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                       {errors.apellidoPaterno && (
@@ -553,6 +561,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Apellido Materno *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                       {errors.apellidoMaterno && (
@@ -637,6 +646,7 @@ const FormRegisterForQuotationSection = () => {
                         className={`w-full p-3 rounded-lg border text-gray-700 ${
                           errors.password ? 'border-red-500' : 'border-gray-300'
                         }`}
+                        autoComplete="new-password"
                         required
                         minLength={8}
                       />
@@ -658,6 +668,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Confirma tu contraseña *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="new-password"
                         required
                       />
                       {errors.confirmPassword && (
@@ -719,6 +730,7 @@ const FormRegisterForQuotationSection = () => {
                       onChange={handleInputChange}
                       placeholder="Nombre comercial *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      autoComplete="off"
                       required
                     />
                   </div>
@@ -731,6 +743,7 @@ const FormRegisterForQuotationSection = () => {
                       onChange={handleInputChange}
                       placeholder="Correo electrónico *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      autoComplete="off"
                       required
                     />
                     {errors.correoEmpresa && (
@@ -748,6 +761,7 @@ const FormRegisterForQuotationSection = () => {
                       onChange={handleInputChange}
                       placeholder="Sitio web (opcional)"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      autoComplete="off"
                     />
                     {errors.sitioWeb && (
                       <span className="text-red-600 text-sm font-semibold block mt-1">
@@ -764,6 +778,7 @@ const FormRegisterForQuotationSection = () => {
                       onChange={handleInputChange}
                       placeholder="Razón Social *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      autoComplete="off"
                       required
                     />
                   </div>
@@ -776,6 +791,7 @@ const FormRegisterForQuotationSection = () => {
                       onChange={handleInputChange}
                       placeholder="RFC *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 uppercase"
+                      autoComplete="off"
                       required
                       maxLength={13}
                     />
@@ -796,6 +812,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Calle y número *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                     </div>
@@ -807,6 +824,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Colonia *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                     </div>
@@ -818,6 +836,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Ciudad *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         required
                       />
                     </div>
@@ -829,6 +848,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         placeholder="Código Postal *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        autoComplete="off"
                         maxLength={5}
                         required
                       />

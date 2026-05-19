@@ -11,7 +11,7 @@ export default function CompaniesPage() {
       <CompanyBenefitsSection />
       {/* CompanyTestimonialsSection removed — testimonials used placeholder data */}
       {/* Form section header */}
-      <section id="register" className="bg-soft-beige pt-16 md:pt-24 pb-0">
+      <section id="register" className="bg-soft-beige pt-16 md:pt-24 pb-12 md:pb-16">
         <div className="container mx-auto px-4 text-center">
           <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark mb-4">
             Registra tu Empresa

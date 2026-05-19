@@ -14,6 +14,7 @@ import imgErnesto from '@/assets/images/2-about/ernesto-zapata.png';
 import imgAndre from '@/assets/images/2-about/andre-gracia.png';
 import imgAlejandro from '@/assets/images/2-about/alejandro-martinez.png';
 import imgDenisse from '@/assets/images/2-about/denisse.png';
+import imgAdriana from '@/assets/images/2-about/adriana-lara.jpeg';
 
 interface Expert {
   name: string;
@@ -78,6 +79,12 @@ const experts: Expert[] = [
     image: imgDenisse,
     bio: '',
   },
+  {
+    name: 'Adriana Lara Ávalos',
+    role: 'Especialista en Manufactura y Sistemas de Calidad',
+    image: imgAdriana,
+    bio: 'Ingeniera Industrial por el Tecnológico de Monterrey con minor en Sistemas y estancia académica en Hochschule Karlsruhe (Alemania). Manufacturing Engineer en KATCON México con experiencia en APQP, FMEA, IATF 16949 e ISO 9001/14001. Especialista en evaluar candidatos para roles de manufactura, calidad y mejora continua de procesos.',
+  },
 ];
 
 const ExpertsSection = () => {
@@ -106,23 +113,28 @@ const ExpertsSection = () => {
           </p>
 
           {/* Experts grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 max-w-6xl mx-auto">
             {experts.map((expert, index) => (
               <button
                 key={index}
                 onClick={() => setSelectedExpert(expert)}
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all text-center cursor-pointer hover:-translate-y-1`}
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-2xl p-6 md:p-7 shadow-sm hover:shadow-lg transition-all text-center cursor-pointer hover:-translate-y-1`}
                 style={{ transitionDelay: `${index * 80}ms` }}
               >
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
+                <div className="w-28 h-28 md:w-36 md:h-36 lg:w-40 lg:h-40 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
                   <Image
                     src={expert.image}
                     alt={expert.name}
+                    width={320}
+                    height={320}
+                    sizes="(min-width: 1024px) 160px, (min-width: 768px) 144px, 112px"
+                    quality={85}
+                    priority={index < 4}
+                    loading={index < 4 ? undefined : 'lazy'}
                     className="w-full h-full object-cover"
-                    loading="lazy"
                   />
                 </div>
-                <h3 className="font-display font-bold text-title-dark text-sm md:text-base">
+                <h3 className="font-display font-bold text-title-dark text-base md:text-lg">
                   {expert.name}
                 </h3>
                 <p className="text-button-green text-sm mt-1">{expert.role}</p>

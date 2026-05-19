@@ -1,10 +1,17 @@
 // RUTA: src/components/sections/home/SpecialtiesSection.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInView } from '@/hooks/useInView';
 
-const specialties = [
+interface Specialty {
+  name: string;
+  subs: string[];
+}
+
+// Fallback en caso de que el endpoint falle o tarde.
+// Coincide con los seeds iniciales del catálogo de especialidades.
+const FALLBACK_SPECIALTIES: Specialty[] = [
   {
     name: 'Psicología, Educación y Ciencias Humanas',
     subs: [
@@ -75,6 +82,38 @@ const specialties = [
 const SpecialtiesSection = () => {
   const { ref, isInView } = useInView(0.15);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [specialties, setSpecialties] =
+    useState<Specialty[]>(FALLBACK_SPECIALTIES);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/specialties?subcategories=true', {
+          cache: 'force-cache',
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled || !json?.success || !Array.isArray(json.data)) return;
+
+        const mapped: Specialty[] = json.data
+          .map((s: { name: string; subcategories?: string[] }) => ({
+            name: s.name,
+            subs: Array.isArray(s.subcategories) ? s.subcategories : [],
+          }))
+          .filter((s: Specialty) => s.name);
+
+        if (mapped.length > 0) setSpecialties(mapped);
+      } catch {
+        // Mantener fallback ante cualquier error de red
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <section
@@ -87,7 +126,9 @@ const SpecialtiesSection = () => {
           className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-4`}
         >
           Especialistas en{' '}
-          <span className="text-button-green">7 áreas clave</span>
+          <span className="text-button-green">
+            {specialties.length} áreas clave
+          </span>
         </h2>
         <p
           className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-white/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
@@ -101,7 +142,7 @@ const SpecialtiesSection = () => {
         <div className="flex flex-wrap justify-center gap-4 max-w-4xl mx-auto">
           {specialties.map((specialty, index) => (
             <div
-              key={index}
+              key={specialty.name}
               className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
               style={{ transitionDelay: `${index * 80}ms` }}
             >
@@ -122,22 +163,28 @@ const SpecialtiesSection = () => {
         </div>
 
         {/* Expanded subcategories */}
-        {expandedIndex !== null && (
+        {expandedIndex !== null && specialties[expandedIndex] && (
           <div className="mt-8 max-w-3xl mx-auto">
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 md:p-8">
               <h3 className="font-display text-lg font-semibold text-button-green mb-4">
                 {specialties[expandedIndex].name}
               </h3>
-              <div className="flex flex-wrap gap-3">
-                {specialties[expandedIndex].subs.map((sub, i) => (
-                  <span
-                    key={i}
-                    className="px-4 py-2 bg-white/10 rounded-lg text-white/90 text-sm"
-                  >
-                    {sub}
-                  </span>
-                ))}
-              </div>
+              {specialties[expandedIndex].subs.length > 0 ? (
+                <div className="flex flex-wrap gap-3">
+                  {specialties[expandedIndex].subs.map((sub, i) => (
+                    <span
+                      key={i}
+                      className="px-4 py-2 bg-white/10 rounded-lg text-white/90 text-sm"
+                    >
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-white/60 text-sm">
+                  Próximamente más detalles de esta especialidad.
+                </p>
+              )}
             </div>
           </div>
         )}

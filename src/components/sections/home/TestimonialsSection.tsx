@@ -28,13 +28,6 @@ const testimonials: Testimonial[] = [
     role: 'Co-Founder & CPO · Reserhub',
     image: imgAdrian,
   },
-  {
-    quote:
-      'Un claro reflejo de la capacidad de Inakat para identificar y conectar el mejor talento especializado de alto nivel en equipos de producto, tecnología y operación.',
-    author: 'Adrian Cuadros',
-    role: 'Co-Founder & CPO · Reserhub',
-    image: imgAdrian,
-  },
 ];
 
 const TestimonialsSection = () => {
