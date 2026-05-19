@@ -30,12 +30,19 @@ export async function GET(request: Request) {
     // Si solo se necesitan los nombres (para selects simples)
     const names = specialties.map((s) => s.name);
 
-    return NextResponse.json({
-      success: true,
-      data: specialties,
-      names, // Array simple de nombres para selects
-      count: specialties.length
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: specialties,
+        names, // Array simple de nombres para selects
+        count: specialties.length
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400'
+        }
+      }
+    );
   } catch (error) {
     console.error('Error fetching specialties:', error);
     return NextResponse.json(
