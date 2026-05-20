@@ -14,7 +14,7 @@ import imgErnesto from '@/assets/images/2-about/ernesto-zapata.png';
 import imgAndre from '@/assets/images/2-about/andre-gracia.png';
 import imgAlejandro from '@/assets/images/2-about/alejandro-martinez.png';
 import imgDenisse from '@/assets/images/2-about/denisse.png';
-import imgAdriana from '@/assets/images/2-about/adriana-lara.jpeg';
+import imgAdriana from '@/assets/images/2-about/adriana-lara.png';
 
 interface Expert {
   name: string;
