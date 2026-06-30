@@ -23,7 +23,7 @@ export async function GET(
       );
     }
 
-    if (!['admin', 'recruiter', 'company'].includes(userRole)) {
+    if (!['admin', 'recruiter', 'specialist', 'company'].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: 'No autorizado' },
         { status: 403 }
@@ -41,7 +41,15 @@ export async function GET(
             candidatePhone: true,
             status: true,
             job: {
-              select: { id: true, title: true, company: true }
+              select: {
+                id: true,
+                title: true,
+                company: true,
+                userId: true,
+                assignment: {
+                  select: { recruiterId: true, specialistId: true }
+                }
+              }
             }
           }
         },
@@ -58,7 +66,43 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: interviewRequest });
+    // Autorización: dueño de la solicitud (requestedById), admin, o
+    // recruiter/specialist asignado a la job. Evita fuga de PII del candidato.
+    const parsedUserId = parseInt(userId);
+    const assignment = interviewRequest.application?.job?.assignment;
+    const authorized =
+      userRole === 'admin' ||
+      interviewRequest.requestedById === parsedUserId ||
+      (userRole === 'recruiter' && assignment?.recruiterId === parsedUserId) ||
+      (userRole === 'specialist' && assignment?.specialistId === parsedUserId);
+
+    if (!authorized) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta solicitud' },
+        { status: 403 }
+      );
+    }
+
+    // SEGURIDAD: userId del dueño y los IDs de staff (recruiter/specialist) se
+    // añadieron al select sólo para autorizar; no deben salir en la respuesta.
+    const { application, ...rest } = interviewRequest;
+    const safeData = {
+      ...rest,
+      application: application
+        ? {
+            ...application,
+            job: application.job
+              ? {
+                  id: application.job.id,
+                  title: application.job.title,
+                  company: application.job.company,
+                }
+              : application.job,
+          }
+        : application,
+    };
+
+    return NextResponse.json({ success: true, data: safeData });
   } catch (error) {
     console.error('Error obteniendo solicitud de entrevista:', error);
     return NextResponse.json(
@@ -106,13 +150,37 @@ export async function PATCH(
     }
 
     const existing = await prisma.interviewRequest.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
+      include: {
+        application: {
+          select: {
+            job: {
+              select: {
+                assignment: { select: { recruiterId: true } }
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Solicitud no encontrada' },
         { status: 404 }
+      );
+    }
+
+    // Autorización: admin, o el recruiter asignado a la job de la solicitud.
+    const recruiterId = existing.application?.job?.assignment?.recruiterId;
+    const authorized =
+      userRole === 'admin' ||
+      (userRole === 'recruiter' && recruiterId === parseInt(userId));
+
+    if (!authorized) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta solicitud' },
+        { status: 403 }
       );
     }
 
