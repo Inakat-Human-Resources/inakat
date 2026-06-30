@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/pricing-delete.test.ts
 
 /**
@@ -142,7 +143,8 @@ describe('DELETE /api/admin/pricing', () => {
       mockPrismaPricingMatrix.findUnique.mockResolvedValue(mockPricingEntry);
       mockPrismaJob.findMany.mockResolvedValue(activeJobs);
 
-      const foundJobs = await mockPrismaJob.findMany({});
+      const foundJobs: Array<{ id: number; title: string; company: string; status: string }> =
+        await mockPrismaJob.findMany({});
 
       const conflictResponse = {
         success: false,

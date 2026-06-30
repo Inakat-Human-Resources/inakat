@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/smoke/api-endpoints.test.ts
 
 /**
@@ -93,7 +94,7 @@ const mockPrisma = {
   contactMessage: {
     create: jest.fn(),
   },
-  $transaction: jest.fn((fn: (tx: typeof mockPrisma) => Promise<unknown>) =>
+  $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>): Promise<unknown> =>
     fn(mockPrisma)
   ),
 };

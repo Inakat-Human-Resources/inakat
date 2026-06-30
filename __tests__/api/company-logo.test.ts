@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/company-logo.test.ts
 
 /**
@@ -81,7 +82,7 @@ describe('FEAT-1: Logo de Empresa', () => {
         title: 'Desarrollador',
         company: 'TechCorp',
         isConfidential: false,
-        user: null,
+        user: null as { companyRequest: { logoUrl: string | null } | null } | null,
       };
 
       const logoUrl = job.user?.companyRequest?.logoUrl || null;
@@ -248,7 +249,7 @@ describe('FEAT-1: Logo de Empresa', () => {
         location: 'GDL',
         isConfidential: false,
         user: {
-          companyRequest: null,
+          companyRequest: null as { logoUrl: string | null } | null,
         },
       };
 

@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/pricing.test.ts
 
 /**
@@ -386,7 +387,7 @@ describe('Admin Pricing API Tests', () => {
         credits: 12
       };
 
-      const entryWithoutLocation = {
+      const entryWithoutLocation: Record<string, unknown> = {
         profile: 'Tecnología',
         seniority: 'Jr',
         workMode: 'remote',

@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/company-requests.test.ts
 
 /**
@@ -386,8 +387,8 @@ describe('Company Requests API Logic Tests', () => {
 
     it('POST debe ser público - cualquiera puede registrar empresa', () => {
       // Simular la lógica del middleware para POST
-      const pathname = '/api/company-requests';
-      const method = 'POST';
+      const pathname: string = '/api/company-requests';
+      const method: string = 'POST';
 
       // La excepción en el middleware permite POST sin autenticación
       const isPublicPostRoute = pathname === '/api/company-requests' && method === 'POST';
@@ -396,9 +397,9 @@ describe('Company Requests API Logic Tests', () => {
     });
 
     it('GET requiere rol admin', () => {
-      const pathname = '/api/company-requests';
-      const method = 'GET';
-      const userRole = 'user';
+      const pathname: string = '/api/company-requests';
+      const method: string = 'GET';
+      const userRole: string = 'user';
 
       // La ruta está protegida para admin
       const isAdminRoute = pathname.startsWith('/api/company-requests');
@@ -411,9 +412,9 @@ describe('Company Requests API Logic Tests', () => {
     });
 
     it('GET con rol admin tiene acceso', () => {
-      const pathname = '/api/company-requests';
-      const method = 'GET';
-      const userRole = 'admin';
+      const pathname: string = '/api/company-requests';
+      const method: string = 'GET';
+      const userRole: string = 'admin';
 
       const isAdminRoute = pathname.startsWith('/api/company-requests');
       const isPostException = pathname === '/api/company-requests' && method === 'POST';
@@ -425,9 +426,9 @@ describe('Company Requests API Logic Tests', () => {
     });
 
     it('PUT a /api/company-requests/[id] requiere admin', () => {
-      const pathname = '/api/company-requests/123';
-      const method = 'PUT';
-      const userRole = 'company';
+      const pathname: string = '/api/company-requests/123';
+      const method: string = 'PUT';
+      const userRole: string = 'company';
 
       const isAdminRoute = pathname.startsWith('/api/company-requests');
       const isPostException = pathname === '/api/company-requests' && method === 'POST';
@@ -439,9 +440,9 @@ describe('Company Requests API Logic Tests', () => {
     });
 
     it('DELETE a /api/company-requests/[id] requiere admin', () => {
-      const pathname = '/api/company-requests/456';
-      const method = 'DELETE';
-      const userRole = 'recruiter';
+      const pathname: string = '/api/company-requests/456';
+      const method: string = 'DELETE';
+      const userRole: string = 'recruiter';
 
       const isAdminRoute = pathname.startsWith('/api/company-requests');
       const isPostException = pathname === '/api/company-requests' && method === 'POST';
@@ -453,8 +454,8 @@ describe('Company Requests API Logic Tests', () => {
     });
 
     it('POST a subrutas como /api/company-requests/123 NO es público', () => {
-      const pathname = '/api/company-requests/123';
-      const method = 'POST';
+      const pathname: string = '/api/company-requests/123';
+      const method: string = 'POST';
 
       // Solo POST a la ruta exacta /api/company-requests es público
       const isPublicPostRoute = pathname === '/api/company-requests' && method === 'POST';

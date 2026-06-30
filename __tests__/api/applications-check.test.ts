@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/applications-check.test.ts
 
 /**
@@ -103,7 +104,7 @@ describe('Applications Check API Tests', () => {
     });
 
     it('debería requerir jobId', () => {
-      const params = { email: 'test@test.com' };
+      const params: { email?: string; jobId?: number } = { email: 'test@test.com' };
       const hasJobId = !!params.jobId;
 
       expect(hasJobId).toBe(false);
@@ -111,7 +112,7 @@ describe('Applications Check API Tests', () => {
     });
 
     it('debería requerir email', () => {
-      const params = { jobId: 1 };
+      const params: { email?: string; jobId?: number } = { jobId: 1 };
       const hasEmail = !!params.email;
 
       expect(hasEmail).toBe(false);

@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/recruiter-dashboard.test.ts
 
 /**
@@ -300,7 +301,7 @@ describe('Recruiter Dashboard API Logic Tests', () => {
     });
 
     it('debería manejar el primer envío sin candidatos previos', () => {
-      const previouslySent = ''; // Ningún candidato enviado aún
+      const previouslySent: string = ''; // Ningún candidato enviado aún
       const newCandidateIds = [1, 2];
 
       const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];

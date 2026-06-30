@@ -137,7 +137,7 @@ describe('Batch 4C: Company candidates page has DistanceBadge', () => {
 
   it('Application candidateProfile should have latitude/longitude', () => {
     // Check candidateProfile has the fields
-    expect(content).toMatch(/candidateProfile.*latitude/s);
+    expect(content).toMatch(/candidateProfile[\s\S]*latitude/);
   });
 });
 

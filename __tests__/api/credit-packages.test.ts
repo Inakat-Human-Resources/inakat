@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/credit-packages.test.ts
 
 /**
@@ -160,7 +161,7 @@ describe('Credit Packages API Tests', () => {
     });
 
     it('debería requerir campo name', () => {
-      const body = { credits: 5, price: 18000 };
+      const body: Record<string, unknown> = { credits: 5, price: 18000 };
       const hasName = !!body.name;
       expect(hasName).toBe(false);
     });
