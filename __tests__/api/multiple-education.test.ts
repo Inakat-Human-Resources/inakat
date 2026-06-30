@@ -8,6 +8,16 @@
 
 import { prisma } from '@/lib/prisma';
 
+// Tests de INTEGRACIÓN contra una base de datos real (crean/leen/borran registros).
+// Se omiten por defecto (CI y local sin DB, donde fallarían con ENOTFOUND) y se
+// ejecutan con `npm run test:integration` o RUN_INTEGRATION_TESTS=true, siempre
+// con un DATABASE_URL alcanzable.
+const describeDb =
+  process.env.RUN_INTEGRATION_TESTS === 'true' ||
+  process.env.npm_lifecycle_event === 'test:integration'
+    ? describe
+    : describe.skip;
+
 // Datos de prueba
 const TEST_EDUCATIONS = [
   {
@@ -30,7 +40,7 @@ const TEST_EDUCATIONS = [
   }
 ];
 
-describe('FEATURE: Educación Múltiple', () => {
+describeDb('FEATURE: Educación Múltiple', () => {
   let testCandidateId: number | null = null;
   let testUserId: number | null = null;
 
