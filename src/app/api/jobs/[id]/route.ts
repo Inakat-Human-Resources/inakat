@@ -213,6 +213,26 @@ export async function PATCH(
       );
     }
 
+    // SEGURIDAD (#39): No permitir PUBLICAR GRATIS un borrador desde PATCH.
+    // Sólo draft -> active es "publicación gratis" (un borrador nunca pagó
+    // créditos); debe pasar por /api/jobs/publish, que valida y cobra. En cambio
+    // paused/closed -> active es REANUDAR una vacante que YA pagó créditos, y
+    // debe seguir permitido para el owner (flujo "Reanudar vacante" del dashboard).
+    // Admin puede activar directamente en cualquier caso.
+    if (
+      body.status === 'active' &&
+      existingJob.status === 'draft' &&
+      auth.role !== 'admin'
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Para publicar/activar esta vacante usa el flujo de publicación (/api/jobs/publish), que valida y cobra los créditos correspondientes.'
+        },
+        { status: 403 }
+      );
+    }
+
     // Validar closedReason si se proporciona
     const validClosedReasons = ['success', 'cancelled'];
     if (body.closedReason && !validClosedReasons.includes(body.closedReason)) {

@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { applyRateLimit, APPLICATION_RATE_LIMIT } from '@/lib/rate-limit';
 import { notifyAllAdmins } from '@/lib/notifications';
+import { cookies } from 'next/headers';
+import { verifyToken } from '@/lib/auth';
 
 // GET - Listar aplicaciones (filtradas por job o por usuario admin)
 export async function GET(request: Request) {
@@ -76,13 +78,24 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       jobId,
-      userId,
       candidateName,
       candidateEmail,
       candidatePhone,
       cvUrl,
       coverLetter
     } = body;
+
+    // SEGURIDAD (#48): NUNCA confiar en body.userId (permitiría suplantar a otro usuario).
+    // Si hay sesión válida, la aplicación se asocia al id de la sesión; si no, queda anónima (null).
+    let sessionUserId: number | null = null;
+    const cookieStore = await cookies();
+    const token = cookieStore.get('auth-token')?.value;
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload?.userId) {
+        sessionUserId = payload.userId;
+      }
+    }
 
     // Validaciones básicas
     if (!jobId || !candidateName || !candidateEmail) {
@@ -138,7 +151,7 @@ export async function POST(request: Request) {
     const application = await prisma.application.create({
       data: {
         jobId: parseInt(jobId),
-        userId: userId || null,
+        userId: sessionUserId,
         candidateName,
         candidateEmail: candidateEmail.toLowerCase(),
         candidatePhone: candidatePhone || null,
