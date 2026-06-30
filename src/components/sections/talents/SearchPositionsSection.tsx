@@ -312,8 +312,18 @@ const SearchPositionsSection = () => {
               </select>
             </div>
 
-            <button className="bg-lemon-green text-black font-bold px-8 py-3 rounded-full hover:bg-green-700 flex items-center justify-center gap-2">
-              <Search size={20} />
+            {/* #64: el filtrado es reactivo (en vivo) — el botón ahora lleva el
+                foco a los resultados en vez de no hacer nada. */}
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById('resultados-vacantes')
+                  ?.scrollIntoView({ behavior: 'smooth' })
+              }
+              className="cta-glow bg-lemon-green text-black font-bold px-8 py-3 rounded-full hover:bg-green-700 flex items-center justify-center gap-2"
+            >
+              <Search size={20} aria-hidden="true" />
               BUSCAR
             </button>
           </div>
@@ -321,7 +331,7 @@ const SearchPositionsSection = () => {
       </div>
 
       {/* Lista de Vacantes */}
-      <div className="container mx-auto py-12 px-4">
+      <div id="resultados-vacantes" className="container mx-auto py-12 px-4">
         {/* Mensaje de éxito */}
         {applicationSuccess && (
           <div className="mb-6 p-4 bg-green-100 border-2 border-green-500 text-green-800 rounded-lg text-center font-semibold">
@@ -457,12 +467,22 @@ const SearchPositionsSection = () => {
               {filteredJobs.map((job) => (
                 <div
                   key={job.id}
-                  className={`bg-white p-6 rounded-lg shadow-lg cursor-pointer hover:shadow-xl relative ${
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selectedJob?.id === job.id}
+                  aria-label={`Ver detalle de la vacante ${job.title}`}
+                  onClick={() => setSelectedJob(job)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedJob(job);
+                    }
+                  }}
+                  className={`hover-lift bg-white p-6 rounded-lg shadow-lg cursor-pointer relative ${
                     selectedJob?.id === job.id
                       ? 'border-2 border-button-green'
                       : ''
                   }`}
-                  onClick={() => setSelectedJob(job)}
                 >
                   {/* Solo mostrar iconos de guardar/menú para candidatos */}
                   {user && user.role === 'candidate' && (
