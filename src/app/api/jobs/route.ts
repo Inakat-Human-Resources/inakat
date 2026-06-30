@@ -2,8 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { getOptionalAuthUser, requireRole } from '@/lib/auth';
 import { calculateJobCreditCost } from '@/lib/pricing';
 import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 
@@ -35,8 +34,17 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId') || '';
     const includeDrafts = searchParams.get('includeDrafts') === 'true';
 
-    // Determinar si es vista de propietario (para no sanitizar)
-    const isOwnerView = !!userId;
+    // SEGURIDAD: la "vista de propietario" (que expone notasInternas y los datos
+    // reales de vacantes confidenciales) NO puede decidirse por la mera presencia
+    // del query param ?userId. Debe exigir una sesión válida cuyo usuario sea el
+    // propietario solicitado (o un admin). De lo contrario cualquier visitante
+    // anónimo leería notas internas y de-anonimizaría vacantes confidenciales.
+    const authUser = await getOptionalAuthUser();
+    const requestedUserId = userId ? parseInt(userId) : null;
+    const isOwnerView =
+      !!authUser &&
+      requestedUserId !== null &&
+      (authUser.role === 'admin' || authUser.id === requestedUserId);
 
     const where: any = {};
 
@@ -51,8 +59,8 @@ export async function GET(request: Request) {
       }
     }
 
-    if (userId) {
-      where.userId = parseInt(userId);
+    if (requestedUserId !== null && !Number.isNaN(requestedUserId)) {
+      where.userId = requestedUserId;
     }
 
     if (search) {
@@ -137,24 +145,18 @@ export async function GET(request: Request) {
 // POST - Crear nueva vacante
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
-
-    let userId: number | null = null;
-    let userRole: string = 'user';
-
-    if (token) {
-      const payload = verifyToken(token);
-      if (payload?.userId) {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.userId }
-        });
-        if (user) {
-          userId = user.id;
-          userRole = user.role;
-        }
-      }
+    // SEGURIDAD: crear vacantes requiere sesión de empresa o admin.
+    // Antes se permitía crear vacantes anónimas (userId null) con cualquier rol.
+    const auth = await requireRole(['company', 'admin']);
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
     }
+
+    const userId: number = auth.user.id;
+    const userRole: string = auth.user.role;
 
     const body = await request.json();
     const {

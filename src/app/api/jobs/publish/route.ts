@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, requireRole } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { calculateJobCreditCost } from '@/lib/pricing';
 
@@ -13,7 +13,15 @@ function sanitizeConfidentialJob(job: any) {
     ...job,
     company: 'Empresa Confidencial',
     location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México',
+    logoUrl: null,
   };
+}
+
+// SEGURIDAD: campos internos que NUNCA deben salir en una respuesta pública.
+// notasInternas es información interna de INAKAT, no visible para candidatos.
+function stripInternalFields(job: any) {
+  const { notasInternas, ...rest } = job;
+  return rest;
 }
 
 // GET - Listar todas las vacantes activas
@@ -78,8 +86,10 @@ export async function GET(request: Request) {
       }
     });
 
-    // Sanitizar vacantes confidenciales
-    const sanitizedJobs = jobs.map(job => sanitizeConfidentialJob(job));
+    // SEGURIDAD: este GET es público (no está protegido por middleware). Quitar
+    // notasInternas de TODAS las vacantes y sanear las confidenciales antes de
+    // responder. Antes se devolvían las notas internas de todas las vacantes.
+    const sanitizedJobs = jobs.map(job => sanitizeConfidentialJob(stripInternalFields(job)));
 
     return NextResponse.json({
       success: true,
@@ -98,28 +108,19 @@ export async function GET(request: Request) {
 // POST - Crear nueva vacante (como borrador por defecto)
 export async function POST(request: Request) {
   try {
-    // Verificar autenticación
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
-
-    let userId: number | null = null;
-    let userRole: string = 'user';
-    let userCredits: number = 0;
-
-    if (token) {
-      const payload = verifyToken(token);
-      if (payload?.userId) {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.userId },
-          select: { id: true, role: true, credits: true }
-        });
-        if (user) {
-          userId = user.id;
-          userRole = user.role;
-          userCredits = user.credits;
-        }
-      }
+    // SEGURIDAD: crear/publicar vacantes requiere sesión de empresa o admin.
+    // Antes se permitía crear vacantes de forma anónima (userId null) y con
+    // cualquier rol.
+    const auth = await requireRole(['company', 'admin']);
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
     }
+
+    const userId: number = auth.user.id;
+    const userRole: string = auth.user.role;
 
     const body = await request.json();
     const {
