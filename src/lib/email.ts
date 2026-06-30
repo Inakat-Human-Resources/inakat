@@ -40,6 +40,40 @@ function getTransporter(): nodemailer.Transporter | null {
 }
 
 // =============================================
+// SEGURIDAD: ESCAPE / SANITIZACIÓN
+// =============================================
+
+/**
+ * Escapa caracteres HTML para evitar inyección de HTML/XSS cuando se interpolan
+ * datos controlados por el usuario (nombres de empresa, candidatos, vacantes…)
+ * dentro de las plantillas de correo (#67/#12).
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Elimina CR/LF de un valor que va en una cabecera de correo (to, subject,
+ * replyTo) para prevenir inyección de cabeceras (#67).
+ */
+export function sanitizeEmailHeader(value: string): string {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+/** Enmascara un email para no escribir PII completa en logs (#68). */
+function maskEmail(email: string): string {
+  const [user, domain] = String(email ?? '').split('@');
+  if (!domain) return '***';
+  const head = user.length <= 2 ? user[0] || '' : user.slice(0, 2);
+  return `${head}***@${domain}`;
+}
+
+// =============================================
 // HELPER GENÉRICO DE ENVÍO
 // =============================================
 
@@ -53,25 +87,31 @@ interface SendEmailParams {
 export async function sendEmail(params: SendEmailParams): Promise<boolean> {
   const transport = getTransporter();
 
+  // SEGURIDAD (#67): sanear cabeceras (to/subject/replyTo) contra inyección CRLF.
+  const to = sanitizeEmailHeader(params.to);
+  const subject = sanitizeEmailHeader(params.subject);
+  const replyTo = params.replyTo ? sanitizeEmailHeader(params.replyTo) : undefined;
+
   if (!transport) {
-    console.warn('[Email] Skipping email (SMTP not configured):', params.subject);
+    console.warn('[Email] Skipping email (SMTP not configured):', subject);
     return false;
   }
 
   try {
     await transport.sendMail({
       from: SMTP_FROM,
-      to: params.to,
-      subject: params.subject,
+      to,
+      subject,
       html: params.html,
-      replyTo: params.replyTo,
+      replyTo,
     });
-    console.info('[Email] Sent:', { to: params.to, subject: params.subject });
+    // No registrar el email completo (PII, #68): se enmascara.
+    console.info('[Email] Sent:', { to: maskEmail(to), subject });
     return true;
   } catch (error) {
     console.error('[Email] Failed to send:', {
-      to: params.to,
-      subject: params.subject,
+      to: maskEmail(to),
+      subject,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return false;
@@ -121,6 +161,8 @@ function baseTemplate(content: string): string {
 // =============================================
 // NOTIFICACIONES ESPECÍFICAS
 // =============================================
+// NOTA: todos los valores controlados por el usuario se pasan por escapeHtml()
+// antes de interpolarse en el HTML (#67/#12).
 
 /** 1. Empresa: Su solicitud de registro fue aprobada */
 export async function sendCompanyApproved(params: {
@@ -131,14 +173,14 @@ export async function sendCompanyApproved(params: {
 }): Promise<boolean> {
   const html = baseTemplate(`
     <h2>Bienvenido a INAKAT!</h2>
-    <p>Nos complace informarte que la solicitud de registro de <strong>${params.nombreEmpresa}</strong> ha sido aprobada.</p>
+    <p>Nos complace informarte que la solicitud de registro de <strong>${escapeHtml(params.nombreEmpresa)}</strong> ha sido aprobada.</p>
     <div class="info-box">
       <p><strong>Tus credenciales de acceso:</strong></p>
-      <p>Email: ${params.email}</p>
-      <p>Contrasena: ${params.password}</p>
+      <p>Email: ${escapeHtml(params.email)}</p>
+      <p>Contrasena: ${escapeHtml(params.password)}</p>
     </div>
     <p>Ya puedes acceder a la plataforma para publicar vacantes y encontrar el mejor talento.</p>
-    <a href="${params.loginUrl}" class="btn">Ir a la Plataforma</a>
+    <a href="${escapeHtml(params.loginUrl)}" class="btn">Ir a la Plataforma</a>
     <p style="font-size: 13px; color: #666;">Te recomendamos cambiar tu contrasena despues de iniciar sesion.</p>
   `);
 
@@ -159,14 +201,14 @@ export async function sendCandidateSentToCompany(params: {
 }): Promise<boolean> {
   const html = baseTemplate(`
     <h2>Nuevo candidato disponible</h2>
-    <p>Hola ${params.nombreEmpresa},</p>
+    <p>Hola ${escapeHtml(params.nombreEmpresa)},</p>
     <p>Un nuevo candidato ha completado el proceso de evaluacion y esta listo para tu revision:</p>
     <div class="info-box">
-      <p>Candidato: <strong>${params.candidateName}</strong></p>
-      <p>Vacante: <strong>${params.jobTitle}</strong></p>
+      <p>Candidato: <strong>${escapeHtml(params.candidateName)}</strong></p>
+      <p>Vacante: <strong>${escapeHtml(params.jobTitle)}</strong></p>
     </div>
     <p>Revisa su perfil y decide si deseas agendar una entrevista.</p>
-    <a href="${params.dashboardUrl}" class="btn">Ver Candidatos</a>
+    <a href="${escapeHtml(params.dashboardUrl)}" class="btn">Ver Candidatos</a>
   `);
 
   return sendEmail({
@@ -187,14 +229,14 @@ export async function sendInterviewRequestToAdmin(params: {
 }): Promise<boolean> {
   const html = baseTemplate(`
     <h2>Nueva solicitud de entrevista</h2>
-    <p>La empresa <strong>${params.companyName}</strong> ha solicitado una entrevista:</p>
+    <p>La empresa <strong>${escapeHtml(params.companyName)}</strong> ha solicitado una entrevista:</p>
     <div class="info-box">
-      <p>Candidato: <strong>${params.candidateName}</strong></p>
-      <p>Vacante: <strong>${params.jobTitle}</strong></p>
+      <p>Candidato: <strong>${escapeHtml(params.candidateName)}</strong></p>
+      <p>Vacante: <strong>${escapeHtml(params.jobTitle)}</strong></p>
       <p>Tipo: <strong>${params.interviewType === 'videocall' ? 'Videoconferencia' : 'Presencial'}</strong></p>
     </div>
     <p>Revisa los horarios propuestos y agenda la entrevista.</p>
-    <a href="${params.adminUrl}" class="btn">Gestionar Entrevistas</a>
+    <a href="${escapeHtml(params.adminUrl)}" class="btn">Gestionar Entrevistas</a>
   `);
 
   return sendEmail({
@@ -214,12 +256,12 @@ export async function sendPaymentConfirmation(params: {
 }): Promise<boolean> {
   const html = baseTemplate(`
     <h2>Pago confirmado</h2>
-    <p>Hola ${params.nombreEmpresa},</p>
+    <p>Hola ${escapeHtml(params.nombreEmpresa)},</p>
     <p>Tu compra de creditos ha sido procesada exitosamente.</p>
     <div class="info-box">
-      <p>Creditos comprados: <strong>${params.credits}</strong></p>
-      <p>Total pagado: <strong>${params.totalPrice.toLocaleString('es-MX')} MXN</strong></p>
-      <p>Balance actual: <strong>${params.newBalance} creditos</strong></p>
+      <p>Creditos comprados: <strong>${escapeHtml(params.credits)}</strong></p>
+      <p>Total pagado: <strong>${escapeHtml(params.totalPrice.toLocaleString('es-MX'))} MXN</strong></p>
+      <p>Balance actual: <strong>${escapeHtml(params.newBalance)} creditos</strong></p>
     </div>
     <p>Ya puedes usar tus creditos para publicar nuevas vacantes.</p>
   `);
