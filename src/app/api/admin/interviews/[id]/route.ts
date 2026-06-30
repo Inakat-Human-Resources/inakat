@@ -113,12 +113,50 @@ export async function PATCH(
       adminNotes,
     } = body;
 
+    // #33: validar el enum de status y que las fechas sean válidas (antes se
+    // aceptaba cualquier string y `new Date('basura')` guardaba Invalid Date).
+    const VALID_STATUSES = ['pending', 'confirmed', 'rejected', 'cancelled'];
+    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json(
+        { error: `Status inválido. Valores permitidos: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    const parseValidDate = (value: unknown): Date | null => {
+      const d = new Date(value as string);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    let parsedStart: Date | undefined;
+    let parsedEnd: Date | undefined;
+    if (scheduledStart !== undefined) {
+      const d = parseValidDate(scheduledStart);
+      if (!d) {
+        return NextResponse.json({ error: 'scheduledStart no es una fecha válida' }, { status: 400 });
+      }
+      parsedStart = d;
+    }
+    if (scheduledEnd !== undefined) {
+      const d = parseValidDate(scheduledEnd);
+      if (!d) {
+        return NextResponse.json({ error: 'scheduledEnd no es una fecha válida' }, { status: 400 });
+      }
+      parsedEnd = d;
+    }
+    if (parsedStart && parsedEnd && parsedStart >= parsedEnd) {
+      return NextResponse.json(
+        { error: 'scheduledStart debe ser anterior a scheduledEnd' },
+        { status: 400 }
+      );
+    }
+
     // Build the update data with only the fields that were provided
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
     if (topic !== undefined) updateData.topic = topic;
-    if (scheduledStart !== undefined) updateData.scheduledStart = new Date(scheduledStart);
-    if (scheduledEnd !== undefined) updateData.scheduledEnd = new Date(scheduledEnd);
+    if (parsedStart !== undefined) updateData.scheduledStart = parsedStart;
+    if (parsedEnd !== undefined) updateData.scheduledEnd = parsedEnd;
     if (location !== undefined) updateData.location = location;
     if (meetingUrl !== undefined) updateData.meetingUrl = meetingUrl;
     if (confirmedSlot !== undefined) updateData.confirmedSlot = confirmedSlot;
