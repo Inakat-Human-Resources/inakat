@@ -498,7 +498,7 @@ export default function SpecialistJobCandidates() {
             <div className="p-12 text-center">
               <Users className="mx-auto text-gray-300 mb-4" size={48} />
               <p className="text-gray-500">
-                No hay candidatos en "{tabs.find(t => t.id === activeTab)?.label}"
+                No hay candidatos en &quot;{tabs.find(t => t.id === activeTab)?.label}&quot;
               </p>
             </div>
           ) : (
