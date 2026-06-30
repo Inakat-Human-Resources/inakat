@@ -5,6 +5,22 @@ import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
+/**
+ * Valida que una URL de documento sea http(s) absoluta.
+ * Previene XSS almacenado (javascript:, data:, vbscript:, file:, etc.)
+ * ya que fileUrl se renderiza luego como href.
+ */
+function isSafeDocumentUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+}
+
 // GET - Obtener documentos del candidato
 export async function GET() {
   try {
@@ -59,6 +75,10 @@ export async function POST(request: Request) {
 
     if (!name || !fileUrl) {
       return NextResponse.json({ success: false, error: 'Nombre y URL del archivo son requeridos' }, { status: 400 });
+    }
+
+    if (!isSafeDocumentUrl(fileUrl)) {
+      return NextResponse.json({ success: false, error: 'URL del archivo inválida. Debe ser una URL http(s) absoluta.' }, { status: 400 });
     }
 
     const doc = await prisma.candidateDocument.create({
