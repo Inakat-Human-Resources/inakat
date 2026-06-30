@@ -153,21 +153,26 @@ export async function authenticateUser(
       };
     }
 
-    // Usuario desactivado
-    if (!user.isActive) {
-      return {
-        success: false,
-        error: 'Usuario desactivado. Contacta al administrador.'
-      };
-    }
-
-    // Verificar contraseña
+    // Verificar contraseña ANTES de revelar el estado de la cuenta.
+    // Devolver "Usuario desactivado" sin validar la contraseña permitiría a un
+    // atacante enumerar qué emails están registrados (#24). Por eso primero se
+    // comprueba la contraseña y, si es incorrecta, se responde de forma genérica.
     const isValidPassword = await verifyPassword(password, user.password);
 
     if (!isValidPassword) {
       return {
         success: false,
         error: 'Credenciales inválidas'
+      };
+    }
+
+    // Solo cuando la contraseña es correcta revelamos que la cuenta está
+    // desactivada (no hay enumeración: quien acierta la contraseña ya es dueño
+    // legítimo de la cuenta).
+    if (!user.isActive) {
+      return {
+        success: false,
+        error: 'Usuario desactivado. Contacta al administrador.'
       };
     }
 
