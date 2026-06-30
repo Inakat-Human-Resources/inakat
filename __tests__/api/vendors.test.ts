@@ -407,6 +407,7 @@ describe('Sistema de Vendedores', () => {
 
       const { POST } = await import('@/app/api/discount-codes/validate/route');
       const request = {
+        headers: new Headers(),
         json: async () => ({ code: 'DESCUENTO10', packagePrice: 1000 })
       } as any;
       const response = await POST(request);
@@ -425,6 +426,7 @@ describe('Sistema de Vendedores', () => {
 
       const { POST } = await import('@/app/api/discount-codes/validate/route');
       const request = {
+        headers: new Headers(),
         json: async () => ({ code: 'INACTIVO', packagePrice: 1000 })
       } as any;
       const response = await POST(request);
@@ -439,6 +441,7 @@ describe('Sistema de Vendedores', () => {
 
       const { POST } = await import('@/app/api/discount-codes/validate/route');
       const request = {
+        headers: new Headers(),
         json: async () => ({ code: 'NOEXISTE', packagePrice: 1000 })
       } as any;
       const response = await POST(request);

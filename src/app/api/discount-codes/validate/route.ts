@@ -2,10 +2,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyRateLimit, DISCOUNT_VALIDATE_RATE_LIMIT } from '@/lib/rate-limit';
 
 // POST - Validar un código de descuento (público para mostrar en checkout)
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY (#37): rate limit para evitar enumeración de códigos.
+    const rateLimited = applyRateLimit(request, 'discount-validate', DISCOUNT_VALIDATE_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { code, packagePrice } = body;
 
@@ -27,12 +32,7 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         code: true,
-        discountPercent: true,
-        user: {
-          select: {
-            nombre: true
-          }
-        }
+        discountPercent: true
       }
     });
 
@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
       data: {
         code: discountCode.code,
         discountPercent: discountCode.discountPercent,
-        vendorName: discountCode.user.nombre,
         ...discountInfo && { pricing: discountInfo }
       }
     });

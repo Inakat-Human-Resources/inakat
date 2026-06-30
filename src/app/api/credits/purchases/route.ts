@@ -97,6 +97,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // SECURITY (#34): impedir auto-referido. Un usuario no puede aplicar
+      // un código de descuento que él mismo creó (se auto-asignaría descuento
+      // + comisión sobre su propia compra).
+      if (foundCode.userId === payload.userId) {
+        return NextResponse.json(
+          { error: 'No puedes usar tu propio código de descuento' },
+          { status: 400 }
+        );
+      }
+
       validDiscountCode = foundCode;
     }
 
@@ -279,22 +289,29 @@ export async function POST(req: NextRequest) {
         discountPercent: validDiscountCode.discountPercent
       } : null
     });
-  } catch (error: any) {
-    console.error('[Payments] Error processing purchase:', error instanceof Error ? error.message : 'Unknown error');
+  } catch (error: unknown) {
+    // SECURITY (#90): loguear el detalle en el servidor, pero nunca devolver
+    // error.cause / error.message crudos al cliente (fuga de internals).
+    const hasCause =
+      typeof error === 'object' && error !== null && 'cause' in error &&
+      (error as { cause?: unknown }).cause != null;
 
-    // Errores específicos de Mercado Pago
-    if (error.cause) {
+    console.error('[Payments] Error processing purchase:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      cause: hasCause ? (error as { cause: unknown }).cause : undefined,
+    });
+
+    // Errores específicos de Mercado Pago (ej: pago rechazado): respondemos 400
+    // con un mensaje genérico, sin exponer el detalle interno.
+    if (hasCause) {
       return NextResponse.json(
-        {
-          error: 'Error en el pago',
-          details: error.cause
-        },
+        { error: 'No se pudo procesar el pago. Verifica los datos e intenta de nuevo.' },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { error: error.message || 'Error al procesar pago' },
+      { error: 'Error al procesar el pago' },
       { status: 500 }
     );
   }

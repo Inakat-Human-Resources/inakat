@@ -55,7 +55,15 @@ function validateMercadoPagoSignature(
     .update(manifest)
     .digest('hex');
 
-  if (hmac !== v1) {
+  // SECURITY: comparación en tiempo constante para evitar timing attacks.
+  // Comparar longitud primero (timingSafeEqual lanza si difieren los buffers).
+  const hmacBuffer = Buffer.from(hmac, 'utf8');
+  const v1Buffer = Buffer.from(v1, 'utf8');
+
+  if (
+    hmacBuffer.length !== v1Buffer.length ||
+    !crypto.timingSafeEqual(hmacBuffer, v1Buffer)
+  ) {
     return {
       isValid: false,
       reason: 'Signature mismatch',
