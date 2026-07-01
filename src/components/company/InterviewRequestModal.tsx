@@ -186,7 +186,7 @@ export default function InterviewRequestModal({
               <p className="text-xs text-purple-600 mt-0.5">Se enviará al equipo de INAKAT, quien coordinará los horarios con el candidato.</p>
             </div>
           </div>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 p-1">
+          <button onClick={handleClose} aria-label="Cerrar" className="text-gray-400 hover:text-gray-600 p-1">
             <X size={24} />
           </button>
         </div>

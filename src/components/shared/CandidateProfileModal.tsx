@@ -1407,6 +1407,7 @@ export default function CandidateProfileModal({
                   setNewDocFile(null);
                   setDocError('');
                 }}
+                aria-label="Cerrar"
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={24} />
