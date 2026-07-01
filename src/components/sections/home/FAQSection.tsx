@@ -82,22 +82,29 @@ const FAQSection = () => {
                 onClick={() =>
                   setOpenIndex(openIndex === index ? null : index)
                 }
+                aria-expanded={openIndex === index}
+                aria-controls={`faq-answer-${index}`}
+                id={`faq-question-${index}`}
                 className="w-full flex items-center justify-between py-5 text-left group"
               >
                 <span className="font-display text-lg font-semibold text-title-dark pr-8 group-hover:text-button-orange transition-colors">
                   {faq.question}
                 </span>
-                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-title-dark/5 flex items-center justify-center group-hover:bg-button-orange/10 transition-colors">
+                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-title-dark/5 flex items-center justify-center group-hover:bg-button-orange/10 transition-colors group-hover:scale-110 duration-200">
                   {openIndex === index ? (
-                    <Minus className="w-4 h-4 text-button-orange" />
+                    <Minus className="w-4 h-4 text-button-orange" aria-hidden="true" />
                   ) : (
-                    <Plus className="w-4 h-4 text-title-dark" />
+                    <Plus className="w-4 h-4 text-title-dark" aria-hidden="true" />
                   )}
                 </span>
               </button>
 
               {/* Answer */}
               <div
+                id={`faq-answer-${index}`}
+                role="region"
+                aria-labelledby={`faq-question-${index}`}
+                aria-hidden={openIndex !== index}
                 className={`overflow-hidden transition-all duration-300 ${
                   openIndex === index ? 'max-h-[600px] pb-5' : 'max-h-0'
                 }`}

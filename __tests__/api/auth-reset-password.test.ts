@@ -89,9 +89,17 @@ describe('API: /api/auth/reset-password', () => {
     expect(content).toContain('export async function POST');
   });
 
-  it('should validate password length >= 6', () => {
+  it('should enforce the same password policy as registro (min 8 + mayúscula + número)', () => {
     const content = readFile('src/app/api/auth/reset-password/route.ts');
-    expect(content).toContain('password.length < 6');
+    expect(content).toContain('.min(8');
+    expect(content).toContain('/[A-Z]/');
+    expect(content).toContain('/[0-9]/');
+  });
+
+  it('should rate-limit reset attempts', () => {
+    const content = readFile('src/app/api/auth/reset-password/route.ts');
+    expect(content).toContain('applyRateLimit');
+    expect(content).toContain("'reset-password'");
   });
 
   it('should verify token is valid and not expired', () => {
@@ -205,23 +213,23 @@ describe('Page: /reset-password', () => {
 
 describe('Migration: PENDING_reset_token.sql', () => {
   it('should exist', () => {
-    const filePath = path.join(process.cwd(), 'prisma/migrations/PENDING_reset_token.sql');
+    const filePath = path.join(process.cwd(), 'prisma/migrations/_archived/20260514_reset_token.sql');
     expect(fs.existsSync(filePath)).toBe(true);
   });
 
   it('should add resetToken column', () => {
-    const content = readFile('prisma/migrations/PENDING_reset_token.sql');
+    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
     expect(content).toContain('resetToken');
     expect(content).toContain('ALTER TABLE');
   });
 
   it('should add resetTokenExpiry column', () => {
-    const content = readFile('prisma/migrations/PENDING_reset_token.sql');
+    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
     expect(content).toContain('resetTokenExpiry');
   });
 
   it('should create unique index on resetToken', () => {
-    const content = readFile('prisma/migrations/PENDING_reset_token.sql');
+    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
     expect(content).toContain('UNIQUE INDEX');
     expect(content).toContain('User_resetToken_key');
   });

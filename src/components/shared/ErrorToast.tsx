@@ -42,7 +42,7 @@ const ErrorToast: React.FC<ErrorToastProps> = ({ message, onClose, duration = 80
       <div className="bg-red-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-start gap-3 border border-red-700">
         <AlertCircle className="flex-shrink-0 mt-0.5" size={22} />
         <p className="flex-1 font-medium text-sm md:text-base">{message}</p>
-        <button onClick={handleClose} className="flex-shrink-0 hover:bg-red-700 rounded-full p-1 transition-colors">
+        <button onClick={handleClose} aria-label="Cerrar aviso" className="flex-shrink-0 hover:bg-red-700 rounded-full p-1 transition-colors">
           <X size={18} />
         </button>
       </div>

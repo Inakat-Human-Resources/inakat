@@ -139,7 +139,7 @@ describe('Users API Logic Tests', () => {
 
   describe('POST /api/admin/users - Crear usuario', () => {
     it('debería validar campos requeridos', () => {
-      const bodyMissing = { email: 'test@test.com' };
+      const bodyMissing: Record<string, unknown> = { email: 'test@test.com' };
       const bodyComplete = {
         email: 'test@test.com',
         password: '123456',
@@ -265,7 +265,7 @@ describe('Users API Logic Tests', () => {
 
   describe('PUT /api/admin/users - Actualizar usuario', () => {
     it('debería validar que id es requerido', () => {
-      const bodyWithoutId = { email: 'test@test.com' };
+      const bodyWithoutId: Record<string, unknown> = { email: 'test@test.com' };
       const bodyWithId = { id: 1, email: 'test@test.com' };
 
       expect(!!bodyWithoutId.id).toBe(false);
@@ -337,7 +337,7 @@ describe('Users API Logic Tests', () => {
     });
 
     it('no debería actualizar contraseña si está vacía', () => {
-      const password = '';
+      const password: string = '';
       const shouldUpdatePassword = password && password.length >= 6;
 
       expect(!!shouldUpdatePassword).toBe(false);

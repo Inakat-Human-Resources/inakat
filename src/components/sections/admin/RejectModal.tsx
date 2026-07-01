@@ -33,6 +33,7 @@ const RejectModal = ({
           </div>
           <button
             onClick={onCancel}
+            aria-label="Cerrar"
             className="p-1 hover:bg-red-600 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />

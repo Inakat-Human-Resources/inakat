@@ -153,21 +153,26 @@ export async function authenticateUser(
       };
     }
 
-    // Usuario desactivado
-    if (!user.isActive) {
-      return {
-        success: false,
-        error: 'Usuario desactivado. Contacta al administrador.'
-      };
-    }
-
-    // Verificar contraseña
+    // Verificar contraseña ANTES de revelar el estado de la cuenta.
+    // Devolver "Usuario desactivado" sin validar la contraseña permitiría a un
+    // atacante enumerar qué emails están registrados (#24). Por eso primero se
+    // comprueba la contraseña y, si es incorrecta, se responde de forma genérica.
     const isValidPassword = await verifyPassword(password, user.password);
 
     if (!isValidPassword) {
       return {
         success: false,
         error: 'Credenciales inválidas'
+      };
+    }
+
+    // Solo cuando la contraseña es correcta revelamos que la cuenta está
+    // desactivada (no hay enumeración: quien acierta la contraseña ya es dueño
+    // legítimo de la cuenta).
+    if (!user.isActive) {
+      return {
+        success: false,
+        error: 'Usuario desactivado. Contacta al administrador.'
       };
     }
 
@@ -336,4 +341,42 @@ export async function requireRole(
   }
 
   return auth;
+}
+
+/**
+ * Autenticación OPCIONAL: devuelve el usuario activo de la DB si la cookie
+ * auth-token es válida, o `null` si no hay sesión / token inválido / usuario
+ * inactivo. No lanza ni devuelve error: pensado para endpoints públicos que
+ * exponen datos adicionales sólo al propietario autenticado (p. ej. notas
+ * internas o vacantes confidenciales). NUNCA confíes en query params para
+ * decidir si alguien es "propietario": usa este helper.
+ */
+export async function getOptionalAuthUser(): Promise<VerifyResult['user'] | null> {
+  const { cookies } = await import('next/headers');
+  const cookieStore = await cookies();
+  const token = cookieStore.get('auth-token')?.value;
+
+  if (!token) return null;
+
+  const payload = verifyToken(token);
+  if (!payload?.userId) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: {
+      id: true,
+      email: true,
+      nombre: true,
+      apellidoPaterno: true,
+      apellidoMaterno: true,
+      role: true,
+      isActive: true,
+      credits: true,
+      specialty: true,
+    },
+  });
+
+  if (!user || !user.isActive) return null;
+
+  return user;
 }

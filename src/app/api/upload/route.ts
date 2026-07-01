@@ -66,12 +66,20 @@ export async function POST(request: Request) {
 
     const blobConfigured = isBlobConfigured();
 
-    // Validar tipo de archivo - verificar MIME type O extensión
+    // SECURITY (#54): antes bastaba con UNO (extensión O MIME), ambos
+    // controlados por el cliente, permitiendo subir p.ej. HTML renombrado a .pdf.
+    // Ahora se exige SIEMPRE una extensión permitida; y el MIME debe estar en la
+    // lista permitida O ser genérico/vacío (varios navegadores/SO envían '' o
+    // application/octet-stream para .doc/.docx/.xls/.xlsx legítimos). Así se
+    // bloquea un MIME explícitamente peligroso (p.ej. text/html) y una extensión
+    // peligrosa, sin rechazar documentos ofimáticos válidos.
+    const GENERIC_MIME_TYPES = ['', 'application/octet-stream'];
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
-    const isValidMimeType = ALLOWED_MIME_TYPES.includes(file.type);
     const isValidExtension = ALLOWED_EXTENSIONS.includes(fileExtension);
+    const isAllowedMime = ALLOWED_MIME_TYPES.includes(file.type);
+    const isGenericMime = GENERIC_MIME_TYPES.includes(file.type);
 
-    if (!isValidMimeType && !isValidExtension) {
+    if (!isValidExtension || (!isAllowedMime && !isGenericMime)) {
       return NextResponse.json(
         {
           success: false,
@@ -146,6 +154,10 @@ export async function POST(request: Request) {
     // Manejo específico de errores de Vercel Blob
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
 
+    // SECURITY (#58/#91): loguear el detalle interno en el servidor; nunca
+    // exponerlo al cliente.
+    console.error('[Upload] Error procesando archivo:', errorMessage);
+
     if (errorMessage.includes('BLOB_STORE_NOT_FOUND') || errorMessage.includes('not configured')) {
       return NextResponse.json(
         {
@@ -169,7 +181,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: `Error al subir archivo: ${errorMessage}`
+        error: 'Error al subir el archivo. Inténtalo de nuevo más tarde.'
       },
       { status: 500 }
     );

@@ -77,13 +77,6 @@ export async function GET(request: Request) {
       include: {
         applications: {
           where: { status: { in: COMPANY_VISIBLE_STATUSES } }
-        },
-        // Incluir assignment para obtener notas del recruiter/specialist
-        assignment: {
-          select: {
-            recruiterNotes: true,
-            specialistNotes: true
-          }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -153,24 +146,16 @@ export async function GET(request: Request) {
       candidatesFromBank.map(c => [c.email.toLowerCase(), c])
     );
 
-    // Crear mapa de notas por jobId
-    const jobNotesMap = new Map(
-      jobs.map(job => [
-        job.id,
-        {
-          recruiterNotes: job.assignment?.recruiterNotes || null,
-          specialistNotes: job.assignment?.specialistNotes || null
-        }
-      ])
-    );
-
     // Enriquecer applications SIN queries adicionales
     const enrichedApplications = allApplications.map((app) => {
       const candidate = candidateMap.get(app.candidateEmail.toLowerCase());
-      const notes = jobNotesMap.get(app.jobId);
+
+      // SEGURIDAD (#50/#51): no exponer Application.notes (campo de notas internas)
+      // a la empresa. Se elimina del spread.
+      const { notes: _internalNotes, ...appPublic } = app;
 
       return {
-        ...app,
+        ...appPublic,
         candidateProfile: candidate
           ? {
               id: candidate.id,
@@ -191,14 +176,13 @@ export async function GET(request: Request) {
               cvUrl: candidate.cvUrl,
               linkedinUrl: candidate.linkedinUrl,
               portafolioUrl: candidate.portafolioUrl,
-              notas: candidate.notas,
+              // SEGURIDAD (#50/#51): NO exponer candidate.notas (notas internas del admin) a la empresa
               educacion: candidate.educacion, // FEATURE: Educación múltiple
               latitude: candidate.latitude,
               longitude: candidate.longitude
             }
-          : null,
-        recruiterNotes: notes?.recruiterNotes || null,
-        specialistNotes: notes?.specialistNotes || null
+          : null
+        // SEGURIDAD (#50/#51): NO exponer recruiterNotes/specialistNotes (notas internas) a la empresa
       };
     });
 
@@ -298,10 +282,15 @@ export async function GET(request: Request) {
         allApplications: enrichedApplications,
         topJobs,
         jobStats,
-        allJobs: jobs.map((job) => ({
-          ...job,
-          applicationCount: job.applications.length
-        }))
+        allJobs: jobs.map((job) => {
+          // SEGURIDAD (#50/#51): notasInternas es información interna de INAKAT
+          // ("no visible para candidatos"), no debe exponerse a la empresa.
+          const { notasInternas: _notasInternas, ...jobPublic } = job;
+          return {
+            ...jobPublic,
+            applicationCount: job.applications.length
+          };
+        })
       }
     });
   } catch (error) {

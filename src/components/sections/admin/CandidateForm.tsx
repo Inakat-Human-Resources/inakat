@@ -546,6 +546,7 @@ const CandidateForm = ({
               resetForm();
               onClose();
             }}
+            aria-label="Cerrar"
             className="text-gray-400 hover:text-gray-600 p-2"
           >
             <X size={24} />

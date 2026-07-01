@@ -2,6 +2,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  canAccessJob,
+  jobAuthInfoFromApplication,
+  loadApplicationForAuth,
+} from '@/lib/authz-applications';
 
 // Status de aplicaciones visibles para la empresa
 const COMPANY_VISIBLE_STATUSES = [
@@ -18,9 +23,10 @@ const COMPANY_VISIBLE_STATUSES = [
  */
 export async function GET(request: NextRequest) {
   try {
+    const userId = request.headers.get('x-user-id');
     const userRole = request.headers.get('x-user-role');
 
-    if (!userRole || !['recruiter', 'specialist', 'admin', 'company'].includes(userRole)) {
+    if (!userId || !userRole || !['recruiter', 'specialist', 'admin', 'company'].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: 'No autorizado' },
         { status: 403 }
@@ -39,19 +45,31 @@ export async function GET(request: NextRequest) {
 
     const appId = parseInt(applicationId);
 
-    // Para empresa: verificar que la application esté en status visible
-    if (userRole === 'company') {
-      const application = await prisma.application.findUnique({
-        where: { id: appId },
-        select: { status: true }
-      });
+    // Autorización por ownership/asignación sobre la Application
+    const application = await loadApplicationForAuth(appId);
 
-      if (!application || !COMPANY_VISIBLE_STATUSES.includes(application.status)) {
-        return NextResponse.json(
-          { success: false, error: 'Aplicación no accesible' },
-          { status: 403 }
-        );
-      }
+    if (!application) {
+      return NextResponse.json(
+        { success: false, error: 'Aplicación no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    const authUser = { id: parseInt(userId), role: userRole };
+
+    if (!canAccessJob(authUser, jobAuthInfoFromApplication(application))) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta aplicación' },
+        { status: 403 }
+      );
+    }
+
+    // Para empresa: además, la application debe estar en un status visible
+    if (userRole === 'company' && !COMPANY_VISIBLE_STATUSES.includes(application.status)) {
+      return NextResponse.json(
+        { success: false, error: 'Aplicación no accesible' },
+        { status: 403 }
+      );
     }
 
     const ratings = await prisma.skillRating.findMany({
@@ -127,15 +145,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verificar que la aplicación existe
-    const application = await prisma.application.findUnique({
-      where: { id: parseInt(applicationId) }
-    });
+    // Verificar que la aplicación existe y autorizar (specialist asignado o admin)
+    const application = await loadApplicationForAuth(parseInt(applicationId));
 
     if (!application) {
       return NextResponse.json(
         { success: false, error: 'Aplicación no encontrada' },
         { status: 404 }
+      );
+    }
+
+    const authUser = { id: parseInt(userId), role: userRole };
+
+    if (!canAccessJob(authUser, jobAuthInfoFromApplication(application))) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta aplicación' },
+        { status: 403 }
       );
     }
 

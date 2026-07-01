@@ -55,7 +55,15 @@ function validateMercadoPagoSignature(
     .update(manifest)
     .digest('hex');
 
-  if (hmac !== v1) {
+  // SECURITY: comparación en tiempo constante para evitar timing attacks.
+  // Comparar longitud primero (timingSafeEqual lanza si difieren los buffers).
+  const hmacBuffer = Buffer.from(hmac, 'utf8');
+  const v1Buffer = Buffer.from(v1, 'utf8');
+
+  if (
+    hmacBuffer.length !== v1Buffer.length ||
+    !crypto.timingSafeEqual(hmacBuffer, v1Buffer)
+  ) {
     return {
       isValid: false,
       reason: 'Signature mismatch',
@@ -143,8 +151,7 @@ export async function POST(req: NextRequest) {
 
     // Buscar la compra en nuestra DB
     const purchase = await prisma.creditPurchase.findUnique({
-      where: { paymentId: String(paymentId) },
-      include: { user: true }
+      where: { paymentId: String(paymentId) }
     });
 
     if (!purchase) {
@@ -169,74 +176,85 @@ export async function POST(req: NextRequest) {
         amount: purchase.amount
       });
 
-      const balanceBefore = purchase.user.credits;
+      // CONSISTENCIA + IDEMPOTENCIA (#35/#7): el chequeo previo de paymentStatus
+      // y la acreditación NO eran atómicos; dos entregas concurrentes del webhook
+      // podían acreditar dos veces. Aquí se "reclama" el pago de forma atómica con
+      // un updateMany condicionado a que siga sin pagarse: sólo una entrega gana la
+      // carrera (la otra ve count=0 y no acredita).
+      let credited = false;
+      let newBalance = 0;
 
-      // Usar transacción para garantizar consistencia
       await prisma.$transaction(async (tx) => {
-        // Actualizar compra
-        await tx.creditPurchase.update({
-          where: { id: purchase.id },
-          data: {
-            paymentStatus: 'paid',
-            paidAt: new Date()
-          }
+        const claimed = await tx.creditPurchase.updateMany({
+          where: { id: purchase.id, paymentStatus: { not: 'paid' } },
+          data: { paymentStatus: 'paid', paidAt: new Date() }
         });
 
-        // Agregar créditos al usuario
+        // Otra entrega concurrente ya acreditó este pago.
+        if (claimed.count === 0) return;
+
+        // Agregar créditos al usuario (incremento atómico)
         const updatedUser = await tx.user.update({
           where: { id: purchase.userId },
-          data: {
-            credits: {
-              increment: purchase.amount
-            }
-          }
+          data: { credits: { increment: purchase.amount } }
         });
 
-        // Registrar transacción de créditos
+        // Registrar transacción de créditos (balanceBefore exacto desde el saldo nuevo)
         await tx.creditTransaction.create({
           data: {
             userId: purchase.userId,
             type: 'purchase',
             amount: purchase.amount,
-            balanceBefore,
+            balanceBefore: updatedUser.credits - purchase.amount,
             balanceAfter: updatedUser.credits,
             purchaseId: purchase.id,
             description: `Compra confirmada - ${purchase.amount} créditos (Pago #${paymentId})`
           }
         });
+
+        credited = true;
+        newBalance = updatedUser.credits;
       });
+
+      if (!credited) {
+        // Idempotencia: otra entrega ya procesó este pago.
+        console.warn('[Webhook] Payment already credited by a concurrent delivery:', { purchaseId: purchase.id });
+        return NextResponse.json({ received: true, alreadyProcessed: true });
+      }
 
       console.info('[Webhook] Credits added successfully:', {
         userId: purchase.userId,
         credits: purchase.amount,
-        newBalance: balanceBefore + purchase.amount
+        newBalance
       });
 
-      // Notificar a la empresa (fire-and-forget)
-      createNotification({
-        userId: purchase.userId,
-        type: 'credits_purchased',
-        title: 'Créditos acreditados',
-        message: `Se acreditaron ${purchase.amount} créditos a tu cuenta. Nuevo saldo: ${balanceBefore + purchase.amount}.`,
-        link: '/company/dashboard',
-        metadata: { credits: purchase.amount, newBalance: balanceBefore + purchase.amount },
-      }).catch(() => {});
-
-      // Enviar email de confirmación (async, no bloquea respuesta)
+      // Notificación in-app + email de confirmación. Se AWAITean (antes eran
+      // fire-and-forget, que en serverless puede no completarse tras responder)
+      // (#70). allSettled: un fallo no afecta al otro ni a la respuesta del webhook.
       const companyRequest = await prisma.companyRequest.findFirst({
         where: { userId: purchase.userId },
         select: { nombreEmpresa: true, correoEmpresa: true }
       });
 
-      if (companyRequest) {
-        sendPaymentConfirmation({
-          companyEmail: companyRequest.correoEmpresa,
-          nombreEmpresa: companyRequest.nombreEmpresa,
-          credits: purchase.amount,
-          totalPrice: purchase.totalPrice,
-          newBalance: balanceBefore + purchase.amount,
-        }).catch(err => console.error('[Webhook] Error sending payment email:', err));
-      }
+      await Promise.allSettled([
+        createNotification({
+          userId: purchase.userId,
+          type: 'credits_purchased',
+          title: 'Créditos acreditados',
+          message: `Se acreditaron ${purchase.amount} créditos a tu cuenta. Nuevo saldo: ${newBalance}.`,
+          link: '/company/dashboard',
+          metadata: { credits: purchase.amount, newBalance },
+        }),
+        companyRequest
+          ? sendPaymentConfirmation({
+              companyEmail: companyRequest.correoEmpresa,
+              nombreEmpresa: companyRequest.nombreEmpresa,
+              credits: purchase.amount,
+              totalPrice: purchase.totalPrice,
+              newBalance,
+            })
+          : Promise.resolve(false),
+      ]);
 
     } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
       console.warn('[Webhook] Payment rejected/cancelled:', {

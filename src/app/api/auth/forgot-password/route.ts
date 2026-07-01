@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
+import { applyRateLimit, FORGOT_PASSWORD_RATE_LIMIT } from '@/lib/rate-limit';
 
 /**
  * POST /api/auth/forgot-password
@@ -11,6 +12,9 @@ import { sendEmail } from '@/lib/email';
  */
 export async function POST(request: Request) {
   try {
+    const rateLimited = applyRateLimit(request, 'forgot-password', FORGOT_PASSWORD_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
     const { email } = body;
 

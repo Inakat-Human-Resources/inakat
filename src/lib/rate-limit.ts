@@ -147,6 +147,24 @@ export const APPLICATION_RATE_LIMIT: RateLimitConfig = {
   windowSeconds: 60 * 60
 };
 
+/** Forgot password: 3 por hora por IP (evita email bombing y enumeración) */
+export const FORGOT_PASSWORD_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 3,
+  windowSeconds: 60 * 60
+};
+
+/** Reset password: 5 por 15 minutos por IP */
+export const RESET_PASSWORD_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 5,
+  windowSeconds: 15 * 60
+};
+
+/** Validación de código de descuento (público): 10 por 15 minutos por IP (evita fuerza bruta/enumeración) */
+export const DISCOUNT_VALIDATE_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 10,
+  windowSeconds: 15 * 60
+};
+
 /**
  * Helper que verifica rate limit y retorna respuesta 429 si se excede.
  * Retorna null si el request es permitido.

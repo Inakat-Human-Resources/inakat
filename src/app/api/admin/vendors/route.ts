@@ -239,13 +239,24 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // #8/#29: validar cotas [0,100]. Antes `parseFloat(...) || 10` convertía un
+    // 0% legítimo en 10% y no acotaba por arriba (>100% => precio negativo).
+    const parsedDiscount = parseFloat(String(discountPercent));
+    const parsedCommission = parseFloat(String(commissionPercent));
+    const finalDiscount = Number.isNaN(parsedDiscount)
+      ? 10
+      : Math.min(100, Math.max(0, parsedDiscount));
+    const finalCommission = Number.isNaN(parsedCommission)
+      ? 10
+      : Math.min(100, Math.max(0, parsedCommission));
+
     // Crear DiscountCode vinculado al User
     const newCode = await prisma.discountCode.create({
       data: {
         code: code.toUpperCase().trim(),
         userId: newUser.id,
-        discountPercent: parseFloat(String(discountPercent)) || 10,
-        commissionPercent: parseFloat(String(commissionPercent)) || 10,
+        discountPercent: finalDiscount,
+        commissionPercent: finalCommission,
         isActive: true,
       }
     });

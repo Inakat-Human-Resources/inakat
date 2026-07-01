@@ -342,13 +342,15 @@ describe('Notification triggers in API routes', () => {
   });
 
   it('All triggers should use fire-and-forget pattern (.catch)', () => {
+    // El webhook de pagos es la EXCEPCIÓN deliberada (#70): await + allSettled
+    // para garantizar la entrega en serverless, en vez de fire-and-forget.
+    // Se verifica aparte en el test siguiente.
     const files = [
       'src/app/api/company-requests/route.ts',
       'src/app/api/company-requests/[id]/route.ts',
       'src/app/api/admin/assignments/route.ts',
       'src/app/api/admin/assign-candidates/route.ts',
       'src/app/api/applications/route.ts',
-      'src/app/api/webhooks/mercadopago/route.ts',
       'src/app/api/recruiter/dashboard/route.ts',
       'src/app/api/specialist/dashboard/route.ts',
       'src/app/api/company/applications/[id]/route.ts',
@@ -360,6 +362,14 @@ describe('Notification triggers in API routes', () => {
         expect(content).toContain('.catch(() => {})');
       }
     });
+  });
+
+  it('webhook de pagos AWAIT-ea la notificación (entrega garantizada en serverless, #70)', () => {
+    const content = readFile('src/app/api/webhooks/mercadopago/route.ts');
+    expect(content).toContain('createNotification');
+    // Debe usar await + allSettled, no fire-and-forget, para no perder la
+    // notificación/email de un pago si la función serverless termina.
+    expect(content).toContain('Promise.allSettled');
   });
 });
 

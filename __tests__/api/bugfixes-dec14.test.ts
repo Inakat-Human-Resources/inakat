@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/bugfixes-dec14.test.ts
 
 /**
@@ -353,7 +354,7 @@ describe('Bug 3: Reclutador/Especialista envío de candidatos', () => {
     });
 
     it('debería manejar cuando no hay candidatos previos', () => {
-      const previouslySent = '';
+      const previouslySent: string = '';
       const newCandidateIds = [1, 2];
 
       const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];

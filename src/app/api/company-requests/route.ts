@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { notifyAllAdmins } from "@/lib/notifications";
+import { validate, companyRequestSchema } from "@/lib/validations";
 
 // GET all company requests (for admin panel)
 export async function GET(request: Request) {
@@ -37,6 +38,26 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const { password, logoUrl } = body; // password/logoUrl no están en el schema
+
+    // SEGURIDAD (#9/#52): validar de verdad con zod (formato de email, RFC
+    // mexicano, longitudes), no sólo presencia. Antes companyRequestSchema
+    // estaba definido pero la ruta nunca lo usaba.
+    const validation = validate(companyRequestSchema, body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Datos inválidos", errors: validation.errors },
+        { status: 400 }
+      );
+    }
+
+    if (!password || typeof password !== "string" || password.length < 8) {
+      return NextResponse.json(
+        { error: "La contraseña debe tener al menos 8 caracteres" },
+        { status: 400 }
+      );
+    }
+
     const {
       nombre,
       apellidoPaterno,
@@ -49,27 +70,7 @@ export async function POST(request: Request) {
       direccionEmpresa,
       identificacionUrl,
       documentosConstitucionUrl,
-      password,
-      logoUrl, // FEAT-1b: Logo de empresa
-    } = body;
-
-    // Validate required fields
-    if (
-      !nombre ||
-      !apellidoPaterno ||
-      !apellidoMaterno ||
-      !nombreEmpresa ||
-      !correoEmpresa ||
-      !razonSocial ||
-      !rfc ||
-      !direccionEmpresa ||
-      !password
-    ) {
-      return NextResponse.json(
-        { error: "Faltan campos requeridos" },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Verificar si ya existe un usuario con ese email
     const existingUser = await prisma.user.findUnique({

@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, requireRole } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { calculateJobCreditCost } from '@/lib/pricing';
 
@@ -13,7 +13,15 @@ function sanitizeConfidentialJob(job: any) {
     ...job,
     company: 'Empresa Confidencial',
     location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México',
+    logoUrl: null,
   };
+}
+
+// SEGURIDAD: campos internos que NUNCA deben salir en una respuesta pública.
+// notasInternas es información interna de INAKAT, no visible para candidatos.
+function stripInternalFields(job: any) {
+  const { notasInternas, ...rest } = job;
+  return rest;
 }
 
 // GET - Listar todas las vacantes activas
@@ -78,8 +86,10 @@ export async function GET(request: Request) {
       }
     });
 
-    // Sanitizar vacantes confidenciales
-    const sanitizedJobs = jobs.map(job => sanitizeConfidentialJob(job));
+    // SEGURIDAD: este GET es público (no está protegido por middleware). Quitar
+    // notasInternas de TODAS las vacantes y sanear las confidenciales antes de
+    // responder. Antes se devolvían las notas internas de todas las vacantes.
+    const sanitizedJobs = jobs.map(job => sanitizeConfidentialJob(stripInternalFields(job)));
 
     return NextResponse.json({
       success: true,
@@ -98,28 +108,19 @@ export async function GET(request: Request) {
 // POST - Crear nueva vacante (como borrador por defecto)
 export async function POST(request: Request) {
   try {
-    // Verificar autenticación
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
-
-    let userId: number | null = null;
-    let userRole: string = 'user';
-    let userCredits: number = 0;
-
-    if (token) {
-      const payload = verifyToken(token);
-      if (payload?.userId) {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.userId },
-          select: { id: true, role: true, credits: true }
-        });
-        if (user) {
-          userId = user.id;
-          userRole = user.role;
-          userCredits = user.credits;
-        }
-      }
+    // SEGURIDAD: crear/publicar vacantes requiere sesión de empresa o admin.
+    // Antes se permitía crear vacantes de forma anónima (userId null) y con
+    // cualquier rol.
+    const auth = await requireRole(['company', 'admin']);
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
     }
+
+    const userId: number = auth.user.id;
+    const userRole: string = auth.user.role;
 
     const body = await request.json();
     const {
@@ -167,104 +168,91 @@ export async function POST(request: Request) {
       creditCost = pricingResult.credits;
     }
 
-    // Determinar el status inicial
-    // - Si es admin: puede publicar directo
-    // - Si es empresa y quiere publicar ahora: verificar créditos
-    // - Por defecto: guardar como borrador
-    let initialStatus = 'draft';
-    let balanceAfterPublish: number | null = null;
+    // Determinar status. Si es publicación de EMPRESA: descontar créditos + crear
+    // la vacante + registrar el ledger DE FORMA ATÓMICA (#6). Antes la deducción
+    // estaba en una transacción pero la creación de la vacante y el registro del
+    // ledger ocurrían fuera: si la creación fallaba tras descontar, los créditos
+    // se perdían sin vacante ni asiento contable.
+    const publishingAsCompany = !!publishNow && userRole === 'company';
+    const publishingAsAdmin = !!publishNow && userRole === 'admin';
+    const initialStatus = publishingAsCompany || publishingAsAdmin ? 'active' : 'draft';
 
-    // MEJ-002: Usar transacción para deducción de créditos (evita race conditions)
-    if (publishNow && userId) {
-        if (userRole === 'admin') {
-          // Admin puede publicar sin créditos
-          initialStatus = 'active';
-        } else if (userRole === 'company') {
-          // Empresa necesita créditos - usar transacción para atomicidad
-          try {
-            await prisma.$transaction(async (tx) => {
-              // Leer usuario dentro de la transacción para bloqueo
-              const freshUser = await tx.user.findUnique({
-                where: { id: userId }
-              });
+    // Tiempo límite para editar (4 horas desde publicación). Sólo al publicar.
+    const editableUntil =
+      initialStatus === 'active'
+        ? new Date(Date.now() + 4 * 60 * 60 * 1000)
+        : null;
 
-              if (!freshUser || freshUser.credits < creditCost) {
-                throw new Error('INSUFFICIENT_CREDITS');
-              }
+    const jobData = {
+      title,
+      company,
+      location,
+      salary,
+      jobType,
+      workMode: workMode || 'presential',
+      description,
+      requirements: requirements || null,
+      userId,
+      companyRating: companyRating || null,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      status: initialStatus,
+      profile: profile || null,
+      seniority: seniority || null,
+      creditCost: initialStatus === 'active' ? creditCost : 0,
+      editableUntil,
+    };
 
-              // Descontar créditos atómicamente
-              const updatedUser = await tx.user.update({
-                where: { id: userId },
-                data: { credits: { decrement: creditCost } }
-              });
+    let job;
 
-              balanceAfterPublish = updatedUser.credits;
-            });
-
-            initialStatus = 'active';
-          } catch (error: any) {
-            if (error.message === 'INSUFFICIENT_CREDITS') {
-              const currentUser = await prisma.user.findUnique({
-                where: { id: userId }
-              });
-              return NextResponse.json(
-                {
-                  success: false,
-                  error: 'Créditos insuficientes para publicar',
-                  required: creditCost,
-                  available: currentUser?.credits || 0,
-                  savedAsDraft: false
-                },
-                { status: 402 }
-              );
-            }
-            throw error;
+    if (publishingAsCompany) {
+      try {
+        job = await prisma.$transaction(async (tx) => {
+          // Leer dentro de la transacción para bloquear la fila del usuario.
+          const freshUser = await tx.user.findUnique({ where: { id: userId } });
+          if (!freshUser || freshUser.credits < creditCost) {
+            throw new Error('INSUFFICIENT_CREDITS');
           }
+
+          const updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: { credits: { decrement: creditCost } },
+          });
+
+          const createdJob = await tx.job.create({ data: jobData });
+
+          await tx.creditTransaction.create({
+            data: {
+              userId,
+              type: 'spend',
+              amount: -creditCost,
+              balanceBefore: updatedUser.credits + creditCost,
+              balanceAfter: updatedUser.credits,
+              description: `Publicación de vacante: ${title}`,
+              jobId: createdJob.id,
+            },
+          });
+
+          return createdJob;
+        });
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'INSUFFICIENT_CREDITS') {
+          const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Créditos insuficientes para publicar',
+              required: creditCost,
+              available: currentUser?.credits || 0,
+              savedAsDraft: false,
+            },
+            { status: 402 }
+          );
         }
-    }
-
-    // Calcular tiempo límite para editar (4 horas desde publicación)
-    // Solo aplica cuando se publica, NO para borradores
-    const editableUntil = publishNow && initialStatus === 'active'
-      ? new Date(Date.now() + 4 * 60 * 60 * 1000)
-      : null;
-
-    // Crear vacante
-    const job = await prisma.job.create({
-      data: {
-        title,
-        company,
-        location,
-        salary,
-        jobType,
-        workMode: workMode || 'presential',
-        description,
-        requirements: requirements || null,
-        userId: userId,
-        companyRating: companyRating || null,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-        status: initialStatus,
-        // Campos de pricing
-        profile: profile || null,
-        seniority: seniority || null,
-        creditCost: initialStatus === 'active' ? creditCost : 0,
-        editableUntil // 4 horas para editar
+        throw error;
       }
-    });
-
-    // Registrar transacción de créditos si se publicó
-    if (initialStatus === 'active' && userId && userRole === 'company' && balanceAfterPublish !== null) {
-      await prisma.creditTransaction.create({
-        data: {
-          userId: userId,
-          type: 'spend',
-          amount: -creditCost,
-          balanceBefore: balanceAfterPublish + creditCost, // Balance antes del decremento
-          balanceAfter: balanceAfterPublish,
-          description: `Publicación de vacante: ${title}`,
-          jobId: job.id
-        }
-      });
+    } else {
+      // Borrador, o publicación de admin (sin créditos): crear directamente.
+      job = await prisma.job.create({ data: jobData });
     }
 
     return NextResponse.json(

@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/direct-applications.test.ts
 
 /**

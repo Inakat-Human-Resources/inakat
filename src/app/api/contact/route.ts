@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { applyRateLimit, CONTACT_RATE_LIMIT } from '@/lib/rate-limit';
 import { sanitizeBody } from '@/lib/sanitize';
+import { validate, contactMessageSchema } from '@/lib/validations';
 
 export async function POST(request: Request) {
   try {
@@ -13,15 +14,18 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const clean = sanitizeBody(body, ['mensaje']);
-    const { nombre, email, telefono, mensaje } = clean;
 
-    // Validate required fields
-    if (!nombre || !email || !mensaje) {
+    // SEGURIDAD (#10/#57): validar formato (email, teléfono, longitudes) con zod,
+    // no sólo presencia. Antes sólo se comprobaba que existieran los campos.
+    const validation = validate(contactMessageSchema, clean);
+    if (!validation.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Datos inválidos", errors: validation.errors },
         { status: 400 }
       );
     }
+
+    const { nombre, email, telefono, mensaje } = validation.data;
 
     // Create contact message in database
     const contactMessage = await prisma.contactMessage.create({

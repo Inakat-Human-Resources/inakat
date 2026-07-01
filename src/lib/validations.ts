@@ -42,7 +42,10 @@ export const contactMessageSchema = z.object({
   telefono: z
     .string()
     .regex(
-      /^\+?52?\d{10}$/,
+      // 10 dígitos, con prefijo de país +52/52 OPCIONAL como grupo. El patrón
+      // anterior (/^\+?52?\d{10}$/) rechazaba números de 10 dígitos que empiezan
+      // por 52 (consumía el "52" del prefijo y dejaba sólo 8 dígitos) (#11).
+      /^(\+?52)?\d{10}$/,
       'Teléfono inválido. Formato: 5512345678 o +525512345678'
     )
     .optional()

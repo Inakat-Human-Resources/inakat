@@ -3,6 +3,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// #53: parseo de JSON tolerante por fila. Antes un único valor malformado en
+// cualquier fila hacía fallar el .map() y devolvía 500 para TODO el listado.
+function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * GET /api/company/interviews
  * Listar entrevistas de la empresa autenticada
@@ -50,12 +61,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Parse JSON text fields for each interview request
+    // Parse JSON text fields for each interview request (tolerante a datos corruptos)
     const data = interviewRequests.map((ir) => ({
       ...ir,
-      participants: ir.participants ? JSON.parse(ir.participants) : null,
-      availableSlots: JSON.parse(ir.availableSlots),
-      confirmedSlot: ir.confirmedSlot ? JSON.parse(ir.confirmedSlot) : null,
+      participants: safeJsonParse(ir.participants, null),
+      availableSlots: safeJsonParse(ir.availableSlots, [] as unknown[]),
+      confirmedSlot: safeJsonParse(ir.confirmedSlot, null),
     }));
 
     return NextResponse.json({ success: true, data });

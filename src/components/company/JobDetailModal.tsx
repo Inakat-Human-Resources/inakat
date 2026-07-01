@@ -100,6 +100,7 @@ export default function JobDetailModal({ job, isOpen, onClose }: JobDetailModalP
           </div>
           <button
             onClick={onClose}
+            aria-label="Cerrar"
             className="text-gray-400 hover:text-gray-600 p-1"
           >
             <X size={24} />

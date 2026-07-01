@@ -1377,6 +1377,7 @@ const CreateJobForm = () => {
                         habilidades: prev.habilidades.filter((_, i) => i !== index)
                       }));
                     }}
+                    aria-label="Quitar habilidad"
                     className="hover:bg-green-800 rounded-full p-0.5"
                   >
                     <X size={14} />

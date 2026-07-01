@@ -123,7 +123,7 @@ describe('Confidential Jobs Feature', () => {
     });
 
     it('debería defaultear isConfidential a false si no se proporciona', () => {
-      const jobData = {
+      const jobData: Record<string, unknown> = {
         title: 'Desarrollador',
         company: 'MiEmpresa',
         location: 'CDMX',

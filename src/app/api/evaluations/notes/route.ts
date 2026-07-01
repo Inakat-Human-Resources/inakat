@@ -3,6 +3,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sanitizeMultilineText } from '@/lib/sanitize';
+import {
+  canAccessJob,
+  jobAuthInfoFromApplication,
+  loadApplicationForAuth,
+} from '@/lib/authz-applications';
 
 /**
  * GET /api/evaluations/notes?applicationId=123
@@ -10,10 +15,11 @@ import { sanitizeMultilineText } from '@/lib/sanitize';
  */
 export async function GET(request: NextRequest) {
   try {
+    const userId = request.headers.get('x-user-id');
     const userRole = request.headers.get('x-user-role');
 
     // Reclutadores, especialistas, admins y empresas pueden ver notas
-    if (!userRole || !['recruiter', 'specialist', 'admin', 'company'].includes(userRole)) {
+    if (!userId || !userRole || !['recruiter', 'specialist', 'admin', 'company'].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: 'No autorizado' },
         { status: 403 }
@@ -30,8 +36,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const appId = parseInt(applicationId);
+
+    // Autorización por ownership/asignación sobre la Application
+    const application = await loadApplicationForAuth(appId);
+
+    if (!application) {
+      return NextResponse.json(
+        { success: false, error: 'Aplicación no encontrada' },
+        { status: 404 }
+      );
+    }
+
+    if (!canAccessJob({ id: parseInt(userId), role: userRole }, jobAuthInfoFromApplication(application))) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta aplicación' },
+        { status: 403 }
+      );
+    }
+
     // Empresas solo ven notas públicas
-    const whereClause: any = { applicationId: parseInt(applicationId) };
+    const whereClause: { applicationId: number; isPublic?: boolean } = { applicationId: appId };
     if (userRole === 'company') {
       whereClause.isPublic = true;
     }
@@ -85,15 +110,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar que la application existe
-    const application = await prisma.application.findUnique({
-      where: { id: parseInt(applicationId) },
-    });
+    // Verificar que la application existe y autorizar (recruiter/specialist asignado)
+    const application = await loadApplicationForAuth(parseInt(applicationId));
 
     if (!application) {
       return NextResponse.json(
         { success: false, error: 'Aplicación no encontrada' },
         { status: 404 }
+      );
+    }
+
+    if (!canAccessJob({ id: parseInt(userId), role: userRole }, jobAuthInfoFromApplication(application))) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado para esta aplicación' },
+        { status: 403 }
       );
     }
 

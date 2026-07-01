@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/job-edit-credits.test.ts
 
 /**
@@ -298,7 +299,7 @@ describe('Job Edit Credits Validation', () => {
       });
 
       // Solo cambió el título, no profile/seniority/workMode
-      const editData = {
+      const editData: Record<string, unknown> = {
         title: 'Desarrollador Frontend Senior'
       };
 
@@ -314,7 +315,7 @@ describe('Job Edit Credits Validation', () => {
     it('no debería cambiar créditos cuando solo se edita la descripción', async () => {
       const originalJob = createMockJob({ creditCost: 8 });
 
-      const editData = {
+      const editData: Record<string, unknown> = {
         description: 'Nueva descripción del puesto'
       };
 
@@ -481,7 +482,7 @@ describe('Job Edit Credits Validation', () => {
     });
 
     it('no debería incluir creditChange cuando no hay cambio de precio', () => {
-      const response = {
+      const response: Record<string, unknown> = {
         success: true,
         message: 'Vacante actualizada exitosamente',
         data: { /* job data */ }

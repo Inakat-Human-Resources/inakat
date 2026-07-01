@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancelar runs anteriores del mismo ref si llega uno nuevo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + lint + tests
+    runs-on: ubuntu-latest
+
+    # Valores DUMMY sólo para el entorno de CI:
+    # - JWT_SECRET: src/lib/auth.ts lanza al importar si falta o tiene <32 chars.
+    # - DATABASE_URL/DIRECT_URL: el cliente Prisma exige la variable al construirse.
+    #   No se conecta a ninguna DB real: los tests de integración están gateados
+    #   (describe.skip salvo RUN_INTEGRATION_TESTS=true) y el resto mockea Prisma.
+    env:
+      JWT_SECRET: ci-dummy-jwt-secret-de-mas-de-treinta-y-dos-chars
+      DATABASE_URL: postgresql://user:pass@localhost:5432/inakat_ci?schema=public
+      DIRECT_URL: postgresql://user:pass@localhost:5432/inakat_ci?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` ejecuta postinstall -> `prisma generate` (necesario para tsc/tests).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Tests (jest)
+        run: npm test

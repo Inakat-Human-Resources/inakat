@@ -523,6 +523,7 @@ const FormRegisterForQuotationSection = () => {
                         name="nombre"
                         value={formData.nombre}
                         onChange={handleInputChange}
+                        aria-label="Nombre *"
                         placeholder="Nombre *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -541,6 +542,7 @@ const FormRegisterForQuotationSection = () => {
                         name="apellidoPaterno"
                         value={formData.apellidoPaterno}
                         onChange={handleInputChange}
+                        aria-label="Apellido Paterno *"
                         placeholder="Apellido Paterno *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -559,6 +561,7 @@ const FormRegisterForQuotationSection = () => {
                         name="apellidoMaterno"
                         value={formData.apellidoMaterno}
                         onChange={handleInputChange}
+                        aria-label="Apellido Materno *"
                         placeholder="Apellido Materno *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -582,6 +585,7 @@ const FormRegisterForQuotationSection = () => {
                         onChange={handleInputChange}
                         autoComplete="one-time-code"
                         role="presentation"
+                        aria-label="Departamento de la empresa (ej: Recursos Humanos)"
                         placeholder="Departamento de la empresa (ej: Recursos Humanos)"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       />
@@ -642,6 +646,7 @@ const FormRegisterForQuotationSection = () => {
                         name="password"
                         value={formData.password}
                         onChange={handleInputChange}
+                        aria-label="Genera tu contraseña *"
                         placeholder="Genera tu contraseña *"
                         className={`w-full p-3 rounded-lg border text-gray-700 ${
                           errors.password ? 'border-red-500' : 'border-gray-300'
@@ -666,6 +671,7 @@ const FormRegisterForQuotationSection = () => {
                         name="confirmPassword"
                         value={formData.confirmPassword}
                         onChange={handleInputChange}
+                        aria-label="Confirma tu contraseña *"
                         placeholder="Confirma tu contraseña *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="new-password"
@@ -728,6 +734,7 @@ const FormRegisterForQuotationSection = () => {
                       name="nombreEmpresa"
                       value={formData.nombreEmpresa}
                       onChange={handleInputChange}
+                      aria-label="Nombre comercial *"
                       placeholder="Nombre comercial *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       autoComplete="off"
@@ -741,6 +748,7 @@ const FormRegisterForQuotationSection = () => {
                       name="correoEmpresa"
                       value={formData.correoEmpresa}
                       onChange={handleInputChange}
+                      aria-label="Correo electrónico *"
                       placeholder="Correo electrónico *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       autoComplete="off"
@@ -759,6 +767,7 @@ const FormRegisterForQuotationSection = () => {
                       name="sitioWeb"
                       value={formData.sitioWeb}
                       onChange={handleInputChange}
+                      aria-label="Sitio web (opcional)"
                       placeholder="Sitio web (opcional)"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       autoComplete="off"
@@ -776,6 +785,7 @@ const FormRegisterForQuotationSection = () => {
                       name="razonSocial"
                       value={formData.razonSocial}
                       onChange={handleInputChange}
+                      aria-label="Razón Social *"
                       placeholder="Razón Social *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                       autoComplete="off"
@@ -789,6 +799,7 @@ const FormRegisterForQuotationSection = () => {
                       name="rfc"
                       value={formData.rfc}
                       onChange={handleInputChange}
+                      aria-label="RFC *"
                       placeholder="RFC *"
                       className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 uppercase"
                       autoComplete="off"
@@ -810,6 +821,7 @@ const FormRegisterForQuotationSection = () => {
                         name="calle"
                         value={formData.calle}
                         onChange={handleInputChange}
+                        aria-label="Calle y número *"
                         placeholder="Calle y número *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -822,6 +834,7 @@ const FormRegisterForQuotationSection = () => {
                         name="colonia"
                         value={formData.colonia}
                         onChange={handleInputChange}
+                        aria-label="Colonia *"
                         placeholder="Colonia *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -834,6 +847,7 @@ const FormRegisterForQuotationSection = () => {
                         name="ciudad"
                         value={formData.ciudad}
                         onChange={handleInputChange}
+                        aria-label="Ciudad *"
                         placeholder="Ciudad *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -846,6 +860,7 @@ const FormRegisterForQuotationSection = () => {
                         name="codigoPostal"
                         value={formData.codigoPostal}
                         onChange={handleInputChange}
+                        aria-label="Código Postal *"
                         placeholder="Código Postal *"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
@@ -882,6 +897,7 @@ const FormRegisterForQuotationSection = () => {
                         >
                           <input
                             type="text"
+                            aria-label="Busca tu dirección..."
                             placeholder="Busca tu dirección..."
                             className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 mb-3"
                           />

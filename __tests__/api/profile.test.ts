@@ -145,7 +145,7 @@ describe('Profile API Tests', () => {
     });
 
     it('debería requerir contraseña actual para cambiar contraseña', () => {
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         newPassword: 'nuevaPassword123'
         // currentPassword no está presente
       };

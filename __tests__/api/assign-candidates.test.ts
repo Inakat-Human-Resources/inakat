@@ -1,3 +1,4 @@
+export {};
 // RUTA: __tests__/api/assign-candidates.test.ts
 
 /**
@@ -36,7 +37,7 @@ describe('Assign Candidates API Logic Tests', () => {
 
   describe('POST /api/admin/assign-candidates', () => {
     it('debería validar que jobId es requerido', () => {
-      const body = { candidateIds: [1, 2, 3] };
+      const body: { jobId?: number; candidateIds: number[] } = { candidateIds: [1, 2, 3] };
 
       const hasJobId = !!body.jobId;
       expect(hasJobId).toBe(false);

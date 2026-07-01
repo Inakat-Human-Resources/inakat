@@ -66,6 +66,16 @@ const ApplyJobModal = ({
 }: ApplyJobModalProps) => {
   const router = useRouter();
 
+  // A11y (#59): cerrar con la tecla Escape mientras el modal está abierto.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   // Vista actual del modal
   const [view, setView] = useState<ModalView>('loading');
 
@@ -337,12 +347,21 @@ const ApplyJobModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 fade-in-fast"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="apply-modal-title"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="flex justify-between items-start p-6 border-b">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 id="apply-modal-title" className="text-xl font-bold text-gray-900">
               {view === 'manual_form' ? 'Aplicar a Vacante' : 'Postularme'}
             </h2>
             <p className="text-gray-600 mt-1 text-sm">
@@ -351,9 +370,10 @@ const ApplyJobModal = ({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            aria-label="Cerrar"
+            className="text-gray-400 hover:text-gray-600 rounded-full"
           >
-            <X size={24} />
+            <X size={24} aria-hidden="true" />
           </button>
         </div>
 
