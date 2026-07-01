@@ -267,6 +267,16 @@ export default function CandidateProfileModal({
     }
   }, [isOpen, application?.id, canViewSkillRatings]);
 
+  // A11y (#59): cerrar con la tecla Escape mientras el modal está abierto.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   const fetchSkillRatings = async (applicationId: number) => {
     try {
       const res = await fetch(`/api/evaluations/skill-ratings?applicationId=${applicationId}`);
@@ -674,8 +684,17 @@ export default function CandidateProfileModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 fade-in-fast"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Perfil de ${data.name}`}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 md:p-6 flex justify-between items-start gap-2">
           <div className="flex-1 min-w-0">
@@ -706,9 +725,10 @@ export default function CandidateProfileModal({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0"
+            aria-label="Cerrar"
+            className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0 rounded-full"
           >
-            <X size={24} />
+            <X size={24} aria-hidden="true" />
           </button>
         </div>
 
@@ -980,6 +1000,9 @@ export default function CandidateProfileModal({
                             <button
                               key={star}
                               type="button"
+                              aria-label={`Calificar ${skill}: ${star} de 5 estrella${star > 1 ? 's' : ''}`}
+                              aria-pressed={star <= currentRating}
+                              title={`${star} de 5`}
                               onClick={() => {
                                 if (!canEditSkillRatings) return;
                                 setSkillRatings(prev => ({
@@ -992,7 +1015,7 @@ export default function CandidateProfileModal({
                                 canEditSkillRatings ? 'cursor-pointer hover:scale-110' : 'cursor-default'
                               } ${star <= currentRating ? 'text-amber-400' : 'text-gray-300'}`}
                             >
-                              {star <= currentRating ? '★' : '☆'}
+                              <span aria-hidden="true">{star <= currentRating ? '★' : '☆'}</span>
                             </button>
                           ))}
                         </div>
