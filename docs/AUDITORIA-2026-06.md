@@ -91,7 +91,10 @@ Remediación organizada en **4 fases**, una rama y un PR por fase (apilados):
   `.skeleton`, `.link-underline`) y `@media (prefers-reduced-motion: reduce)`.
 - A11y del audit: FAQ con `aria-expanded`/`aria-controls`/`aria-hidden` **#66**;
   tarjetas de vacante operables por teclado **#63**; botón BUSCAR funcional **#64**;
-  modal de aplicación con Escape + `role=dialog`/`aria-modal`/`aria-label` **#59/#60**.
+  modales con Escape + `role=dialog`/`aria-modal`/`aria-label` (ApplyJobModal,
+  CandidateProfileModal) **#59**; sweep de nombres accesibles en botones de
+  cerrar/descartar de 8 modales/toasts **#60**; estrellas de calificación con
+  nombre accesible **#65**; nombres accesibles en el formulario de empresa **#61**.
 - `StatCard` (todos los dashboards) con elevación y micro-zoom.
 
 ---
@@ -125,9 +128,12 @@ Remediación organizada en **4 fases**, una rama y un PR por fase (apilados):
    **producción** (`migrate resolve --applied`) es acción manual. Igualmente, pasar
    `role`/`status` a enums, añadir FKs al ledger y reemplazar listas CSV por
    relaciones requiere migraciones revisadas.
-9. **A11y restante de Fase 4 (no bloqueante):** labels asociados a inputs
-   (#61/#62), nombre accesible de las estrellas de calificación (#65), y aplicar
-   las utilidades de elevación/entrada a más componentes por página.
+9. **A11y restante de Fase 4 (no bloqueante):** asociar los `<label>` visibles
+   del formulario de registro de candidato a sus inputs vía `htmlFor`/`id` (#62)
+   — se dejó pendiente a propósito porque un `aria-label` derivado del placeholder
+   diferiría del texto visible y rompería el criterio "label in name"; requiere
+   asignación campo por campo. También: aplicar las utilidades de
+   elevación/entrada a más componentes por página.
 10. **Menores diferidos:** branch muerto en `credit-packages` por el middleware
     (#28); módulo central de validación de variables de entorno (#88).
 
