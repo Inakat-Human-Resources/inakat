@@ -64,6 +64,10 @@ model User {
   // Notificaciones in-app
   notifications           Notification[]
 
+  // Integración Worky2 (API keys entrantes y webhooks salientes, para role="company")
+  integrationApiKeys      IntegrationApiKey[] @relation("IntegrationKeyOwner")
+  integrationWebhooks     IntegrationWebhook[] @relation("IntegrationWebhookOwner")
+
   @@index([email])
   @@index([role])
   @@index([isActive])
@@ -822,5 +826,62 @@ model SkillRating {
   @@unique([applicationId, skillName]) // Una calificación por habilidad por aplicación
   @@index([applicationId])
   @@index([ratedById])
+}
+
+// =============================================
+// INTEGRACIÓN WORKY2 — API KEYS
+// =============================================
+// Llaves de API para que sistemas externos (Worky2) consulten los candidatos
+// aceptados de una empresa. NUNCA se guarda la key en claro: solo su SHA-256.
+model IntegrationApiKey {
+  id          Int       @id @default(autoincrement())
+
+  // Empresa dueña de la key (User con role="company")
+  userId      Int
+  user        User      @relation("IntegrationKeyOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Nombre descriptivo (ej: "Worky2 producción")
+  name        String
+
+  // SHA-256 hex de la key en claro (formato de la key: "inak_" + 32 hex)
+  keyHash     String    @unique
+
+  // Estado
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+
+  // Timestamp
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// =============================================
+// INTEGRACIÓN WORKY2 — WEBHOOKS SALIENTES
+// =============================================
+// URLs registradas por la empresa para recibir el evento candidate.accepted
+// firmado con HMAC-SHA256 (headers X-Inakat-Timestamp / X-Inakat-Signature).
+model IntegrationWebhook {
+  id          Int       @id @default(autoincrement())
+
+  // Empresa dueña del webhook (User con role="company")
+  userId      Int
+  user        User      @relation("IntegrationWebhookOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Endpoint receptor (lo provee Worky2 en su pantalla de Integraciones)
+  url         String
+
+  // Secreto compartido para firmar el payload
+  secret      String
+
+  // Estado
+  isActive    Boolean   @default(true)
+
+  // Timestamp
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isActive])
 }
 
