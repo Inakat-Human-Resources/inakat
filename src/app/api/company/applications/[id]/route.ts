@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { notifyAllAdmins } from '@/lib/notifications';
+import { dispatchCandidateAccepted } from '@/lib/worky2-webhook';
 
 // Status válidos para que la empresa actualice
 const COMPANY_ALLOWED_STATUSES = [
@@ -176,6 +177,13 @@ export async function PATCH(
         }
       }
     });
+
+    // Integración Worky2: la Application acaba de pasar a 'accepted' →
+    // notificar candidate.accepted a los webhooks activos de la empresa
+    // (fire-and-forget: nunca bloquea ni rompe esta respuesta).
+    if (status === 'accepted') {
+      void dispatchCandidateAccepted(applicationId);
+    }
 
     // Si es 'accepted' y closeJob es true, cerrar la vacante
     let jobClosed = false;

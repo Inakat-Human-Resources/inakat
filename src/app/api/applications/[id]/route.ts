@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
+import { dispatchCandidateAccepted } from '@/lib/worky2-webhook';
 
 // ============================================================================
 // TYPES
@@ -431,6 +432,13 @@ export async function PATCH(
         }
       }
     });
+
+    // Integración Worky2: si la Application transiciona a 'accepted' (y no lo
+    // estaba ya), notificar candidate.accepted a los webhooks activos de la
+    // empresa dueña de la vacante (fire-and-forget: nunca bloquea la respuesta).
+    if (status === 'accepted' && existingApplication.status !== 'accepted') {
+      void dispatchCandidateAccepted(applicationId);
+    }
 
     // Si el status cambia a 'sent_to_specialist', actualizar JobAssignment
     if (status === 'sent_to_specialist') {
