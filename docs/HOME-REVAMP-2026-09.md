@@ -102,10 +102,20 @@ npx jest __tests__/qa
   dentro**. Por eso `home.css` devuelve `overflow: visible` a las secciones que fijan
   algo, y las que recortan usan `overflow: clip` (recorta igual, pero no crea
   contenedor de scroll). Si añades una sección con `sticky`, acuérdate.
-- 🚨 **Las animaciones de entrada cuelgan de `.hm--js`**, una clase que pone
-  `HomeMotion` en el primer efecto. Sin ese candado, si el reloj de animación no
-  avanza (pestaña de fondo al cargar, un `both` sin frames) el contenido se queda
-  invisible para siempre. Sin JS, el estado natural es el final.
+- 🚨 **Las animaciones de entrada cuelgan de `.hm--js`**, y esa clase la pone
+  `HomeMotion` **sólo cuando `document.visibilityState === 'visible'`**; si no, espera
+  a `visibilitychange`. Las dos mitades del candado se pagaron por separado:
+  - *sin el candado*, sin JavaScript no había nada que completara la animación;
+  - *sin la condición de visibilidad*, *con* JavaScript tampoco: **en una pestaña de
+    fondo el reloj de animación no avanza**, y `animation-fill-mode: both` deja el
+    elemento clavado en su fotograma inicial — que aquí es «fuera de la máscara» o
+    `opacity: 0`. Se vio en el primer preview de Vercel: la portada salía con los
+    arcos y nada más. Pasa con ctrl+click, al restaurar la sesión de pestañas y en
+    cualquier captura automática.
+
+  Se comprueba falseando `visibilityState` antes de cargar (`page.evaluateOnNewDocument`):
+  con la pestaña oculta el título, la foto y el CTA deben salir con opacidad 1 y sin
+  desplazar, y la clase no debe estar.
 - El `h1` **no lleva `transform` ni `opacity`**: si creara contexto de apilamiento,
   la foto dejaría de poder quedar *entre* las líneas del título. Las animaciones van
   en cada línea, que son máscaras.
