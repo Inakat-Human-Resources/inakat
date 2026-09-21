@@ -1,0 +1,179 @@
+/**
+ * QA del revamp de la portada (septiembre 2026).
+ *
+ * Estos tests vigilan las reglas que NO se pueden romper al seguir tocando la home:
+ * que se lea sin JavaScript, que respete "movimiento reducido", que no vuelva a
+ * presentar una imagen generada por IA como si fuera el equipo real, y que el
+ * contenido que el cliente aprobó (FAQ, testimonios, cifras) siga intacto.
+ *
+ * Son tests de código fuente, como el resto de __tests__/qa: no montan React.
+ */
+import fs from 'fs';
+import path from 'path';
+
+const readFile = (filePath: string): string =>
+  fs.readFileSync(path.join(process.cwd(), filePath), 'utf-8');
+
+const HOME = 'src/app/page.tsx';
+const CSS = 'src/app/home.css';
+
+// ============================================================
+// Estructura de la portada
+// ============================================================
+
+describe('Home revamp: estructura de la página', () => {
+  const content = readFile(HOME);
+
+  it('carga su propia hoja de estilos', () => {
+    expect(content).toContain('./home.css');
+  });
+
+  it('envuelve la página en .hm (ámbito de los estilos de la home)', () => {
+    expect(content).toMatch(/className=\{`hm /);
+  });
+
+  it('mantiene todas las secciones del recorrido', () => {
+    for (const section of [
+      'HeroSection',
+      'SocialProofBar',
+      'PhilosophySection',
+      'SelectionProcessSection',
+      'DualCTASection',
+      'WhyInakatSection',
+      'SpecialtiesSection',
+      'StatsSection',
+      'TestimonialsSection',
+      'CoverageMapSection',
+      'FAQSection',
+      'Footer',
+    ]) {
+      expect(content).toContain(section);
+    }
+  });
+
+  it('usa el proceso de selección en su variante de arco', () => {
+    expect(content).toMatch(/<SelectionProcessSection\s+variant="arc"\s*\/>/);
+  });
+});
+
+// ============================================================
+// Accesibilidad y degradación: lo que se cobra si se rompe
+// ============================================================
+
+describe('Home revamp: se lee sin JavaScript y con movimiento reducido', () => {
+  const css = readFile(CSS);
+
+  it('las animaciones de entrada cuelgan de .hm--js (sin JS el estado es el final)', () => {
+    // Si una animación de entrada se declara fuera de .hm--js y el reloj de
+    // animación no avanza, el contenido se queda invisible para siempre.
+    for (const rule of [
+      '.hm--js .hm-line > span',
+      '.hm--js .hm-window',
+      '.hm--js .hm-hero__foot',
+    ]) {
+      expect(css).toContain(rule);
+    }
+  });
+
+  it('todo lo ligado al scroll vive tras @supports + prefers-reduced-motion', () => {
+    expect(css).toContain('@supports (animation-timeline: view())');
+    expect(css).toContain('prefers-reduced-motion: no-preference');
+  });
+
+  it('apaga explícitamente las animaciones en bucle con movimiento reducido', () => {
+    const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
+    for (const selector of ['.hm-marquee__row', '.hm-cue::before', '.hm-pin::after']) {
+      expect(reduce).toContain(selector);
+    }
+    expect(reduce).toContain('animation: none !important');
+  });
+
+  it('devuelve overflow: visible a las secciones que fijan contenido', () => {
+    // globals.css declara `section { overflow: hidden }`, y eso mata todo
+    // `position: sticky` que viva dentro de una <section>.
+    expect(css).toMatch(/\.hm-proc,[\s\S]{0,120}overflow: visible/);
+  });
+
+  it('el título partido lleva nombre accesible y sus trozos van aria-hidden', () => {
+    const hero = readFile('src/components/sections/home/HeroSection.tsx');
+    expect(hero).toMatch(/<h1[^>]*aria-label=\{lines\.join\(' '\)\}/);
+    expect((hero.match(/aria-hidden="true"/g) || []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('los acordeones son <details> nativos (teclado y sin-JS gratis)', () => {
+    const faq = readFile('src/components/sections/home/FAQSection.tsx');
+    const esp = readFile('src/components/sections/home/SpecialtiesSection.tsx');
+    expect(faq).toMatch(/<details\s+key=/);
+    expect(esp).toMatch(/<details\s+key=/);
+  });
+});
+
+// ============================================================
+// Honestidad del contenido
+// ============================================================
+
+describe('Home revamp: honestidad del contenido', () => {
+  it('la foto generada por IA no se presenta como el equipo de INAKAT', () => {
+    const hero = readFile('src/components/sections/home/HeroSection.tsx');
+    expect(hero).not.toMatch(/alt="Equipo INAKAT/);
+    expect(hero).toMatch(/alt="Ilustración/);
+  });
+
+  it('la marquesina no duplica su contenido para los lectores de pantalla', () => {
+    const bar = readFile('src/components/sections/home/SocialProofBar.tsx');
+    expect(bar).toMatch(/<MetricList hidden \/>/);
+    expect(bar).toMatch(/aria-hidden=\{hidden \|\| undefined\}/);
+  });
+
+  it('conserva los dos testimonios reales con su empresa', () => {
+    const t = readFile('src/components/sections/home/TestimonialsSection.tsx');
+    for (const s of ['Mayela Sánchez', 'Grupo 4S', 'Adrian Cuadros', 'Reserhub']) {
+      expect(t).toContain(s);
+    }
+  });
+
+  it('conserva las 9 preguntas frecuentes aprobadas', () => {
+    const faq = readFile('src/components/sections/home/FAQSection.tsx');
+    expect((faq.match(/question:/g) || []).length).toBe(9);
+    expect(faq).toContain('calculadora de costo');
+  });
+
+  it('conserva las cuatro cifras de la portada', () => {
+    const stats = readFile('src/components/sections/home/StatsSection.tsx');
+    for (const v of [/value: 100/, /value: 150/, /value: 15\b/, /value: 11/]) {
+      expect(stats).toMatch(v);
+    }
+  });
+
+  it('el teléfono y el correo del cierre son enlaces accionables', () => {
+    const close = readFile('src/components/sections/home/HomeCloseSection.tsx');
+    expect(close).toContain('mailto:info@inakat.com');
+    expect(close).toContain('tel:+528116312490');
+  });
+});
+
+// ============================================================
+// El proceso de selección sigue siendo una sola fuente de datos
+// ============================================================
+
+describe('Home revamp: el proceso de selección no se duplicó', () => {
+  const process = readFile('src/components/sections/aboutus/SelectionProcessSection.tsx');
+
+  it('/about sigue usando la variante de rejilla', () => {
+    const about = readFile('src/app/about/page.tsx');
+    expect(about).toContain('SelectionProcessSection');
+    expect(about).not.toContain('variant="arc"');
+  });
+
+  it('las 11 etapas viven en un único archivo', () => {
+    expect(process).toContain('const mainSteps');
+    expect(process).toContain('const postSteps');
+    const arc = readFile('src/components/sections/home/ProcessArc.tsx');
+    expect(arc).not.toContain('Definición del perfil');
+  });
+
+  it('la variante de arco recibe las 11 etapas', () => {
+    expect(process).toMatch(/\.\.\.mainSteps\.map/);
+    expect(process).toMatch(/\.\.\.postSteps\.map/);
+  });
+});
