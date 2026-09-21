@@ -1,17 +1,26 @@
 // RUTA: src/components/sections/home/CoverageMapSection.tsx
 import Image from 'next/image';
-import mapImage from '@/assets/images/1-home/7.png';
+import mapImage from '@/assets/images/1-home/mapa-cobertura.png';
 
-// Posición de cada ciudad medida sobre 7.png (1840 × 1265 px), en % del ancho/alto.
+// Posición de cada ciudad sobre el mapa, en % del ancho/alto de la imagen.
+//
+// No están puestas a ojo: el PNG ya marca en naranja tres estados, y sus centroides
+// (medidos analizando el archivo por color) sirven de ancla geográfica —
+// CDMX 56.9%/74.9%, Jalisco 41.6%/68.1%, Nuevo León 53.9%/41.2%. De ahí sale la
+// proyección de este mapa, que resultó ser prácticamente equirectangular:
+//
+//   x% = 56.9 + (lon + 99.13) * 3.46        y% = 74.9 - (lat - 19.43) * 5.90
+//
+// Si alguna vez se cambia la imagen del mapa, hay que rehacer estas cuentas.
 const cities = [
-  { name: 'CDMX', top: '74.5%', left: '56.8%' },
-  { name: 'Monterrey', top: '43%', left: '53.5%' },
-  { name: 'Guadalajara', top: '65.6%', left: '43.5%' },
-  { name: 'Puebla', top: '75.5%', left: '59.8%' },
-  { name: 'Querétaro', top: '67.2%', left: '54.6%' },
+  { name: 'CDMX', top: '74.9%', left: '56.9%' },
+  { name: 'Monterrey', top: '38.0%', left: '52.8%' },
+  { name: 'Guadalajara', top: '67.6%', left: '42.3%' },
+  { name: 'Puebla', top: '77.2%', left: '60.1%' },
+  { name: 'Querétaro', top: '68.1%', left: '52.5%' },
+  { name: 'León', top: '64.9%', left: '48.1%' },
+  { name: 'Mérida', top: '65.8%', left: '89.9%' },
 ];
-
-const cityList = ['CDMX', 'Monterrey', 'Guadalajara', 'Puebla', 'Querétaro', 'León', 'Mérida', 'Y más...'];
 
 const CoverageMapSection = () => {
   return (
@@ -29,22 +38,23 @@ const CoverageMapSection = () => {
           </p>
 
           <ul className="hm-cities">
-            {cityList.map((city) => (
-              <li key={city} className="hm-rv">
-                {city}
+            {cities.map((city) => (
+              <li key={city.name} className="hm-rv">
+                {city.name}
               </li>
             ))}
+            <li className="hm-rv hm-cities__mas">Y más…</li>
           </ul>
         </div>
 
         <div className="hm-map">
           <Image
             src={mapImage}
-            alt="Mapa de cobertura INAKAT en la República Mexicana"
-            sizes="(max-width: 900px) 100vw, 58vw"
+            alt="Mapa de la República Mexicana con las ciudades donde INAKAT tiene presencia"
+            sizes="(max-width: 900px) 92vw, 58vw"
             loading="lazy"
           />
-          {/* Decorativos: las ciudades ya están en la lista de texto */}
+          {/* Decorativos: la lista de ciudades de al lado es la versión accesible */}
           {cities.map((city, index) => (
             <span
               key={city.name}

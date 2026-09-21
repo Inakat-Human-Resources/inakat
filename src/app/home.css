@@ -304,12 +304,12 @@
   animation: hm-unveil 1.5s var(--ease) 0.35s both;
 }
 .hm-window img {
+  /* La imagen ya viene recortada en retrato 4:5 (752x940) y sin los rótulos
+     quemados, así que cubre el arco sin ampliarse: nada de estirar un 3:2. */
   width: 100%;
-  /* 140 %: deja fuera del arco la franja inferior de la imagen (rótulos quemados) */
-  height: 140%;
+  height: 100%;
   object-fit: cover;
-  object-position: 50% 0%;
-  transform-origin: 50% 0%;
+  object-position: 50% 12%;
 }
 .hm--js .hm-window img {
   animation: hm-settle 2s var(--ease) 0.35s both;
@@ -1154,6 +1154,14 @@ details[open] > summary .hm-plus::after {
   border-radius: 50%;
   background: var(--orange);
 }
+/* «Y más…» no es una ciudad marcada en el mapa: sin punto y en un tono más callado */
+.hm-cities__mas {
+  border-style: dashed;
+  color: rgb(40 55 57 / 0.7);
+}
+.hm-cities__mas::before {
+  display: none;
+}
 .hm-map {
   position: relative;
 }
@@ -1163,20 +1171,21 @@ details[open] > summary .hm-plus::after {
   display: block;
 }
 .hm-pin {
+  --pin: clamp(8px, 0.95vw, 13px);
   position: absolute;
-  width: clamp(7px, 1.1vw, 16px);
+  width: var(--pin);
   aspect-ratio: 1;
-  margin: calc(clamp(7px, 1.1vw, 16px) / -2) 0 0 calc(clamp(7px, 1.1vw, 16px) / -2);
+  margin: calc(var(--pin) / -2) 0 0 calc(var(--pin) / -2);
   border-radius: 50%;
-  background: var(--ink);
-  box-shadow: 0 0 0 2px #fff;
+  background: var(--orange);
+  box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgb(40 55 57 / 0.35);
 }
 .hm-pin::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--orange);
   animation: hm-ping 2.6s ease-out infinite;
   animation-delay: calc(var(--i, 0) * 0.45s);
 }

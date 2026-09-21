@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
-import heroImage from '@/assets/images/1-home/hero-inakat.jpg';
+import heroImage from '@/assets/images/1-home/hero-inakat-retrato.jpg';
 
 const lines = ['Contrata talento', 'que realmente', 'hace la diferencia.'];
 
@@ -46,7 +46,7 @@ const HeroSection = () => {
               alt="Ilustración: profesionales de distintas disciplinas"
               priority
               placeholder="blur"
-              sizes="(max-width: 860px) 72vw, 32vw"
+              sizes="(max-width: 860px) 46vw, 26vw"
             />
           </div>
           <span className="hm-dot hm-hero__dot" aria-hidden="true" />

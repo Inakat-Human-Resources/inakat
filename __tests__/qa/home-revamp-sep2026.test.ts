@@ -155,6 +155,41 @@ describe('Home revamp: honestidad del contenido', () => {
     }
   });
 
+  it('el mapa usa la versión con los estados sin cobertura visibles', () => {
+    // El PNG original pintaba esos estados en (224,224,208) y el suelo de la
+    // sección es #e8e7d4: 1.07:1 de contraste, o sea medio país invisible.
+    const cov = readFile('src/components/sections/home/CoverageMapSection.tsx');
+    expect(cov).toContain('mapa-cobertura.png');
+    expect(cov).not.toContain('1-home/7.png');
+  });
+
+  it('cada ciudad del mapa tiene una posición dentro de la imagen', () => {
+    const cov = readFile('src/components/sections/home/CoverageMapSection.tsx');
+    const pos = [...cov.matchAll(/name: '([^']+)', top: '([\d.]+)%', left: '([\d.]+)%'/g)];
+    expect(pos.length).toBeGreaterThanOrEqual(7);
+    for (const [, nombre, top, left] of pos) {
+      expect(Number(top)).toBeGreaterThan(0);
+      expect(Number(top)).toBeLessThan(100);
+      expect(Number(left)).toBeGreaterThan(0);
+      expect(Number(left)).toBeLessThan(100);
+      expect(nombre.length).toBeGreaterThan(2);
+    }
+    // Comprobaciones geográficas: Monterrey al norte de CDMX, y CDMX al oeste de Mérida
+    const de = (n: string) => pos.find((p) => p[1] === n)!;
+    expect(Number(de('Monterrey')[2])).toBeLessThan(Number(de('CDMX')[2]));
+    expect(Number(de('CDMX')[3])).toBeLessThan(Number(de('Mérida')[3]));
+    expect(Number(de('Guadalajara')[3])).toBeLessThan(Number(de('CDMX')[3]));
+  });
+
+  it('el hero usa el recorte en retrato, no la imagen horizontal estirada', () => {
+    // La original es 1920x1280; mostrada en un arco vertical con cover se
+    // ampliaba 1.73x y se veía borrosa.
+    const hero = readFile('src/components/sections/home/HeroSection.tsx');
+    expect(hero).toContain('hero-inakat-retrato.jpg');
+    const css = readFile(CSS);
+    expect(css).not.toMatch(/\.hm-window img \{[^}]*height: 140%/);
+  });
+
   it('el teléfono y el correo del cierre son enlaces accionables', () => {
     const close = readFile('src/components/sections/home/HomeCloseSection.tsx');
     expect(close).toContain('mailto:info@inakat.com');
