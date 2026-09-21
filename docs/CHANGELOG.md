@@ -9,6 +9,39 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### 🎨 Rediseño de la portada — 2026-09-21 (rama `feat/home-revamp`)
+
+Concepto **«Arco»**, sacado del isotipo (un punto y un arco): siete patrones de
+composición distintos, escala tipográfica que llega a 129 px y ocho mecanismos de
+movimiento ligados al scroll con `animation-timeline` nativo — sin añadir ninguna
+dependencia. Detalle completo, decisiones y trampas en
+[`docs/HOME-REVAMP-2026-09.md`](./HOME-REVAMP-2026-09.md).
+
+- **Agregado:** `src/app/home.css` (estilos de la home, todo con prefijo `hm-`);
+  `src/components/sections/home/ProcessArc.tsx` (escena fijada de las 11 etapas);
+  `src/components/sections/home/HomeCloseSection.tsx`;
+  `src/components/sections/home/HomeMotion.tsx` (paralaje del puntero, botones
+  imantados y la clase `.hm--js`); 19 tests en
+  `__tests__/qa/home-revamp-sep2026.test.ts`.
+- **Cambiado:** las 12 secciones de `src/components/sections/home/`;
+  `SelectionProcessSection` ahora acepta `variant="grid" | "arc"` para que la home y
+  `/about` compartan una sola fuente de las 11 etapas.
+- **Corregido:** la foto del hero (generada por IA, con rótulos quemados) ya no se
+  presenta como el equipo real de INAKAT; el acordeón de FAQ y el de especialidades
+  pasan a `<details>` nativos (teclado y sin-JS gratis); las cifras se pintan desde el
+  servidor en vez de con un contador JS; el título partido lleva `aria-label`.
+- **Verificado:** Chrome real en 1440/1024/820v/390/360 sin desbordes, `reduce`
+  motion con 0 animaciones corriendo, sin JS con 91 elementos clave visibles, los 32
+  encabezados en el árbol de accesibilidad, `tsc` y `eslint` en 0.
+
+### 🔍 Auditoría integral — 2026-09-21
+
+483 hallazgos en 166 archivos (1 crítico, 51 altos), con el parte de trabajo en
+[`docs/AUDITORIA-2026-09.md`](./AUDITORIA-2026-09.md) y una ficha por defecto en
+`docs/auditoria-2026-09/`. **Nada de esto está arreglado todavía.** Lo primero de la
+lista es que `main` está en rojo: 4 tests de `__tests__/api/auth-reset-password.test.ts`
+apuntan a un SQL que borró el PR #6, y CI corre `npm test` de forma bloqueante.
+
 ### Planificado
 - Sistema de notificaciones por email
 - Panel completo para empresas
