@@ -9,17 +9,36 @@ import { useEffect } from 'react';
 // Solo con puntero fino y sin movimiento reducido. El rAF se detiene solo.
 const HomeMotion = () => {
   useEffect(() => {
-    // Marca que JS está vivo: las animaciones de ENTRADA de home.css cuelgan de .hm--js.
-    // Sin JS el estado natural es el final (todo visible), nunca un fotograma congelado.
+    // Las animaciones de ENTRADA de home.css cuelgan de .hm--js, y la clase se pone
+    // sólo cuando la pestaña está VISIBLE. Motivo: en una pestaña de fondo (ctrl+click,
+    // restaurar sesión) el reloj de animación no avanza, y un `both` deja el título y
+    // la foto congelados en su fotograma inicial — es decir, invisibles. Así, quien
+    // abra la home en segundo plano la encuentra legible, y la animación arranca
+    // limpia la primera vez que la mira.
     const root = document.querySelector('.hm');
-    root?.classList.add('hm--js');
+    const cleanups: Array<() => void> = [];
+
+    const arm = () => {
+      if (document.visibilityState !== 'visible') return false;
+      root?.classList.add('hm--js');
+      return true;
+    };
+
+    if (!arm()) {
+      const onVisible = () => {
+        if (arm()) document.removeEventListener('visibilitychange', onVisible);
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      cleanups.push(() => document.removeEventListener('visibilitychange', onVisible));
+    }
+
+    cleanups.push(() => root?.classList.remove('hm--js'));
 
     const fine = window.matchMedia('(hover: hover) and (pointer: fine)');
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (!fine.matches || calm.matches) return () => root?.classList.remove('hm--js');
+    if (!fine.matches || calm.matches) return () => cleanups.forEach((fn) => fn());
 
     const hero = document.querySelector<HTMLElement>('[data-hm-hero]');
-    const cleanups: Array<() => void> = [() => root?.classList.remove('hm--js')];
 
     if (hero) {
       let tx = 0;

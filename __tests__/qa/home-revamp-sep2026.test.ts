@@ -94,6 +94,16 @@ describe('Home revamp: se lee sin JavaScript y con movimiento reducido', () => {
     expect(css).toMatch(/\.hm-proc,[\s\S]{0,120}overflow: visible/);
   });
 
+  it('la animación de entrada no arranca hasta que la pestaña es visible', () => {
+    // En una pestaña de fondo (ctrl+click, restaurar sesión) el reloj de animación
+    // no avanza, y un `both` deja el título y la foto congelados en su fotograma
+    // inicial: invisibles. Por eso .hm--js se pone sólo con la pestaña visible.
+    const motion = readFile('src/components/sections/home/HomeMotion.tsx');
+    expect(motion).toContain("document.visibilityState !== 'visible'");
+    expect(motion).toContain("addEventListener('visibilitychange'");
+    expect(motion).toContain("removeEventListener('visibilitychange'");
+  });
+
   it('el título partido lleva nombre accesible y sus trozos van aria-hidden', () => {
     const hero = readFile('src/components/sections/home/HeroSection.tsx');
     expect(hero).toMatch(/<h1[^>]*aria-label=\{lines\.join\(' '\)\}/);
