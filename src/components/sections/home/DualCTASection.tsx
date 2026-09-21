@@ -1,70 +1,57 @@
 // RUTA: src/components/sections/home/DualCTASection.tsx
-'use client';
-
+// Dos públicos, dos hojas que se apilan: la segunda cubre a la primera al bajar.
 import Link from 'next/link';
-import { useInView } from '@/hooks/useInView';
-import { Building2, UserCircle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const DualCTASection = () => {
-  const { ref, isInView } = useInView(0.15);
-
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-soft-green py-16 md:py-24"
-    >
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          {/* Card Empresas */}
-          <div
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white/95 rounded-2xl p-8 md:p-10 border-l-4 border-button-orange hover:-translate-y-1 hover:shadow-xl transition-all duration-300`}
-            style={{ transitionDelay: '0ms' }}
-          >
-            <Building2 className="w-10 h-10 text-button-orange mb-4" />
-            <h3 className="font-display text-2xl font-bold text-title-dark mb-3">
-              Para Empresas
-            </h3>
-            <p className="text-xl text-title-dark/80 font-medium mb-4">
-              ¿Buscas talento calificado?
-            </p>
-            <p className="text-text-black/70 mb-8 leading-relaxed">
+    <section className="hm-duo" aria-label="Para empresas y para candidatos">
+      <article className="hm-sheet hm-sheet--a">
+        <span className="hm-sheet__shape" aria-hidden="true" />
+        <div className="hm-wrap hm-sheet__grid">
+          <div>
+            <p className="hm-sheet__kicker">01 · Para Empresas</p>
+            <h2 className="hm-sheet__title">
+              Para empresas
+              <em>¿Buscas talento calificado?</em>
+            </h2>
+          </div>
+          <div className="hm-sheet__body">
+            <p>
               Registra tu empresa y accede a nuestro proceso de selección
               experto. Recibe candidatos evaluados por psicólogos y
               especialistas técnicos.
             </p>
-            <Link
-              href="/companies"
-              className="block w-full text-center bg-button-orange text-white font-semibold py-4 rounded-full hover:scale-105 hover:shadow-lg transition-all duration-300"
-            >
+            <Link href="/companies" className="hm-btn hm-btn--ink" data-hm-magnet>
               Registrarme como Empresa
-            </Link>
-          </div>
-
-          {/* Card Candidatos */}
-          <div
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white/95 rounded-2xl p-8 md:p-10 border-l-4 border-button-green hover:-translate-y-1 hover:shadow-xl transition-all duration-300`}
-            style={{ transitionDelay: '150ms' }}
-          >
-            <UserCircle className="w-10 h-10 text-button-green mb-4" />
-            <h3 className="font-display text-2xl font-bold text-title-dark mb-3">
-              Para Candidatos
-            </h3>
-            <p className="text-xl text-title-dark/80 font-medium mb-4">
-              ¿Buscas tu próximo reto profesional?
-            </p>
-            <p className="text-text-black/70 mb-8 leading-relaxed">
-              Sube tu CV y déjanos conectarte con las mejores empresas de
-              México. Nuestro equipo te acompañará en cada paso del proceso.
-            </p>
-            <Link
-              href="/talents"
-              className="block w-full text-center bg-button-green text-white font-semibold py-4 rounded-full hover:scale-105 hover:shadow-lg transition-all duration-300"
-            >
-              Aplicar Ahora
+              <ArrowRight aria-hidden="true" />
             </Link>
           </div>
         </div>
-      </div>
+      </article>
+
+      <article className="hm-sheet hm-sheet--b">
+        <span className="hm-sheet__shape" aria-hidden="true" />
+        <div className="hm-wrap hm-sheet__grid">
+          <div>
+            <p className="hm-sheet__kicker">02 · Para Candidatos</p>
+            <h2 className="hm-sheet__title">
+              Para candidatos
+              <em>¿Buscas tu próximo reto profesional?</em>
+            </h2>
+          </div>
+          <div className="hm-sheet__body">
+            <p>
+              Sube tu CV y déjanos conectarte con las mejores empresas de
+              México. Nuestro equipo te acompañará en cada paso del proceso.
+            </p>
+            <Link href="/talents" className="hm-btn hm-btn--ink" data-hm-magnet>
+              Aplicar Ahora
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+      </article>
     </section>
   );
 };

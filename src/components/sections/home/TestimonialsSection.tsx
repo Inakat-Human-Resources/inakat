@@ -1,8 +1,5 @@
 // RUTA: src/components/sections/home/TestimonialsSection.tsx
-'use client';
-
 import Image, { StaticImageData } from 'next/image';
-import { useInView } from '@/hooks/useInView';
 import imgMayela from '@/assets/images/testimonials/mayela-sanchez.jpeg';
 import imgAdrian from '@/assets/images/testimonials/adrian-cuadros.jpeg';
 
@@ -31,66 +28,37 @@ const testimonials: Testimonial[] = [
 ];
 
 const TestimonialsSection = () => {
-  const { ref, isInView } = useInView(0.1);
-
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-soft-green py-16 md:py-24"
-      style={{
-        backgroundImage:
-          'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.03) 0%, transparent 50%), radial-gradient(circle at 80% 50%, rgba(255,255,255,0.03) 0%, transparent 50%)',
-      }}
-    >
-      <div className="container mx-auto px-4">
-        {/* Section title */}
-        <h2
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-14`}
-        >
-          Lo que dicen nuestros clientes
-        </h2>
+    <section className="hm-testi hm-on-dark" aria-labelledby="hm-testi-title">
+      <span className="hm-testi__arc" aria-hidden="true" />
+      <div className="hm-wrap">
+        <div className="hm-testi__head">
+          <p className="hm-eyebrow">Testimonios</p>
+          <h2 id="hm-testi-title" className="hm-h2">
+            Lo que dicen <em>nuestros clientes</em>
+          </h2>
+        </div>
 
-        {/* Card grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {testimonials.map((testimonial, index) => (
-            <div
-              key={index}
-              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/15 transition-colors`}
-              style={{ transitionDelay: `${index * 150}ms` }}
-            >
-              {/* Decorative quote */}
-              <span className="text-button-green text-6xl font-display leading-none select-none">
-                &ldquo;
-              </span>
-
-              {/* Quote */}
-              <blockquote className="text-white/90 italic leading-relaxed -mt-4 mb-6 text-base">
-                {testimonial.quote}
-              </blockquote>
-
-              {/* Separator */}
-              <div className="h-px bg-white/10 mb-4" />
-
-              {/* Author */}
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 border-2 border-white/30">
+        {/* Rejilla (no carrusel): los dos testimonios reales, a la vista */}
+        <div className="hm-testi__grid grid grid-cols-1 md:grid-cols-2">
+          {testimonials.map((testimonial) => (
+            <figure key={testimonial.author} className="hm-quote hm-rv">
+              <blockquote>{testimonial.quote}</blockquote>
+              <figcaption>
+                <div className="hm-quote__photo">
                   <Image
                     src={testimonial.image}
                     alt={testimonial.author}
-                    className="w-full h-full object-cover"
+                    sizes="80px"
                     loading="lazy"
                   />
                 </div>
                 <div>
-                  <p className="font-display font-bold text-white text-sm">
-                    {testimonial.author}
-                  </p>
-                  <p className="text-white/60 text-xs">
-                    {testimonial.role}
-                  </p>
+                  <p className="hm-quote__name">{testimonial.author}</p>
+                  <p className="hm-quote__role">{testimonial.role}</p>
                 </div>
-              </div>
-            </div>
+              </figcaption>
+            </figure>
           ))}
         </div>
       </div>

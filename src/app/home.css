@@ -1,0 +1,1819 @@
+/* RUTA: src/app/home.css
+   Home «Arco» — el isotipo de INAKAT es un punto (la persona) y un arco (el puente).
+   Todo el movimiento de la portada sale de esas dos formas.
+
+   Reglas de esta hoja:
+   - Prefijo hm- en todo: no pisa al resto de la app.
+   - Solo se animan transform, opacity y clip-path.
+   - Todo lo ligado al scroll vive dentro de @supports (animation-timeline) y
+     prefers-reduced-motion: no-preference. Sin soporte, el estado natural es el final:
+     la página se lee completa sin JS, sin scroll timelines y con movimiento reducido.
+*/
+
+.hm {
+  --ink: #283739;
+  --teal: #2b5d62;
+  --lime: #9fbb2f;
+  --orange: #f48602;
+  --sand: #e8e7d4;
+  --paper: #f7f5ee;
+  --nav: 56px; /* = pt-14 del body; abajo se ajusta al alto real de la barra en móvil */
+  --gut: clamp(1.25rem, 0.5rem + 3vw, 3.5rem);
+  --disp: var(--font-outfit), system-ui, sans-serif;
+  --serif: var(--font-serif), 'Times New Roman', serif;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-x: clip;
+  background: var(--sand);
+  color: var(--ink);
+  interpolate-size: allow-keywords;
+}
+
+/* globals.css declara `section { overflow: hidden }`, y eso convierte a cada <section> en
+   contenedor de scroll: mata todo `position: sticky` que viva dentro. Las secciones de la
+   home que fijan algo lo devuelven a visible; las que recortan usan `overflow: clip`
+   (recorta igual, pero NO crea contenedor de scroll). */
+/* Alto REAL de la barra de navegación (medido): 44 px en escritorio, 64 en tablet, 60 en móvil. */
+@media (max-width: 1023px) {
+  .hm {
+    --nav: 64px;
+  }
+}
+@media (max-width: 640px) {
+  .hm {
+    --nav: 60px;
+  }
+}
+
+.hm-proc,
+.hm-duo,
+.hm-why,
+.hm-stats,
+.hm-faq,
+.hm-close {
+  overflow: visible;
+}
+
+.hm-wrap {
+  width: 100%;
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-inline: var(--gut);
+}
+
+.hm em,
+.hm-serif {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.hm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  font-family: var(--disp);
+  font-size: clamp(0.72rem, 0.66rem + 0.3vw, 0.9rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.hm-eyebrow::before {
+  content: '';
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--orange);
+  flex: none;
+}
+
+.hm-h2 {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.3rem, calc(6.6vw - 4px), 6.75rem);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0;
+  text-wrap: balance;
+}
+.hm-h2 em {
+  letter-spacing: -0.02em;
+}
+
+/* ---------- botones ---------- */
+.hm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 3.25rem;
+  padding: 0.9em 1.9em;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.35s var(--ease), background-color 0.25s, color 0.25s, box-shadow 0.35s;
+}
+.hm-btn:hover {
+  transform: translateY(-2px);
+}
+.hm-btn:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+.hm-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+  transition: transform 0.35s var(--ease);
+}
+.hm-btn:hover svg {
+  transform: translateX(4px);
+}
+.hm-btn--orange {
+  background: var(--orange);
+  color: var(--ink);
+}
+.hm-btn--orange:hover {
+  box-shadow: 0 14px 34px -14px rgb(244 134 2 / 0.75);
+}
+.hm-btn--lime {
+  background: var(--lime);
+  color: var(--ink);
+}
+.hm-btn--lime:hover {
+  box-shadow: 0 14px 34px -14px rgb(159 187 47 / 0.75);
+}
+.hm-btn--ink {
+  background: var(--ink);
+  color: #fff;
+}
+.hm-btn--ghost {
+  border-color: currentColor;
+  color: inherit;
+  background: transparent;
+}
+.hm-btn--ghost:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.hm-on-dark .hm-btn--ghost:hover {
+  background: #fff;
+  border-color: #fff;
+  color: var(--ink);
+}
+
+/* ---------- barra de progreso: el punto recorre la página ---------- */
+.hm-progress {
+  position: fixed;
+  top: var(--nav);
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 40;
+  background: var(--lime);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+/* =====================================================================
+   1. PORTADA EMPAREDADA
+   Planos, de atrás hacia adelante: arcos · línea 1 · ventana en arco · líneas 2 y 3
+   ===================================================================== */
+.hm-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  view-timeline-name: --hm-hero;
+  --tf: clamp(1.95rem, min(calc(9.4vw - 6px), 17svh), 10rem);
+  padding-block: clamp(2rem, 5svh, 4.5rem) clamp(2.5rem, 7svh, 5.5rem);
+  min-height: calc(100svh - var(--nav));
+  display: flex;
+  align-items: center;
+}
+.hm-hero__inner {
+  position: relative;
+}
+.hm-plane {
+  translate: calc(var(--mx, 0) * var(--f, 0) * 1px) calc(var(--my, 0) * var(--f, 0) * 0.6px);
+}
+.hm-hero__arcs {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  --f: -10;
+}
+.hm-arc {
+  position: absolute;
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(43 93 98 / 0.22);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+}
+.hm-arc--a {
+  width: min(118vw, 1900px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(118vw, 1900px) / -2);
+}
+.hm-arc--b {
+  width: min(84vw, 1350px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(84vw, 1350px) / -2);
+  border-color: rgb(159 187 47 / 0.55);
+}
+.hm-arc--c {
+  width: min(50vw, 800px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(50vw, 800px) / -2);
+  border-color: rgb(244 134 2 / 0.4);
+}
+
+.hm-title {
+  position: static; /* SIN transform ni opacity: no debe crear contexto de apilamiento */
+  margin: clamp(1rem, 2.4svh, 1.75rem) 0 0;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: var(--tf);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+.hm-line {
+  display: block;
+  overflow: hidden;
+  padding: 0.1em 0.06em 0.14em 0;
+  margin: -0.1em 0 -0.14em;
+  position: relative;
+}
+.hm-line > span {
+  display: block;
+}
+.hm--js .hm-line > span {
+  animation: hm-rise 1.25s var(--ease) both;
+  animation-delay: calc(0.12s + var(--i, 0) * 0.13s);
+}
+.hm-line--1 {
+  z-index: 1;
+}
+.hm-line--2 {
+  z-index: 3;
+  margin-left: 0.62em;
+}
+.hm-line--3 {
+  z-index: 3;
+  margin-left: 1.3em;
+  color: var(--teal);
+}
+.hm-line--3 em {
+  letter-spacing: -0.03em;
+  font-size: 1.06em;
+}
+@keyframes hm-rise {
+  from {
+    transform: translateY(112%);
+  }
+}
+
+.hm-hero__piece {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  top: calc(var(--tf) * 0.62);
+  width: calc(var(--tf) * 2.75);
+  --f: 16;
+}
+.hm-window {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+  box-shadow: 0 40px 80px -40px rgb(40 55 57 / 0.55);
+}
+.hm--js .hm-window {
+  animation: hm-unveil 1.5s var(--ease) 0.35s both;
+}
+.hm-window img {
+  width: 100%;
+  /* 140 %: deja fuera del arco la franja inferior de la imagen (rótulos quemados) */
+  height: 140%;
+  object-fit: cover;
+  object-position: 50% 0%;
+  transform-origin: 50% 0%;
+}
+.hm--js .hm-window img {
+  animation: hm-settle 2s var(--ease) 0.35s both;
+}
+@keyframes hm-unveil {
+  from {
+    clip-path: inset(100% 0 0 0 round 999px 999px 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 999px 999px 0 0);
+  }
+}
+@keyframes hm-settle {
+  from {
+    transform: scale(1.22);
+  }
+}
+.hm-dot {
+  position: absolute;
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+.hm-hero__dot {
+  width: 24%;
+  left: -12%;
+  bottom: 9%;
+  background: var(--orange);
+}
+.hm--js .hm-hero__dot {
+  animation: hm-pop 0.9s var(--ease) 1.15s both;
+}
+.hm-hero__dot2 {
+  width: 11%;
+  right: 6%;
+  top: -5%;
+  background: var(--lime);
+}
+.hm--js .hm-hero__dot2 {
+  animation: hm-pop 0.9s var(--ease) 1.3s both;
+}
+@keyframes hm-pop {
+  from {
+    transform: scale(0);
+  }
+}
+
+.hm-hero__foot {
+  position: relative;
+  z-index: 4;
+  margin-top: clamp(1.75rem, 5svh, 3.5rem);
+  max-width: min(36rem, calc(100% - var(--tf) * 3.1));
+}
+.hm--js .hm-hero__foot {
+  animation: hm-fade 1s var(--ease) 0.75s both;
+}
+.hm-hero__sub {
+  font-size: clamp(1.05rem, 0.95rem + 0.55vw, 1.4rem);
+  line-height: 1.5;
+  margin: 0;
+  color: rgb(40 55 57 / 0.86);
+}
+.hm-hero__sub strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.hm-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: clamp(1.4rem, 3.4svh, 2.2rem);
+}
+@keyframes hm-fade {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+.hm-cue {
+  position: absolute;
+  left: var(--gut);
+  bottom: 1.1rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-family: var(--disp);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(40 55 57 / 0.7);
+}
+.hm-cue::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: hm-bob 1.9s ease-in-out infinite;
+}
+@keyframes hm-bob {
+  50% {
+    transform: translateY(9px);
+  }
+}
+
+@media (max-width: 860px) {
+  .hm-hero {
+    align-items: flex-start;
+    --tf: clamp(2.2rem, calc(13.4vw - 6px), 6.2rem);
+  }
+  .hm-hero__piece {
+    position: relative;
+    right: auto;
+    top: auto;
+    width: min(46vw, 15rem);
+    margin: clamp(1rem, 3svh, 2rem) 0 0 auto;
+  }
+  .hm-hero__foot {
+    max-width: none;
+  }
+  .hm-line--2 {
+    margin-left: 0.4em;
+  }
+  .hm-line--3 {
+    margin-left: 0;
+  }
+  .hm-cue {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   2. MARQUESINA DE GARANTÍAS
+   ===================================================================== */
+.hm-marquee {
+  background: var(--ink);
+  color: #fff;
+  padding-block: clamp(1.6rem, 4vw, 3rem);
+  overflow: clip;
+}
+.hm-marquee__row {
+  display: flex;
+  width: max-content;
+  animation: hm-slide 38s linear infinite;
+}
+.hm-marquee:hover .hm-marquee__row {
+  animation-play-state: paused;
+}
+.hm-marquee__list {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-marquee__item {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.2rem, 3vw, 2.6rem);
+  padding-right: clamp(1.2rem, 3vw, 2.6rem);
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.9rem, 5.4vw, 5rem);
+  letter-spacing: -0.035em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.hm-marquee__item em {
+  color: var(--lime);
+  font-size: 1.04em;
+}
+.hm-marquee__item::after {
+  content: '';
+  width: 0.34em;
+  height: 0.34em;
+  border-radius: 50%;
+  background: var(--orange);
+  flex: none;
+}
+@keyframes hm-slide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* =====================================================================
+   3. MANIFIESTO — palabras que se encienden
+   ===================================================================== */
+.hm-manifesto {
+  position: relative;
+  background: var(--paper);
+  padding-block: clamp(5rem, 13vw, 12rem);
+  overflow: clip;
+}
+.hm-manifesto__deco {
+  position: absolute;
+  right: -14vw;
+  top: 8%;
+  width: min(56vw, 760px);
+  aspect-ratio: 2 / 1;
+  border-radius: 999vmax 999vmax 0 0;
+  background: var(--lime);
+  opacity: 0.2;
+  pointer-events: none;
+}
+.hm-manifesto__grid {
+  position: relative;
+  display: grid;
+  gap: clamp(2.5rem, 6vw, 6rem);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+}
+.hm-manifesto__head {
+  position: sticky;
+  top: calc(var(--nav) + 2.5rem);
+}
+.hm-manifesto__head .hm-h2 {
+  margin-top: 1.2rem;
+}
+.hm-manifesto__head .hm-h2 em {
+  color: var(--teal);
+  display: block;
+}
+.hm-manifesto__text p {
+  font-family: var(--disp);
+  font-weight: 500;
+  font-size: clamp(1.35rem, 1rem + 1.75vw, 2.6rem);
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.hm-manifesto__text p + p {
+  margin-top: 1.1em;
+}
+.hm-w {
+  display: inline-block;
+}
+.hm-w--b {
+  font-weight: 800;
+  color: var(--teal);
+}
+@media (max-width: 900px) {
+  .hm-manifesto__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm-manifesto__head {
+    position: static;
+  }
+}
+
+/* =====================================================================
+   4. PROCESO — el punto recorre el arco (escena fijada)
+   Base (sin soporte / movimiento reducido): lista ordenada en rejilla.
+   ===================================================================== */
+.hm-proc {
+  position: relative;
+  background: var(--teal);
+  color: #fff;
+}
+.hm-proc__stage {
+  padding-block: clamp(4.5rem, 10vw, 9rem);
+}
+.hm-proc__head {
+  display: grid;
+  gap: 1.2rem;
+  max-width: 62rem;
+}
+.hm-proc__head .hm-h2 em {
+  color: var(--lime);
+}
+.hm-proc__lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.84);
+  max-width: 40rem;
+  margin: 0;
+}
+.hm-proc__dial {
+  display: none;
+}
+.hm-steps {
+  list-style: none;
+  margin: clamp(2.5rem, 6vw, 4.5rem) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+  background: rgb(255 255 255 / 0.18);
+  border: 1px solid rgb(255 255 255 / 0.18);
+}
+.hm-step {
+  background: var(--teal);
+  padding: clamp(1.2rem, 2.4vw, 1.9rem);
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+.hm-step__n {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--lime);
+}
+.hm-step__t {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1.1rem, 1rem + 0.5vw, 1.4rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.hm-step__d {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.78);
+}
+
+/* =====================================================================
+   5. DOS PÚBLICOS — hojas que se apilan
+   ===================================================================== */
+.hm-duo {
+  position: relative;
+  background: var(--teal);
+}
+.hm-sheet {
+  position: relative;
+  min-height: min(100svh, 56rem);
+  display: flex;
+  align-items: center;
+  padding-block: clamp(4rem, 9vw, 8rem);
+  border-radius: clamp(1.75rem, 5vw, 5rem) clamp(1.75rem, 5vw, 5rem) 0 0;
+  overflow: clip;
+}
+.hm-sheet--a {
+  background: var(--orange);
+  color: var(--ink);
+}
+.hm-sheet--b {
+  background: var(--lime);
+  color: var(--ink);
+}
+.hm-sheet__grid {
+  display: grid;
+  gap: clamp(2rem, 5vw, 5rem);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: end;
+  position: relative;
+  z-index: 1;
+}
+.hm-sheet__kicker {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0 0 1.1rem;
+}
+.hm-sheet__title {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.7rem, calc(9.6vw - 6px), 9.5rem);
+  line-height: 0.88;
+  letter-spacing: -0.05em;
+  margin: 0;
+}
+.hm-sheet__title em {
+  display: block;
+  font-size: 0.5em;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-top: 0.45em;
+}
+.hm-sheet__body p {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  margin: 0 0 1.75rem;
+}
+.hm-sheet__shape {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  width: min(62vw, 880px);
+  right: -18vw;
+  top: -22%;
+  border: 2px solid rgb(40 55 57 / 0.2);
+}
+.hm-sheet--b .hm-sheet__shape {
+  right: auto;
+  left: -20vw;
+  top: auto;
+  bottom: -34%;
+}
+@media (max-width: 860px) {
+  .hm-sheet {
+    min-height: 74svh;
+  }
+  .hm-sheet__grid {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* =====================================================================
+   6. POR QUÉ — lista editorial con números en contorno
+   ===================================================================== */
+.hm-why {
+  background: var(--sand);
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.hm-why__head {
+  display: grid;
+  gap: 1.2rem;
+  margin-bottom: clamp(2.5rem, 6vw, 5rem);
+  max-width: 66rem;
+}
+.hm-why__head .hm-h2 em {
+  color: var(--teal);
+}
+.hm-why__lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  max-width: 40rem;
+  margin: 0;
+  color: rgb(40 55 57 / 0.86);
+}
+.hm-why__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 2px solid var(--ink);
+}
+.hm-why__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 5fr) minmax(0, 5fr);
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: baseline;
+  padding-block: clamp(1.5rem, 3.2vw, 2.75rem);
+  border-bottom: 1px solid rgb(40 55 57 / 0.28);
+  transition: padding-left 0.5s var(--ease), background-color 0.4s;
+}
+.hm-why__row:hover {
+  padding-left: clamp(0.5rem, 1.5vw, 1.5rem);
+  background: rgb(255 255 255 / 0.4);
+}
+.hm-num {
+  position: relative;
+  display: inline-block;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.6rem, 5.4vw, 5.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: var(--teal);
+}
+.hm-num__fill {
+  display: block;
+}
+.hm-why__title {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.5rem, 1.1rem + 1.7vw, 2.75rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.hm-why__title svg {
+  width: 0.8em;
+  height: 0.8em;
+  flex: none;
+  color: var(--orange);
+}
+.hm-why__desc {
+  font-size: clamp(1rem, 0.95rem + 0.3vw, 1.2rem);
+  line-height: 1.55;
+  margin: 0;
+  color: rgb(40 55 57 / 0.88);
+}
+@media (max-width: 860px) {
+  .hm-why__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+}
+
+/* =====================================================================
+   7. ESPECIALIDADES
+   ===================================================================== */
+.hm-esp {
+  position: relative;
+  background: var(--ink);
+  color: #fff;
+  padding-block: clamp(5rem, 12vw, 11rem);
+  overflow: clip;
+}
+.hm-esp__ghost {
+  position: absolute;
+  left: 0;
+  top: clamp(1rem, 4vw, 3rem);
+  white-space: nowrap;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(7rem, 26vw, 26rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgb(255 255 255 / 0.1);
+  pointer-events: none;
+  user-select: none;
+}
+.hm-esp__head {
+  position: relative;
+  display: grid;
+  gap: 1.2rem;
+  margin-bottom: clamp(2.5rem, 6vw, 4.5rem);
+  max-width: 62rem;
+}
+.hm-esp__head .hm-h2 em {
+  color: var(--lime);
+}
+.hm-esp__lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.8);
+  max-width: 40rem;
+  margin: 0;
+}
+.hm-esp__list {
+  position: relative;
+  border-top: 1px solid rgb(255 255 255 / 0.28);
+}
+.hm-esp__item {
+  border-bottom: 1px solid rgb(255 255 255 / 0.28);
+}
+.hm-esp__item summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) auto;
+  gap: clamp(0.5rem, 2vw, 2rem);
+  align-items: center;
+  padding-block: clamp(1.1rem, 2.4vw, 2rem);
+  transition: color 0.3s, padding-left 0.5s var(--ease);
+}
+.hm-esp__item summary::-webkit-details-marker {
+  display: none;
+}
+.hm-esp__item summary:hover,
+.hm-esp__item[open] summary {
+  color: var(--lime);
+  padding-left: clamp(0.25rem, 1.2vw, 1.25rem);
+}
+.hm-esp__item summary:focus-visible {
+  outline: 3px solid var(--lime);
+  outline-offset: 4px;
+}
+.hm-esp__i {
+  font-family: var(--disp);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  color: rgb(255 255 255 / 0.7);
+}
+.hm-esp__name {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.35rem, 0.9rem + 2.3vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+.hm-plus {
+  position: relative;
+  width: clamp(2.2rem, 3.2vw, 3rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  flex: none;
+  transition: transform 0.5s var(--ease), background-color 0.3s;
+}
+.hm-plus::before,
+.hm-plus::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42%;
+  height: 2px;
+  margin: -1px 0 0 -21%;
+  background: currentColor;
+  transition: transform 0.5s var(--ease);
+}
+.hm-plus::after {
+  transform: rotate(90deg);
+}
+details[open] > summary .hm-plus {
+  transform: rotate(180deg);
+}
+details[open] > summary .hm-plus::after {
+  transform: rotate(0deg);
+}
+.hm-esp__subs {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 clamp(1.4rem, 3vw, 2.4rem) calc(3.2rem + clamp(0.5rem, 2vw, 2rem));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.hm-esp__subs li {
+  padding: 0.5em 1.05em;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  font-size: clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem);
+  color: #fff;
+}
+.hm-esp__empty {
+  margin: 0;
+  padding: 0 0 1.75rem calc(3.2rem + clamp(0.5rem, 2vw, 2rem));
+  color: rgb(255 255 255 / 0.75);
+}
+@media (max-width: 640px) {
+  .hm-esp__item summary {
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+  }
+  .hm-esp__subs,
+  .hm-esp__empty {
+    padding-left: 0;
+  }
+}
+
+/* acordeones nativos: abren con transición donde el motor lo soporta */
+.hm details::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition: block-size 0.5s var(--ease), content-visibility 0.5s allow-discrete;
+}
+.hm details[open]::details-content {
+  block-size: auto;
+}
+
+/* =====================================================================
+   8. CIFRAS — números en contorno que se rellenan
+   ===================================================================== */
+.hm-stats {
+  background: var(--paper);
+  padding-block: clamp(4.5rem, 10vw, 9rem);
+}
+.hm-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(1.5rem, 3vw, 3rem);
+  margin: 0;
+}
+.hm-stat {
+  border-top: 2px solid var(--ink);
+  padding-top: clamp(1rem, 2vw, 1.6rem);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.8rem;
+}
+.hm-stat__v {
+  margin: 0;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(3.4rem, calc(9.2vw - 4px), 9.5rem);
+  line-height: 0.85;
+  letter-spacing: -0.06em;
+  color: var(--teal);
+  position: relative;
+}
+.hm-stat__l {
+  margin: 0;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 0.9rem + 0.3vw, 1.15rem);
+  line-height: 1.25;
+}
+.hm-stat__l small {
+  display: block;
+  margin-top: 0.3em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.12em;
+  color: rgb(40 55 57 / 0.86);
+}
+@media (max-width: 900px) {
+  .hm-stats__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =====================================================================
+   9. TESTIMONIOS
+   ===================================================================== */
+.hm-testi {
+  position: relative;
+  background: var(--teal);
+  color: #fff;
+  padding-block: clamp(5rem, 12vw, 11rem);
+  overflow: clip;
+}
+.hm-testi__arc {
+  position: absolute;
+  left: 50%;
+  top: -6%;
+  width: min(140vw, 2100px);
+  margin-left: calc(min(140vw, 2100px) / -2);
+  aspect-ratio: 2 / 1;
+  border-radius: 0 0 999vmax 999vmax;
+  border: 2px solid rgb(255 255 255 / 0.12);
+  border-top: 0;
+  pointer-events: none;
+}
+.hm-testi__head {
+  position: relative;
+  margin-bottom: clamp(2.5rem, 6vw, 5rem);
+}
+.hm-testi__head .hm-h2 em {
+  color: var(--lime);
+}
+.hm-testi__grid {
+  position: relative;
+  gap: clamp(2rem, 5vw, 5rem);
+}
+.hm-quote {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  border-top: 2px solid rgb(255 255 255 / 0.85);
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+}
+.hm-quote blockquote {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.45rem, 1.05rem + 1.7vw, 2.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.hm-quote blockquote::before {
+  content: '“';
+  display: block;
+  font-size: 2.6em;
+  line-height: 0.7;
+  height: 0.42em;
+  color: var(--lime);
+}
+.hm-quote figcaption {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: auto;
+}
+.hm-quote__photo {
+  position: relative;
+  width: clamp(3.75rem, 5vw, 5rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: none;
+  box-shadow: 0 0 0 3px var(--teal), 0 0 0 5px var(--lime);
+}
+.hm-quote__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hm-quote__name {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  margin: 0;
+}
+.hm-quote__role {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 0.82);
+}
+
+/* =====================================================================
+   10. COBERTURA
+   ===================================================================== */
+.hm-cov {
+  background: var(--sand);
+  padding-block: clamp(5rem, 12vw, 11rem);
+  overflow: clip;
+}
+.hm-cov__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+}
+.hm-cov .hm-h2 em {
+  color: var(--teal);
+  display: block;
+}
+.hm-cov__lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  margin: 1.5rem 0 2rem;
+  max-width: 34rem;
+  color: rgb(40 55 57 / 0.88);
+}
+.hm-cities {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.hm-cities li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.5em 1.05em;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  font-family: var(--disp);
+  font-weight: 600;
+  font-size: clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem);
+}
+.hm-cities li::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.hm-map {
+  position: relative;
+}
+.hm-map img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hm-pin {
+  position: absolute;
+  width: clamp(7px, 1.1vw, 16px);
+  aspect-ratio: 1;
+  margin: calc(clamp(7px, 1.1vw, 16px) / -2) 0 0 calc(clamp(7px, 1.1vw, 16px) / -2);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px #fff;
+}
+.hm-pin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  animation: hm-ping 2.6s ease-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.45s);
+}
+@keyframes hm-ping {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(4.2);
+    opacity: 0;
+  }
+}
+@media (max-width: 900px) {
+  .hm-cov__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* =====================================================================
+   11. FAQ
+   ===================================================================== */
+.hm-faq {
+  background: var(--paper);
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.hm-faq__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: start;
+}
+.hm-faq__head {
+  position: sticky;
+  top: calc(var(--nav) + 2.5rem);
+}
+.hm-faq__head .hm-h2 em {
+  color: var(--teal);
+  display: block;
+}
+.hm-faq__list {
+  border-top: 2px solid var(--ink);
+}
+.hm-faq__item {
+  border-bottom: 1px solid rgb(40 55 57 / 0.3);
+}
+.hm-faq__item summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-block: clamp(1.1rem, 2.2vw, 1.75rem);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1.1rem, 0.95rem + 0.75vw, 1.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  transition: color 0.3s;
+}
+.hm-faq__item summary::-webkit-details-marker {
+  display: none;
+}
+.hm-faq__item summary:hover,
+.hm-faq__item[open] summary {
+  color: var(--teal);
+}
+.hm-faq__item summary:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 4px;
+}
+.hm-faq__a {
+  margin: 0;
+  padding: 0 clamp(0rem, 4vw, 4.5rem) clamp(1.4rem, 2.6vw, 2.2rem) 0;
+  font-size: clamp(1rem, 0.95rem + 0.3vw, 1.15rem);
+  line-height: 1.65;
+  color: rgb(40 55 57 / 0.9);
+}
+@media (max-width: 900px) {
+  .hm-faq__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hm-faq__head {
+    position: static;
+  }
+}
+
+/* =====================================================================
+   12. CIERRE — ventana fija
+   ===================================================================== */
+.hm-close {
+  position: relative;
+  isolation: isolate;
+  clip-path: inset(0);
+  background: var(--ink);
+  color: #fff;
+  min-height: min(100svh, 60rem);
+  display: flex;
+  align-items: center;
+  padding-block: clamp(5rem, 12vw, 10rem);
+  view-timeline-name: --hm-close;
+}
+.hm-close__bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(90vmax 60vmax at 50% 118%, rgb(43 93 98 / 0.95), transparent 70%), var(--ink);
+}
+.hm-close__arc {
+  position: absolute;
+  left: 50%;
+  bottom: -4%;
+  aspect-ratio: 2 / 1;
+  border-radius: 999vmax 999vmax 0 0;
+  border: 2px solid rgb(159 187 47 / 0.55);
+  border-bottom: 0;
+  width: min(150vw, 2200px);
+  margin-left: calc(min(150vw, 2200px) / -2);
+}
+.hm-close__arc + .hm-close__arc {
+  width: min(96vw, 1400px);
+  margin-left: calc(min(96vw, 1400px) / -2);
+  border-color: rgb(244 134 2 / 0.6);
+}
+.hm-close__inner {
+  position: relative;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: clamp(1.4rem, 3vw, 2.4rem);
+}
+.hm-close__title {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.5rem, calc(8vw - 4px), 8.25rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  margin: 0;
+  max-width: 14ch;
+  text-wrap: balance;
+}
+.hm-close__title em {
+  display: block;
+  color: var(--lime);
+  margin-top: 0.12em;
+}
+.hm-close__cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem;
+}
+.hm-close__contact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem 2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1rem;
+}
+.hm-close__contact a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  color: rgb(255 255 255 / 0.88);
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 0.35);
+  text-underline-offset: 0.3em;
+  min-height: 2.75rem;
+}
+.hm-close__contact a:hover {
+  color: var(--lime);
+  text-decoration-color: currentColor;
+}
+.hm-close__contact svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+/* =====================================================================
+   MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hm-progress {
+      animation: hm-grow linear both;
+      animation-timeline: scroll(root);
+    }
+
+    /* portada: cada plano sale a su velocidad */
+    .hm-hero__arcs {
+      animation: hm-hero-arcs linear both;
+      animation-timeline: --hm-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .hm-line--1 {
+      animation: hm-hero-l1 linear both;
+      animation-timeline: --hm-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .hm-hero__piece {
+      animation: hm-hero-piece linear both;
+      animation-timeline: --hm-hero;
+      animation-range: exit 0% exit 100%;
+    }
+
+    /* revelados genéricos */
+    .hm-rv {
+      animation: hm-rv linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 75%;
+    }
+    .hm-mask {
+      display: block;
+      overflow: hidden;
+      padding-block: 0.12em;
+      margin-block: -0.12em;
+    }
+    .hm-mask > span {
+      display: block;
+      animation: hm-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 28%;
+    }
+
+    /* palabras que se encienden, de izquierda a derecha */
+    .hm-w {
+      animation: hm-lit linear both;
+      animation-timeline: view();
+      animation-range: cover calc(24% + var(--w, 0) * 1.5%) cover calc(40% + var(--w, 0) * 1.5%);
+    }
+
+    .hm-manifesto__deco {
+      animation: hm-drift linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .hm-esp__ghost {
+      animation: hm-ghost linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .hm-testi__arc {
+      animation: hm-arc-down linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .hm-sheet__shape {
+      animation: hm-spin linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .hm-map {
+      animation: hm-map linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+    }
+
+    /* números en contorno que se rellenan */
+    .hm-num::before,
+    .hm-stat__v::before {
+      content: attr(data-t);
+      position: absolute;
+      inset: 0;
+      color: transparent;
+      -webkit-text-stroke: 1.5px var(--teal);
+    }
+    .hm-num__fill,
+    .hm-stat__v > span {
+      display: block;
+      animation: hm-fill linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 42%;
+    }
+
+    /* hojas que se apilan: la primera se hunde cuando llega la segunda */
+    .hm-duo {
+      timeline-scope: --hm-sheet-b;
+    }
+    .hm-sheet {
+      position: sticky;
+      top: var(--nav);
+    }
+    .hm-sheet--b {
+      view-timeline-name: --hm-sheet-b;
+    }
+    .hm-sheet--a .hm-sheet__grid {
+      animation: hm-sink linear both;
+      animation-timeline: --hm-sheet-b;
+      animation-range: entry 0% entry 100%;
+    }
+
+    /* cierre: el fondo se queda quieto y los arcos crecen */
+    .hm-close__arc {
+      animation: hm-close-arc linear both;
+      animation-timeline: --hm-close;
+      animation-range: entry 0% cover 60%;
+    }
+
+    /* ---- proceso fijado: el punto recorre el arco ---- */
+    .hm-proc {
+      height: 560vh;
+      view-timeline-name: --hm-proc;
+      --R: min(41vw, 58svh, 640px);
+    }
+    .hm-proc__stage {
+      position: sticky;
+      top: var(--nav);
+      height: calc(100svh - var(--nav));
+      padding-block: clamp(1.5rem, 4svh, 3rem) 0;
+      overflow: clip;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .hm-proc__head {
+      position: relative;
+      z-index: 2;
+    }
+    .hm-proc__head .hm-h2 {
+      font-size: clamp(1.9rem, min(4.6vw, 7.5svh), 4.75rem);
+    }
+    .hm-proc__lead {
+      display: none;
+    }
+    .hm-proc__body {
+      position: relative;
+      min-height: 0;
+    }
+    .hm-proc__dial {
+      display: block;
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: 0;
+      height: 0;
+    }
+    .hm-proc__ring {
+      position: absolute;
+      left: calc(var(--R) * -1);
+      bottom: 0;
+      width: calc(var(--R) * 2);
+      height: var(--R);
+      border: 2px solid rgb(255 255 255 / 0.4);
+      border-bottom: 0;
+      border-radius: 999vmax 999vmax 0 0;
+    }
+    .hm-proc__ring--in {
+      left: calc(var(--R) * -0.72);
+      width: calc(var(--R) * 1.44);
+      height: calc(var(--R) * 0.72);
+      border-color: rgb(255 255 255 / 0.14);
+    }
+    .hm-tick {
+      position: absolute;
+      left: -1px;
+      bottom: 0;
+      width: 2px;
+      height: var(--R);
+      transform-origin: 50% 100%;
+      transform: rotate(calc(-80deg + var(--i) * 16deg));
+    }
+    .hm-tick::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: -4px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgb(255 255 255 / 0.55);
+    }
+    .hm-runner {
+      position: absolute;
+      left: -1px;
+      bottom: 0;
+      width: 2px;
+      height: var(--R);
+      transform-origin: 50% 100%;
+      animation: hm-run linear both;
+      animation-timeline: --hm-proc;
+      animation-range: contain 0% contain 100%;
+    }
+    .hm-runner::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: clamp(1.4rem, 2.6vw, 2.4rem);
+      aspect-ratio: 1;
+      margin: calc(clamp(1.4rem, 2.6vw, 2.4rem) / -2) 0 0 calc(clamp(1.4rem, 2.6vw, 2.4rem) / -2);
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 0 8px rgb(244 134 2 / 0.25);
+    }
+    .hm-steps {
+      position: absolute;
+      left: 50%;
+      bottom: clamp(1.25rem, 5svh, 3.5rem);
+      width: min(calc(var(--R) * 1.3), 100% - var(--gut) * 2);
+      margin: 0 0 0 calc(min(calc(var(--R) * 1.3), 100% - var(--gut) * 2) / -2);
+      display: block;
+      background: none;
+      border: 0;
+      height: calc(var(--R) * 0.62);
+    }
+    .hm-step {
+      position: absolute;
+      inset: auto 0 0 0;
+      background: none;
+      padding: 0;
+      text-align: center;
+      justify-items: center;
+      gap: 0.5rem;
+      animation: hm-step linear both;
+      animation-timeline: --hm-proc;
+      animation-range: contain calc(var(--i) * 9.09%) contain calc(var(--i) * 9.09% + 9.09%);
+    }
+    .hm-step:first-child {
+      animation-name: hm-step-first;
+    }
+    .hm-step:last-child {
+      animation-name: hm-step-last;
+    }
+    .hm-step__n {
+      font-size: clamp(3.5rem, min(11vw, 17svh), 10rem);
+      line-height: 0.85;
+    }
+    .hm-step__t {
+      font-size: clamp(1.15rem, min(2.5vw, 4.2svh), 2.4rem);
+      max-width: 18ch;
+      text-wrap: balance;
+    }
+    .hm-step__d {
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400;
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: clamp(1rem, 1.5vw, 1.4rem);
+      color: rgb(255 255 255 / 0.85);
+    }
+  }
+}
+
+/* vertical y tablets: el arco sube y el texto vive debajo (hasta 1023 px, no 760) */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) and (max-width: 1023px) {
+    .hm-proc {
+      --R: min(46vw, 38svh);
+    }
+    .hm-proc__dial {
+      bottom: auto;
+      top: calc(var(--R) + 7svh);
+    }
+    .hm-step__n {
+      font-size: clamp(4.5rem, 20vw, 9rem);
+    }
+    .hm-steps {
+      bottom: auto;
+      top: calc(var(--R) + 7svh + 1.75rem);
+      height: auto;
+      width: calc(100% - var(--gut) * 2);
+      margin-left: calc((100% - var(--gut) * 2) / -2);
+    }
+    .hm-step {
+      inset: 0 0 auto 0;
+    }
+  }
+}
+
+@keyframes hm-grow {
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes hm-hero-arcs {
+  to {
+    transform: translateY(16%) scale(1.06);
+  }
+}
+@keyframes hm-hero-l1 {
+  to {
+    transform: translateY(-46%);
+    opacity: 0.25;
+  }
+}
+@keyframes hm-hero-piece {
+  to {
+    transform: translateY(-20%) rotate(-3deg);
+  }
+}
+@keyframes hm-rv {
+  from {
+    opacity: 0;
+    transform: translateY(44px);
+  }
+}
+@keyframes hm-lit {
+  from {
+    opacity: 0.16;
+  }
+}
+@keyframes hm-drift {
+  from {
+    transform: translateY(18%) rotate(8deg);
+  }
+  to {
+    transform: translateY(-28%) rotate(-10deg);
+  }
+}
+@keyframes hm-ghost {
+  from {
+    transform: translateX(4%);
+  }
+  to {
+    transform: translateX(-38%);
+  }
+}
+@keyframes hm-arc-down {
+  from {
+    transform: translateY(-22%);
+  }
+  to {
+    transform: translateY(12%);
+  }
+}
+@keyframes hm-spin {
+  from {
+    transform: translateY(14%) scale(0.86);
+  }
+  to {
+    transform: translateY(-14%) scale(1.08);
+  }
+}
+@keyframes hm-map {
+  from {
+    transform: scale(0.88);
+    opacity: 0.35;
+  }
+}
+@keyframes hm-fill {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes hm-sink {
+  to {
+    transform: scale(0.93) translateY(-4vh);
+    opacity: 0.35;
+  }
+}
+@keyframes hm-close-arc {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+@keyframes hm-run {
+  from {
+    transform: rotate(-80deg);
+  }
+  to {
+    transform: rotate(80deg);
+  }
+}
+@keyframes hm-step {
+  0% {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+  22%,
+  78% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px);
+  }
+}
+@keyframes hm-step-first {
+  0%,
+  78% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px);
+  }
+}
+@keyframes hm-step-last {
+  0% {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+  22%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Movimiento reducido: la regla global de globals.css acorta duraciones, pero los
+   bucles infinitos y los pseudos se apagan EXPLÍCITAMENTE aquí. */
+@media (prefers-reduced-motion: reduce) {
+  .hm-marquee__row,
+  .hm-cue::before,
+  .hm-pin::after,
+  .hm--js .hm-line > span,
+  .hm--js .hm-window,
+  .hm--js .hm-window img,
+  .hm--js .hm-hero__dot,
+  .hm--js .hm-hero__dot2,
+  .hm--js .hm-hero__foot {
+    animation: none !important;
+  }
+  .hm-marquee__row {
+    width: auto;
+    flex-wrap: wrap;
+  }
+  .hm-marquee__list {
+    flex-wrap: wrap;
+    padding-inline: var(--gut);
+    row-gap: 0.6rem;
+  }
+  .hm-marquee__list[aria-hidden='true'] {
+    display: none;
+  }
+  .hm-marquee__item {
+    white-space: normal;
+  }
+  .hm-pin::after {
+    display: none;
+  }
+}

@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useInView } from '@/hooks/useInView';
 
 interface Specialty {
   name: string;
@@ -80,8 +79,6 @@ const FALLBACK_SPECIALTIES: Specialty[] = [
 ];
 
 const SpecialtiesSection = () => {
-  const { ref, isInView } = useInView(0.15);
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [specialties, setSpecialties] =
     useState<Specialty[]>(FALLBACK_SPECIALTIES);
 
@@ -116,78 +113,48 @@ const SpecialtiesSection = () => {
   }, []);
 
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-title-dark py-16 md:py-24"
-    >
-      <div className="container mx-auto px-4">
-        {/* Section title */}
-        <h2
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-4`}
-        >
-          Especialistas en{' '}
-          <span className="text-button-green">
-            {specialties.length} áreas clave
-          </span>
-        </h2>
-        <p
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-white/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
-          style={{ transitionDelay: '100ms' }}
-        >
-          Nuestros evaluadores son líderes en su campo. Selecciona una
-          especialidad para ver las subcategorías.
-        </p>
+    <section className="hm-esp hm-on-dark" aria-labelledby="hm-esp-title">
+      <span className="hm-esp__ghost" aria-hidden="true">
+        Especialidades
+      </span>
 
-        {/* Pills grid */}
-        <div className="flex flex-wrap justify-center gap-4 max-w-4xl mx-auto">
-          {specialties.map((specialty, index) => (
-            <div
-              key={specialty.name}
-              className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
-              style={{ transitionDelay: `${index * 80}ms` }}
-            >
-              <button
-                onClick={() =>
-                  setExpandedIndex(expandedIndex === index ? null : index)
-                }
-                className={`px-6 py-3 rounded-full border-2 font-medium text-sm md:text-base transition-all duration-300 ${
-                  expandedIndex === index
-                    ? 'bg-button-green border-button-green text-white scale-105'
-                    : 'border-button-green/60 text-white hover:border-button-green hover:bg-button-green/10'
-                }`}
-              >
-                {specialty.name}
-              </button>
-            </div>
-          ))}
+      <div className="hm-wrap">
+        <div className="hm-esp__head">
+          <p className="hm-eyebrow">Áreas de especialidad</p>
+          <h2 id="hm-esp-title" className="hm-h2">
+            Especialistas en <em>{specialties.length} áreas clave</em>
+          </h2>
+          <p className="hm-esp__lead">
+            Nuestros evaluadores son líderes en su campo. Selecciona una
+            especialidad para ver las subcategorías.
+          </p>
         </div>
 
-        {/* Expanded subcategories */}
-        {expandedIndex !== null && specialties[expandedIndex] && (
-          <div className="mt-8 max-w-3xl mx-auto">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 md:p-8">
-              <h3 className="font-display text-lg font-semibold text-button-green mb-4">
-                {specialties[expandedIndex].name}
-              </h3>
-              {specialties[expandedIndex].subs.length > 0 ? (
-                <div className="flex flex-wrap gap-3">
-                  {specialties[expandedIndex].subs.map((sub, i) => (
-                    <span
-                      key={i}
-                      className="px-4 py-2 bg-white/10 rounded-lg text-white/90 text-sm"
-                    >
-                      {sub}
-                    </span>
+        {/* <details name> = acordeón exclusivo nativo: funciona sin JS y con teclado */}
+        <div className="hm-esp__list">
+          {specialties.map((specialty, index) => (
+            <details key={specialty.name} name="hm-esp" className="hm-esp__item">
+              <summary>
+                <span className="hm-esp__i" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span className="hm-esp__name">{specialty.name}</span>
+                <span className="hm-plus" aria-hidden="true" />
+              </summary>
+              {specialty.subs.length > 0 ? (
+                <ul className="hm-esp__subs">
+                  {specialty.subs.map((sub) => (
+                    <li key={sub}>{sub}</li>
                   ))}
-                </div>
+                </ul>
               ) : (
-                <p className="text-white/60 text-sm">
+                <p className="hm-esp__empty">
                   Próximamente más detalles de esta especialidad.
                 </p>
               )}
-            </div>
-          </div>
-        )}
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );

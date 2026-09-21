@@ -1,8 +1,6 @@
 // RUTA: src/components/sections/home/StatsSection.tsx
-'use client';
-
-import { useInView } from '@/hooks/useInView';
-import { useCountUp } from '@/hooks/useCountUp';
+// Cifras en contorno que se rellenan al pasar. Las cifras se pintan desde el servidor
+// (sin contador JS): se leen igual sin JavaScript y con movimiento reducido.
 
 const stats = [
   { value: 100, suffix: '%', label: 'evaluados por humanos', sublabel: 'cero decisiones de IA' },
@@ -11,57 +9,29 @@ const stats = [
   { value: 11, suffix: '', label: 'etapas de evaluación', sublabel: 'antes de presentar candidatos' },
 ];
 
-const StatItem = ({
-  stat,
-  isInView,
-  delay,
-}: {
-  stat: (typeof stats)[0];
-  isInView: boolean;
-  delay: number;
-}) => {
-  const count = useCountUp(stat.value, 2000, isInView);
-
-  return (
-    <div
-      className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-center`}
-      style={{ transitionDelay: `${delay}ms` }}
-    >
-      <p className="font-display text-5xl md:text-6xl lg:text-7xl font-black text-button-orange">
-        {count}
-        {stat.suffix}
-      </p>
-      <p className="text-title-dark font-semibold text-sm uppercase tracking-wider mt-3">
-        {stat.label}
-      </p>
-      {stat.sublabel && (
-        <p className="text-text-black/50 text-xs uppercase tracking-wider mt-1">
-          {stat.sublabel}
-        </p>
-      )}
-    </div>
-  );
-};
-
 const StatsSection = () => {
-  const { ref, isInView } = useInView(0.2);
-
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-custom-beige py-16 md:py-24"
-    >
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-10 md:gap-8 max-w-5xl mx-auto">
-          {stats.map((stat, index) => (
-            <StatItem
-              key={index}
-              stat={stat}
-              isInView={isInView}
-              delay={index * 150}
-            />
-          ))}
-        </div>
+    <section className="hm-stats" aria-labelledby="hm-stats-title">
+      <div className="hm-wrap">
+        <h2 id="hm-stats-title" className="sr-only">
+          INAKAT en cifras
+        </h2>
+        <dl className="hm-stats__grid">
+          {stats.map((stat) => {
+            const text = `${stat.value}${stat.suffix}`;
+            return (
+              <div key={stat.label} className="hm-stat">
+                <dt className="hm-stat__l">
+                  {stat.label}
+                  {stat.sublabel && <small>{stat.sublabel}</small>}
+                </dt>
+                <dd className="hm-stat__v" data-t={text}>
+                  <span>{text}</span>
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
       </div>
     </section>
   );
