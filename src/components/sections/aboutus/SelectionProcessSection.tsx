@@ -2,6 +2,7 @@
 'use client';
 
 import { useInView } from '@/hooks/useInView';
+import ProcessArc from '@/components/sections/home/ProcessArc';
 import {
   FileText,
   Users,
@@ -86,8 +87,24 @@ const postSteps = [
   },
 ];
 
-const SelectionProcessSection = () => {
+interface SelectionProcessSectionProps {
+  /** 'grid' = rejilla clásica (/about). 'arc' = escena fijada de la home (requiere src/app/home.css). */
+  variant?: 'grid' | 'arc';
+}
+
+const SelectionProcessSection = ({ variant = 'grid' }: SelectionProcessSectionProps) => {
   const { ref, isInView } = useInView(0.1);
+
+  if (variant === 'arc') {
+    return (
+      <ProcessArc
+        steps={[
+          ...mainSteps.map(({ number, title, duration }) => ({ number, title, tag: duration })),
+          ...postSteps.map(({ number, title }) => ({ number, title, tag: 'Post contratación' })),
+        ]}
+      />
+    );
+  }
 
   return (
     <section

@@ -1,97 +1,79 @@
 // RUTA: src/components/sections/home/HeroSection.tsx
-'use client';
-
+// Portada emparedada: arcos (fondo) · línea 1 · ventana en arco · líneas 2 y 3 al frente.
+// El h1 NO lleva transform ni opacity: si creara contexto de apilamiento, la ventana
+// dejaría de poder quedar ENTRE las líneas del título.
 import Link from 'next/link';
 import Image from 'next/image';
+import { ArrowRight } from 'lucide-react';
 import heroImage from '@/assets/images/1-home/hero-inakat.jpg';
-import iconK from '@/assets/images/1-home/2.png';
-import circleTeal from '@/assets/images/1-home/5.png';
+
+const lines = ['Contrata talento', 'que realmente', 'hace la diferencia.'];
 
 const HeroSection = () => {
   return (
-    <section className="bg-custom-beige py-12 md:py-20 lg:py-24">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
-          {/* Text Column */}
-          <div className="order-1">
-            <h1 className="hero-headline font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-title-dark leading-tight">
-              Contrata talento
-              <br />
-              que realmente
-              <br />
-              <span className="gradient-text">hace la diferencia.</span>
-            </h1>
+    <section className="hm-hero" data-hm-hero>
+      <div className="hm-hero__arcs hm-plane" aria-hidden="true">
+        <span className="hm-arc hm-arc--a" />
+        <span className="hm-arc hm-arc--b" />
+        <span className="hm-arc hm-arc--c" />
+      </div>
 
-            <p className="hero-sub mt-6 text-lg md:text-xl text-text-black/70 max-w-lg leading-relaxed">
-              Evaluación dual: psicólogos + especialistas técnicos.
-              <br />
-              IA como apoyo. Personas que deciden.
-            </p>
+      <div className="hm-wrap hm-hero__inner">
+        <p className="hm-eyebrow">Reclutamiento con evaluación dual</p>
 
-            <div className="hero-cta mt-8 flex flex-col sm:flex-row gap-4">
-              <Link
-                href="/companies"
-                className="inline-flex items-center justify-center bg-button-orange text-white font-semibold px-8 py-4 rounded-full text-lg hover:scale-105 hover:shadow-lg transition-all duration-300"
-              >
-                Registra tu Empresa
-              </Link>
-              <Link
-                href="/talents"
-                className="inline-flex items-center justify-center border-2 border-button-green text-button-dark-green font-semibold px-8 py-4 rounded-full text-lg hover:bg-button-green hover:text-white transition-all duration-300"
-              >
-                Soy Candidato
-              </Link>
-            </div>
+        {/* El título va partido en tres máscaras. Sin aria-label se leería
+            "Contrata talento / que realmente / hace la diferencia." como tres
+            trozos sueltos, así que el nombre accesible va en el h1 y los trozos
+            se ocultan al lector de pantalla. */}
+        <h1 className="hm-title" aria-label={lines.join(' ')}>
+          <span className="hm-line hm-line--1" aria-hidden="true">
+            <span style={{ '--i': 0 } as React.CSSProperties}>{lines[0]}</span>
+          </span>
+          <span className="hm-line hm-line--2" aria-hidden="true">
+            <span style={{ '--i': 1 } as React.CSSProperties}>{lines[1]}</span>
+          </span>
+          <span className="hm-line hm-line--3" aria-hidden="true">
+            <span style={{ '--i': 2 } as React.CSSProperties}>
+              <em>{lines[2]}</em>
+            </span>
+          </span>
+        </h1>
+
+        <div className="hm-hero__piece hm-plane">
+          <div className="hm-window">
+            <Image
+              src={heroImage}
+              alt="Ilustración: profesionales de distintas disciplinas"
+              priority
+              placeholder="blur"
+              sizes="(max-width: 860px) 72vw, 32vw"
+            />
           </div>
+          <span className="hm-dot hm-hero__dot" aria-hidden="true" />
+          <span className="hm-dot hm-hero__dot2" aria-hidden="true" />
+        </div>
 
-          {/* Image Column */}
-          <div className="hero-image order-2 relative">
-            {/* Decorative circle */}
-            <div className="absolute -top-8 -right-8 w-24 h-24 md:w-32 md:h-32 opacity-20 animate-float-delayed pointer-events-none">
-              <Image
-                src={circleTeal}
-                alt=""
-                fill
-                className="object-contain"
-                aria-hidden="true"
-              />
-            </div>
-
-            {/* Main hero image */}
-            <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-              <Image
-                src={heroImage}
-                alt="Equipo INAKAT - Profesionales de reclutamiento"
-                width={600}
-                height={450}
-                className="w-full h-auto object-cover"
-                priority
-              />
-              {/* Subtle overlay with brand icon */}
-              <div className="absolute bottom-4 right-4 w-12 h-12 md:w-16 md:h-16 opacity-30">
-                <Image
-                  src={iconK}
-                  alt=""
-                  fill
-                  className="object-contain"
-                  aria-hidden="true"
-                />
-              </div>
-            </div>
-
-            {/* Floating decorative element */}
-            <div className="absolute -bottom-6 -left-6 w-16 h-16 md:w-20 md:h-20 opacity-15 animate-float pointer-events-none">
-              <Image
-                src={circleTeal}
-                alt=""
-                fill
-                className="object-contain"
-                aria-hidden="true"
-              />
-            </div>
+        <div className="hm-hero__foot">
+          <p className="hm-hero__sub">
+            Evaluación dual: <strong>psicólogos + especialistas técnicos.</strong>
+            <br />
+            IA como apoyo. Personas que deciden.
+          </p>
+          <div className="hm-hero__cta">
+            <Link href="/companies" className="hm-btn hm-btn--orange" data-hm-magnet>
+              Registra tu Empresa
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/talents" className="hm-btn hm-btn--ghost" data-hm-magnet>
+              Soy Candidato
+            </Link>
           </div>
         </div>
       </div>
+
+      <span className="hm-cue" aria-hidden="true">
+        Desliza
+      </span>
     </section>
   );
 };

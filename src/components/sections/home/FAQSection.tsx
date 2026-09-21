@@ -1,9 +1,6 @@
 // RUTA: src/components/sections/home/FAQSection.tsx
-'use client';
-
-import { useState } from 'react';
-import { useInView } from '@/hooks/useInView';
-import { Plus, Minus } from 'lucide-react';
+// Acordeón con <details name>: exclusivo, operable con teclado y funcional sin JS.
+// El navegador expone el estado abierto/cerrado; no hace falta aria-expanded manual.
 
 const faqs = [
   {
@@ -54,66 +51,25 @@ const faqs = [
 ];
 
 const FAQSection = () => {
-  const { ref, isInView } = useInView(0.1);
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-soft-beige py-16 md:py-24"
-    >
-      <div className="container mx-auto px-4">
-        {/* Section title */}
-        <h2
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-14`}
-        >
-          Preguntas frecuentes
-        </h2>
+    <section className="hm-faq" aria-labelledby="hm-faq-title">
+      <div className="hm-wrap hm-faq__grid">
+        <div className="hm-faq__head">
+          <p className="hm-eyebrow">Dudas comunes</p>
+          <h2 id="hm-faq-title" className="hm-h2" style={{ marginTop: '1.2rem' }}>
+            Preguntas <em>frecuentes</em>
+          </h2>
+        </div>
 
-        {/* FAQ Accordion */}
-        <div className="max-w-3xl mx-auto space-y-3">
-          {faqs.map((faq, index) => (
-            <div
-              key={index}
-              className={`animate-on-scroll ${isInView ? 'in-view' : ''} border-b border-title-dark/10`}
-              style={{ transitionDelay: `${index * 80}ms` }}
-            >
-              <button
-                onClick={() =>
-                  setOpenIndex(openIndex === index ? null : index)
-                }
-                aria-expanded={openIndex === index}
-                aria-controls={`faq-answer-${index}`}
-                id={`faq-question-${index}`}
-                className="w-full flex items-center justify-between py-5 text-left group"
-              >
-                <span className="font-display text-lg font-semibold text-title-dark pr-8 group-hover:text-button-orange transition-colors">
-                  {faq.question}
-                </span>
-                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-title-dark/5 flex items-center justify-center group-hover:bg-button-orange/10 transition-colors group-hover:scale-110 duration-200">
-                  {openIndex === index ? (
-                    <Minus className="w-4 h-4 text-button-orange" aria-hidden="true" />
-                  ) : (
-                    <Plus className="w-4 h-4 text-title-dark" aria-hidden="true" />
-                  )}
-                </span>
-              </button>
-
-              {/* Answer */}
-              <div
-                id={`faq-answer-${index}`}
-                role="region"
-                aria-labelledby={`faq-question-${index}`}
-                aria-hidden={openIndex !== index}
-                className={`overflow-hidden transition-all duration-300 ${
-                  openIndex === index ? 'max-h-[600px] pb-5' : 'max-h-0'
-                }`}
-              >
-                <p className="text-text-black/70 text-base leading-relaxed pr-12">
-                  {faq.answer}
-                </p>
-              </div>
-            </div>
+        <div className="hm-faq__list">
+          {faqs.map((faq) => (
+            <details key={faq.question} name="hm-faq" className="hm-faq__item">
+              <summary>
+                <span>{faq.question}</span>
+                <span className="hm-plus" aria-hidden="true" />
+              </summary>
+              <p className="hm-faq__a">{faq.answer}</p>
+            </details>
           ))}
         </div>
       </div>
