@@ -34,6 +34,23 @@ dependencia. Detalle completo, decisiones y trampas en
   motion con 0 animaciones corriendo, sin JS con 91 elementos clave visibles, los 32
   encabezados en el árbol de accesibilidad, `tsc` y `eslint` en 0.
 
+#### Correcciones posteriores, ya en producción
+
+- **La portada se quedaba en blanco al abrirse en una pestaña de fondo.** En una
+  pestaña que no está al frente el reloj de animación no avanza, y
+  `animation-fill-mode: both` deja el título y la foto clavados en su fotograma
+  inicial. Ahora la clase `.hm--js` se pone sólo con `visibilityState === 'visible'`.
+- **El mapa de México se veía roto:** los estados sin cobertura del PNG son
+  (224,224,208) y el suelo de la sección es `#e8e7d4` — 1.07:1 de contraste, medio
+  país invisible. Se re-tiñó ese color a (193,190,172) (1.50:1) sin tocar el verde ni
+  el naranja de marca.
+- **Los pines del mapa estaban puestos a ojo** y caían amontonados lejos de sus
+  ciudades. Ahora salen de la proyección real del mapa, derivada de los tres estados
+  que el PNG ya marcaba en naranja (CDMX, Jalisco y Nuevo León) usados como anclas.
+- **La imagen del hero se veía borrosa:** es 1920×1280 (horizontal) dentro de un arco
+  vertical, así que `object-fit: cover` la ampliaba 1.73×. Se recortó en origen a
+  retrato 4:5 (752×940), sin la franja de rótulos quemados.
+
 ### 🔍 Auditoría integral — 2026-09-21
 
 483 hallazgos en 166 archivos (1 crítico, 51 altos), con el parte de trabajo en
