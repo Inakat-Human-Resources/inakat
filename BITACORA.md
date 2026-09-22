@@ -17,21 +17,35 @@ propio en cookie · MercadoPago · Vercel Blob.
 *(Esta sección se reescribe completa en cada actualización.)*
 
 **Hecho y funcionando**
-- **La portada rediseñada está en producción** y verificada en vivo: `/`, `/about`,
-  `/companies`, `/talents`, `/login`, `/contact` y `/api/jobs` responden 200.
-  Despliegue en vivo: `inakat-hk9vyq8wj-izalith`.
-- La home aguanta las condiciones que rompen este tipo de páginas: cinco anchos sin
-  desbordes, `prefers-reduced-motion` con 0 animaciones corriendo, y **legible sin
-  JavaScript** (91 elementos clave visibles).
-- **215 tests de QA en verde** (`__tests__/qa/`), 19 de ellos nuevos y específicos del
-  rediseño.
+- **La portada rediseñada está en producción** y verificada en vivo. Aguanta las
+  condiciones que rompen este tipo de páginas: cinco anchos sin desbordes,
+  `prefers-reduced-motion` con 0 animaciones corriendo, y **legible sin JavaScript**.
+- **El árbol está verde otra vez**: `tsc` 0 · `npm run lint` 0 errores · **1457 tests
+  pasan** · `next build` OK · **CI en verde en `main`** desde `c2e0fbc`.
+- **Dependencias: de 26 vulnerabilidades a 8**, ninguna crítica (next 15.5.10 → 15.5.25,
+  prisma 6.6 → 6.19, nodemailer 8 → 10).
+- **Arreglado y desplegado, con test cada uno** (despliegue `inakat-kbmoiljye-izalith`):
+  cuatro formas de publicar vacantes sin pagar; dos carreras de créditos; comisiones de
+  ventas nunca cobradas contadas como ingresos; cargos de tarjeta que podían quedarse
+  sin registro; doble acreditación de créditos; precios de compra que podían no ser los
+  cobrados; cinco fugas de notas internas hacia la empresa y el integrador; el oráculo
+  público de postulaciones; la des-anonimización de vacantes confidenciales; el XSS
+  almacenado contra el admin (`javascript:` en URLs del registro); subir y borrar el CV;
+  el registro de empresa con el sitio web vacío; y las entrevistas, que siempre decían
+  «Error al guardar» y guardaban 1970 como fecha.
+- **Comprobado en producción, no sólo en el código:** `/api/applications/check` responde
+  401, `/api/credit-packages` sirve los paquetes reales, y de las 27 vacantes públicas
+  las 2 confidenciales salen sin `userId` ni coordenadas y ninguna trae `notasInternas`.
 - **La auditoría integral está documentada**: 483 hallazgos en 166 archivos
   (1 crítico, 51 altos, 189 medios, 242 bajos) en `docs/AUDITORIA-2026-09.md` y
   `docs/auditoria-2026-09/`.
 
 **A medias**
-- **La auditoría no tiene ni un hallazgo corregido.** Es diagnóstico, no arreglo.
-  El plan por fases está en `docs/AUDITORIA-2026-09.md`.
+- **Quedan hallazgos de la auditoría sin tocar**, entre ellos varios altos ya
+  verificados: listas topadas a 20/30 registros en seis pantallas (los registros 21+
+  son inalcanzables), desactivar un usuario no le corta el acceso hasta que caduque su
+  JWT, el login exige 8 caracteres pero el admin puede crear cuentas con 6, y los
+  mensajes del formulario de contacto se guardan sin que nadie los lea ni reciba aviso.
 - **La verificación adversarial automática de la auditoría nunca corrió** (se agotó el
   límite de gasto del modelo a mitad). Se verificaron a mano los 31 hallazgos más
   graves —los 31 ciertos— y el resto quedó marcado como «sin verificar». Falta también
@@ -39,11 +53,6 @@ propio en cookie · MercadoPago · Vercel Blob.
   validación de entrada y accesibilidad.
 
 **Bloqueado**
-- **`main` está en rojo desde el PR #6 (antes de este trabajo).** Cuatro tests de
-  `__tests__/api/auth-reset-password.test.ts:216` exigen
-  `prisma/migrations/_archived/20260514_reset_token.sql`, que ese PR movió a
-  `prisma/archived-sql/`. Como `ci.yml` corre `npm test` de forma bloqueante, falla en
-  `main` y en todo PR nuevo. No depende de nadie externo: es media hora de trabajo.
 - **Tres decisiones esperan a INAKAT** (desde el 21/09/2026):
   1. La foto del hero es generada por IA. Ya no se presenta como el equipo real, pero
      está publicada; hace falta una fotografía de verdad.
@@ -54,9 +63,63 @@ propio en cookie · MercadoPago · Vercel Blob.
      Querétaro, León y Mérida.
 
 **Siguiente paso**
-- Arreglar lo roto empezando por el árbol verde (CI + `npm audit`), y de ahí seguir el
-  plan por fases de la auditoría: dinero y permisos, fuga de datos personales, flujos
-  rotos de cara al usuario.
+- Seguir con los hallazgos altos que quedan: las listas topadas a 20/30 registros, que
+  son las que hoy esconden datos reales a quien usa el panel.
+
+---
+
+## 22/09/2026 — Árbol verde y primera tanda de arreglos en producción
+
+**Qué cambió**
+- `main` vuelve a estar en verde y el CI con él. Dependencias: 26 vulnerabilidades → 8,
+  ninguna crítica.
+- Cuatro tandas de arreglos, cada una con sus tests y desplegada a producción: dinero
+  (publicación de vacantes y créditos), pagos (comisiones, cobros, precios), privacidad
+  (notas internas, confidenciales, oráculo) y flujos rotos (CV, registro de empresa,
+  entrevistas). 1457 tests en verde, 62 nuevos.
+
+**Por qué**
+- Sin árbol verde no se puede validar ningún arreglo: el CI llevaba rojo desde el PR #6
+  y cualquier PR nuevo nacía en rojo, así que dejaba de ser una señal.
+- Lo demás salió de la auditoría, atacando primero lo que toca dinero y datos
+  personales.
+
+**Decisiones y descartes**
+- **`creditCost > 0` NO sirve como prueba de que una vacante se pagó.** Fue lo primero
+  que se probó para cerrar el rodeo draft → paused → active, y un test existente lo
+  tumbó: las vacantes anteriores al cobro tienen 0 y su dueño se habría quedado sin
+  poder reanudarlas. Se cerró por el otro lado: un borrador no sale de borrador salvo
+  por `/api/jobs/publish`, que cobra.
+- **Los campos que fijan el precio salen de la whitelist de PATCH** en vez de duplicar
+  ahí la lógica de cobro. El formulario de edición usa PUT, que sí recalcula; PATCH lo
+  usa la UI sólo para cambiar el estado, así que no se rompe ningún flujo real.
+- **No se añadió una columna para `external_reference`.** MercadoPago ya guarda ese
+  campo, así que basta con crear la compra antes de cobrar y mandar su id: se evita una
+  migración sobre una base en producción.
+- **`/api/vendor/*` abierto a cualquier usuario autenticado se dejó como está.** El
+  middleware lo documenta como decisión deliberada («cualquier usuario registrado puede
+  crear y gestionar su código»), los porcentajes son fijos en el servidor (10/10) y el
+  auto-referido ya se cerró en junio: es un programa de referidos, no un agujero. Es un
+  ejemplo de hallazgo de la auditoría que al verificarse resultó ser intencional.
+- **El fallback de precios de la página de compra se eliminó en vez de corregirlo.**
+  Enseñar un precio que puede no ser el que se cobra es peor que decir «no pudimos
+  cargar los paquetes».
+
+**Lo que salió mal**
+- Dos aserciones de tests nuevos fallaron por dar positivo con el **comentario** que
+  explicaba el arreglo, no con el código. Al escribir un test que comprueba ausencia,
+  la aserción tiene que mirar la llamada (`fetch(...)`), no el texto suelto.
+- Los parches por script con cadenas multilínea fallan en este repo porque los archivos
+  tienen CRLF. Para eso, la herramienta de edición; los scripts, sólo para cambios de
+  una línea o con separador detectado.
+
+**Datos duros**
+- Verificado en producción tras desplegar: `/api/applications/check` → 401;
+  `/api/credit-packages` sirve los cuatro paquetes reales de la base; de 27 vacantes
+  públicas, las 2 confidenciales salen con `userId`, `latitude` y `longitude` en null y
+  ninguna incluye `notasInternas`.
+- Commits: `4af863d` (CI), `c2e0fbc` (deps), `71988a7` (vacantes), `2f71964` (pagos),
+  `95c0015` (privacidad), `40400b1` (flujos).
 
 ---
 
