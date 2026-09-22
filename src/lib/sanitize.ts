@@ -41,3 +41,22 @@ export function sanitizeBody<T extends Record<string, unknown>>(
   }
   return sanitized;
 }
+
+/**
+ * ¿Es una URL http(s) absoluta?
+ *
+ * Cualquier URL que venga del usuario y vaya a renderizarse como `href` tiene que
+ * pasar por aquí. `z.string().url()` NO sirve para esto: `javascript:alert(1)` es
+ * una URL válida según el estándar, así que pasa la validación y luego se
+ * convierte en XSS almacenado al pinchar el enlace.
+ */
+export function isSafeHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+}

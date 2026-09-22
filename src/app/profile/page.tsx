@@ -517,25 +517,42 @@ export default function ProfilePage() {
       setUploadingCv(true);
       setError('');
 
+      // Subir el archivo y guardar la URL en el perfil: el mismo patrón en dos
+      // pasos que usa la foto.
+      //
+      // Antes esto mandaba un FormData a /api/profile/documents, que hace
+      // `request.json()` y espera `{ name, fileUrl, fileType }`: la petición
+      // reventaba siempre, así que subir el CV desde el perfil no funcionaba.
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', 'cv');
 
-      const response = await fetch('/api/profile/documents', {
+      const uploadRes = await fetch('/api/upload', {
         method: 'POST',
-        credentials: 'include',
         body: formData
+      });
+      const uploadData = await uploadRes.json().catch(() => ({}));
+
+      if (!uploadRes.ok || !uploadData.success) {
+        setError(uploadData.error || 'Error al subir CV');
+        return;
+      }
+
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ candidateData: { cvUrl: uploadData.url } })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setCvUrl(data.data.url);
+        setCvUrl(uploadData.url);
         setSuccess('CV subido exitosamente');
       } else {
-        setError(data.error || 'Error al subir CV');
+        setError(data.error || 'Error al guardar el CV en tu perfil');
       }
-    } catch (err) {
+    } catch {
       setError('Error al subir archivo');
     } finally {
       setUploadingCv(false);
@@ -547,9 +564,14 @@ export default function ProfilePage() {
     if (!confirm('¿Estás seguro de eliminar tu CV?')) return;
 
     try {
-      const response = await fetch('/api/profile/documents?type=cv', {
-        method: 'DELETE',
-        credentials: 'include'
+      // El CV vive en `Candidate.cvUrl`, no en la tabla de documentos: se quita
+      // poniéndolo a null. Antes se llamaba a /api/profile/documents?type=cv,
+      // que espera `?id=<docId>` y respondía 400 «ID requerido».
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ candidateData: { cvUrl: null } })
       });
 
       const data = await response.json();
@@ -560,7 +582,7 @@ export default function ProfilePage() {
       } else {
         setError(data.error || 'Error al eliminar CV');
       }
-    } catch (err) {
+    } catch {
       setError('Error de conexión');
     }
   };

@@ -1,5 +1,36 @@
 // RUTA: src/lib/validations.ts
 import { z } from 'zod';
+import { isSafeHttpUrl } from '@/lib/sanitize';
+
+/**
+ * URL opcional que va a acabar renderizada como `href`.
+ *
+ * Dos cosas que `z.string().url().optional().or(z.literal(''))` hacía mal:
+ *
+ *  1. `.optional()` acepta `undefined` pero NO `null`, y los formularios mandan
+ *     `null` para los campos vacíos: el registro de empresa fallaba con
+ *     «Datos inválidos» sólo por dejar el sitio web en blanco.
+ *  2. `javascript:alert(1)` ES una URL válida para el estándar, así que pasaba
+ *     el filtro y quedaba guardada; al pinchar el enlace desde el panel de
+ *     admin se ejecutaba. Aquí se exige http(s), como en los documentos.
+ */
+const urlOpcionalSegura = (etiqueta: string) =>
+  z
+    .preprocess(
+      (v) => {
+        if (v === null || v === undefined || v === '') return undefined;
+        if (typeof v !== 'string') return v;
+        const limpio = v.trim();
+        if (limpio === '') return undefined;
+        // "inakat.com" es lo que la gente escribe; se completa antes de validar.
+        return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(limpio) ? limpio : `https://${limpio}`;
+      },
+      z
+        .string()
+        .refine(isSafeHttpUrl, `${etiqueta} debe ser una dirección http(s) válida`)
+        .optional()
+    )
+    .optional();
 
 // =============================================
 // SCHEMAS DE VALIDACIÓN
@@ -20,7 +51,7 @@ export const companyRequestSchema = z.object({
   apellidoMaterno: z.string().min(2, 'Apellido materno muy corto'),
   nombreEmpresa: z.string().min(2, 'Nombre de empresa muy corto'),
   correoEmpresa: z.string().email('Email inválido'),
-  sitioWeb: z.string().url('URL inválida').optional().or(z.literal('')),
+  sitioWeb: urlOpcionalSegura('El sitio web'),
   razonSocial: z.string().min(5, 'Razón social muy corta'),
   rfc: z
     .string()
@@ -29,8 +60,8 @@ export const companyRequestSchema = z.object({
       'RFC inválido. Debe ser formato mexicano válido (ej: ABC123456A1A o XAXX010101AAA)'
     ),
   direccionEmpresa: z.string().min(10, 'Dirección muy corta'),
-  identificacionUrl: z.string().url().optional().or(z.literal('')),
-  documentosConstitucionUrl: z.string().url().optional().or(z.literal(''))
+  identificacionUrl: urlOpcionalSegura('La identificación'),
+  documentosConstitucionUrl: urlOpcionalSegura('El acta constitutiva')
 });
 
 export type CompanyRequestData = z.infer<typeof companyRequestSchema>;

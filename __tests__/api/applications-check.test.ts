@@ -1,5 +1,7 @@
 export {};
 // RUTA: __tests__/api/applications-check.test.ts
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Tests para la API de verificación de aplicaciones duplicadas
@@ -115,8 +117,6 @@ describe('Applications Check API Tests', () => {
       // La ruta era pública y respondía si CUALQUIER correo había postulado a
       // una vacante y en qué estado iba. Ahora exige sesión y usa el email del
       // usuario autenticado, así que el parámetro dejó de existir.
-      const fs = require('fs');
-      const path = require('path');
       const route = fs.readFileSync(
         path.join(process.cwd(), 'src/app/api/applications/check/route.ts'),
         'utf-8'

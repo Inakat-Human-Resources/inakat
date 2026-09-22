@@ -62,7 +62,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ interview });
+    return NextResponse.json({ success: true, interview });
   } catch (error) {
     console.error('Error fetching interview request:', error);
     return NextResponse.json(
@@ -123,23 +123,32 @@ export async function PATCH(
       );
     }
 
-    const parseValidDate = (value: unknown): Date | null => {
+    /**
+     * `null` y `''` significan «sin fecha», no una fecha inválida.
+     *
+     * Antes se pasaban directos a `new Date()`: `new Date(null)` da
+     * 1970-01-01T00:00:00Z, que NO es NaN, así que la comprobación la daba por
+     * buena y se guardaba 1970 como hora de la entrevista. Cancelar una
+     * solicitud que aún no tenía horario escribía esa fecha en la base.
+     */
+    const parseValidDate = (value: unknown): Date | null | undefined => {
+      if (value === null || value === '') return null;
       const d = new Date(value as string);
-      return Number.isNaN(d.getTime()) ? null : d;
+      return Number.isNaN(d.getTime()) ? undefined : d;
     };
 
-    let parsedStart: Date | undefined;
-    let parsedEnd: Date | undefined;
+    let parsedStart: Date | null | undefined;
+    let parsedEnd: Date | null | undefined;
     if (scheduledStart !== undefined) {
       const d = parseValidDate(scheduledStart);
-      if (!d) {
+      if (d === undefined) {
         return NextResponse.json({ error: 'scheduledStart no es una fecha válida' }, { status: 400 });
       }
       parsedStart = d;
     }
     if (scheduledEnd !== undefined) {
       const d = parseValidDate(scheduledEnd);
-      if (!d) {
+      if (d === undefined) {
         return NextResponse.json({ error: 'scheduledEnd no es una fecha válida' }, { status: 400 });
       }
       parsedEnd = d;
@@ -193,7 +202,7 @@ export async function PATCH(
       include: interviewInclude,
     });
 
-    return NextResponse.json({ interview });
+    return NextResponse.json({ success: true, interview });
   } catch (error) {
     console.error('Error updating interview request:', error);
     return NextResponse.json(
