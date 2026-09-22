@@ -40,8 +40,15 @@ export async function GET(request: NextRequest) {
     const vendorId = searchParams.get('vendorId');
     const skip = (page - 1) * limit;
 
-    // Construir filtros
-    const whereClause: Record<string, unknown> = {};
+    // DINERO (#PAGO): una comisión sólo cuenta si la compra que la generó se
+    // pagó. `DiscountCodeUse` se crea en POST /api/credits/purchases junto con la
+    // compra, ANTES de saber si MercadoPago la aprueba; si el pago se rechaza o
+    // el OXXO/SPEI nunca se paga, el webhook marca la compra como 'failed' pero
+    // la comisión queda intacta. Sin este filtro, el panel las mostraba como
+    // pagables y las sumaba a ventas e ingresos.
+    const SOLO_COMPRAS_PAGADAS = { purchase: { paymentStatus: 'paid' } };
+
+    const whereClause: Record<string, unknown> = { ...SOLO_COMPRAS_PAGADAS };
     if (status) {
       whereClause.commissionStatus = status;
     }
@@ -131,12 +138,12 @@ export async function GET(request: NextRequest) {
     // Resumen por status
     const [pendingSum, paidSum] = await Promise.all([
       prisma.discountCodeUse.aggregate({
-        where: { commissionStatus: 'pending' },
+        where: { commissionStatus: 'pending', ...SOLO_COMPRAS_PAGADAS },
         _sum: { commissionAmount: true },
         _count: true
       }),
       prisma.discountCodeUse.aggregate({
-        where: { commissionStatus: 'paid' },
+        where: { commissionStatus: 'paid', ...SOLO_COMPRAS_PAGADAS },
         _sum: { commissionAmount: true },
         _count: true
       })

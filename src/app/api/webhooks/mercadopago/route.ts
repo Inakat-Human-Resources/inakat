@@ -149,10 +149,37 @@ export async function POST(req: NextRequest) {
       statusDetail: paymentInfo.status_detail
     });
 
-    // Buscar la compra en nuestra DB
-    const purchase = await prisma.creditPurchase.findUnique({
+    // Buscar la compra en nuestra DB.
+    //
+    // Por paymentId primero y, si no aparece, por `external_reference`: la compra
+    // se crea ANTES de cobrar y su id viaja a MercadoPago en ese campo, así que
+    // si el `update` que guarda el paymentId no llegó a completarse (timeout,
+    // función serverless terminada) la compra sigue siendo conciliable y los
+    // créditos se acreditan igual. Antes, en ese caso, el webhook respondía 404
+    // en todos los reintentos y el cargo se quedaba sin acreditar.
+    let purchase = await prisma.creditPurchase.findUnique({
       where: { paymentId: String(paymentId) }
     });
+
+    if (!purchase && paymentInfo.external_reference) {
+      const refId = Number(paymentInfo.external_reference);
+      if (Number.isInteger(refId) && refId > 0) {
+        purchase = await prisma.creditPurchase.findUnique({ where: { id: refId } });
+        if (purchase) {
+          console.warn('[Webhook] Compra conciliada por external_reference:', {
+            purchaseId: purchase.id,
+            paymentId,
+            requestId
+          });
+          // Se guarda el paymentId para que los reintentos siguientes la
+          // encuentren por la vía normal.
+          await prisma.creditPurchase.update({
+            where: { id: purchase.id },
+            data: { paymentId: String(paymentId) }
+          }).catch(() => {});
+        }
+      }
+    }
 
     if (!purchase) {
       console.error('[Webhook] Purchase not found:', { paymentId, requestId });

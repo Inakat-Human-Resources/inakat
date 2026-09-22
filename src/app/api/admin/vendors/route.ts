@@ -66,6 +66,11 @@ export async function GET(request: NextRequest) {
             }
           },
           uses: {
+            // DINERO (#PAGO): sólo cuentan las comisiones de compras pagadas.
+            // DiscountCodeUse se crea antes de saber si MercadoPago aprueba el
+            // pago, así que sin este filtro las ventas rechazadas inflaban las
+            // estadísticas del vendedor.
+            where: { purchase: { paymentStatus: 'paid' } },
             select: {
               id: true,
               finalPrice: true,
@@ -118,6 +123,7 @@ export async function GET(request: NextRequest) {
 
     // Estadísticas globales
     const globalStats = await prisma.discountCodeUse.aggregate({
+      where: { purchase: { paymentStatus: 'paid' } },
       _sum: {
         finalPrice: true,
         commissionAmount: true
@@ -126,7 +132,7 @@ export async function GET(request: NextRequest) {
     });
 
     const pendingGlobal = await prisma.discountCodeUse.aggregate({
-      where: { commissionStatus: 'pending' },
+      where: { commissionStatus: 'pending', purchase: { paymentStatus: 'paid' } },
       _sum: { commissionAmount: true }
     });
 

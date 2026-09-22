@@ -50,6 +50,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const commission = await prisma.discountCodeUse.findUnique({
       where: { id: commissionId },
       include: {
+        purchase: { select: { paymentStatus: true } },
         code: {
           include: {
             user: {
@@ -80,6 +81,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { success: false, error: 'Estado inválido. Usar: pending, paid' },
         { status: 400 }
+      );
+    }
+
+    // DINERO (#PAGO): no se puede marcar como pagada la comisión de una venta que
+    // nunca se cobró. La comisión nace junto con la compra, antes de saber si
+    // MercadoPago la aprueba, así que un pago rechazado deja una comisión viva.
+    if (status === 'paid' && commission.purchase?.paymentStatus !== 'paid') {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'La compra que generó esta comisión no está pagada, así que no hay comisión que liquidar.',
+          paymentStatus: commission.purchase?.paymentStatus ?? 'desconocido'
+        },
+        { status: 409 }
       );
     }
 

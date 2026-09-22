@@ -166,14 +166,19 @@ export async function POST(req: NextRequest) {
       paymentBody.notification_url = `${appUrl}/api/webhooks/mercadopago`;
     }
 
-    // Crear pago en Mercado Pago
-    const paymentResult = await payment.create({
-      body: paymentBody
-    });
-
-    console.info('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
-
-    // Registrar compra en DB (siempre como pending, se actualiza en la transacción si es approved)
+    // DINERO (#PAGO): la fila se crea ANTES de cobrar.
+    //
+    // Antes el orden era: cobrar en MercadoPago -> registrar la compra. Si algo
+    // fallaba entre medias (timeout del pool de Postgres, la función serverless
+    // terminada, un P2002 en DiscountCodeUse), la tarjeta ya estaba cobrada y no
+    // quedaba fila: el webhook respondía 404 "Purchase not found" en todos los
+    // reintentos, los créditos no se acreditaban nunca, y como el pago no llevaba
+    // external_reference tampoco había forma de conciliarlo desde el panel de MP.
+    //
+    // Ahora la compra nace en 'pending' y su id viaja a MercadoPago como
+    // `external_reference`, que es lo que permite al webhook encontrarla aunque
+    // el paymentId no se haya llegado a guardar. La `idempotencyKey` evita el
+    // doble cargo si el cliente reintenta la misma compra.
     const purchase = await prisma.creditPurchase.create({
       data: {
         userId: payload.userId,
@@ -181,11 +186,42 @@ export async function POST(req: NextRequest) {
         pricePerCredit: finalPrice / pkg.credits, // Precio por crédito después de descuento
         totalPrice: finalPrice,
         packageType,
-        paymentStatus: 'pending', // Se actualiza a 'paid' en la transacción si es approved
-        paymentId: String(paymentResult.id),
+        paymentStatus: 'pending',
         paymentMethod: paymentData.payment_method_id,
-        paidAt: null // Se establece en la transacción si es approved
+        paidAt: null
       }
+    });
+
+    paymentBody.external_reference = String(purchase.id);
+
+    let paymentResult;
+    try {
+      paymentResult = await payment.create({
+        body: paymentBody,
+        requestOptions: { idempotencyKey: `inakat-purchase-${purchase.id}` }
+      });
+    } catch (e) {
+      // El cobro no llegó a hacerse: la compra queda marcada y no se acredita nada.
+      await prisma.creditPurchase.update({
+        where: { id: purchase.id },
+        data: { paymentStatus: 'failed' }
+      }).catch(() => {});
+      throw e;
+    }
+
+    console.info('[Payments] Payment created:', { id: paymentResult.id, status: paymentResult.status });
+
+    // A partir de aquí la tarjeta PUEDE estar cobrada: lo que falle se registra,
+    // pero nunca se le dice al cliente que el pago falló.
+    await prisma.creditPurchase.update({
+      where: { id: purchase.id },
+      data: { paymentId: String(paymentResult.id) }
+    }).catch((e) => {
+      console.error('[Payments] No se pudo guardar el paymentId; el webhook conciliará por external_reference:', {
+        purchaseId: purchase.id,
+        paymentId: paymentResult.id,
+        error: e instanceof Error ? e.message : 'desconocido'
+      });
     });
 
     // Si se usó código de descuento, registrar el uso
@@ -215,13 +251,25 @@ export async function POST(req: NextRequest) {
 
       // Usar transacción para garantizar consistencia (igual que el webhook)
       const { updatedUser, updatedPurchase } = await prisma.$transaction(async (tx) => {
-        // Actualizar purchase status
-        const updatedPurchase = await tx.creditPurchase.update({
-          where: { id: purchase.id },
-          data: {
-            paymentStatus: 'paid',
-            paidAt: new Date()
-          }
+        // IDEMPOTENCIA (#PAGO): el mismo reclamo atómico que usa el webhook.
+        // Antes este camino hacía un `update` incondicional mientras el webhook
+        // usaba `updateMany` condicionado a que la compra siguiera sin pagar; si
+        // la notificación llegaba a la vez que esta respuesta síncrona, los dos
+        // podían acreditar y el usuario se llevaba los créditos por duplicado.
+        const claimed = await tx.creditPurchase.updateMany({
+          where: { id: purchase.id, paymentStatus: { not: 'paid' } },
+          data: { paymentStatus: 'paid', paidAt: new Date() }
+        });
+
+        if (claimed.count === 0) {
+          // El webhook llegó primero y ya acreditó: no se toca el saldo.
+          const yaPagada = await tx.creditPurchase.findUnique({ where: { id: purchase.id } });
+          const actual = await tx.user.findUnique({ where: { id: payload.userId } });
+          return { updatedUser: actual!, updatedPurchase: yaPagada!, yaAcreditado: true };
+        }
+
+        const updatedPurchase = await tx.creditPurchase.findUniqueOrThrow({
+          where: { id: purchase.id }
         });
 
         // Agregar créditos al usuario

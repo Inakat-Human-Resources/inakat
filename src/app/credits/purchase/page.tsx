@@ -30,13 +30,12 @@ interface DiscountInfo {
   };
 }
 
-// Paquetes por defecto (fallback si la API falla)
-const DEFAULT_PACKAGES: CreditPackage[] = [
-  { id: 1, name: '1 Crédito', credits: 1, price: 4000, pricePerCredit: 4000, badge: null, isActive: true, sortOrder: 1 },
-  { id: 2, name: 'Pack 10', credits: 10, price: 35000, pricePerCredit: 3500, badge: 'MÁS POPULAR', isActive: true, sortOrder: 2 },
-  { id: 3, name: 'Pack 15', credits: 15, price: 50000, pricePerCredit: 3333, badge: null, isActive: true, sortOrder: 3 },
-  { id: 4, name: 'Pack 20', credits: 20, price: 65000, pricePerCredit: 3250, badge: 'PROMOCIÓN', isActive: true, sortOrder: 4 }
-];
+// DINERO (#PAGO): aquí había una lista de precios escrita a mano que se usaba
+// como fallback. Como la petición iba a /api/admin/credit-packages y el
+// middleware la bloquea para empresas, el fallback era lo que se mostraba
+// SIEMPRE — y el cobro real sale de la tabla CreditPackage, así que el precio
+// anunciado podía no ser el cobrado. Si los paquetes no cargan, ahora se avisa
+// en vez de enseñar precios que quizá no existen.
 
 export default function PurchaseCreditsPage() {
   const router = useRouter();
@@ -65,7 +64,8 @@ export default function PurchaseCreditsPage() {
   const fetchPackages = async () => {
     try {
       setLoadingPackages(true);
-      const response = await fetch('/api/admin/credit-packages?activeOnly=true');
+      setError(null);
+      const response = await fetch('/api/credit-packages');
       const data = await response.json();
 
       if (data.success && data.data.length > 0) {
@@ -74,13 +74,18 @@ export default function PurchaseCreditsPage() {
         const popularPkg = data.data.find((p: CreditPackage) => p.badge === 'MÁS POPULAR');
         setSelectedPackageId(popularPkg?.id || data.data[Math.min(1, data.data.length - 1)]?.id);
       } else {
-        // Usar paquetes por defecto si no hay en la BD
-        setPackages(DEFAULT_PACKAGES);
-        setSelectedPackageId(2); // Pack 10 por defecto
+        setPackages([]);
+        setSelectedPackageId(null);
+        setError(
+          'No pudimos cargar los paquetes de créditos. Vuelve a intentarlo en un momento o escríbenos a info@inakat.com.'
+        );
       }
     } catch {
-      setPackages(DEFAULT_PACKAGES);
-      setSelectedPackageId(2);
+      setPackages([]);
+      setSelectedPackageId(null);
+      setError(
+        'No pudimos cargar los paquetes de créditos. Revisa tu conexión y vuelve a intentarlo.'
+      );
     } finally {
       setLoadingPackages(false);
     }

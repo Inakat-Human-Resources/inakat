@@ -577,6 +577,10 @@ describe('Sistema de Vendedores', () => {
       mockPrisma.discountCodeUse.findUnique.mockResolvedValue({
         id: 1,
         commissionStatus: 'pending',
+        // La compra que generó la comisión está pagada: sólo así hay comisión
+        // que liquidar (DiscountCodeUse se crea antes de saber si MercadoPago
+        // aprueba el pago).
+        purchase: { paymentStatus: 'paid' },
         code: {
           id: 1,
           code: 'CODE1',

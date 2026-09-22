@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // Obtener ventas con el código
     const [sales, totalCount, summaryData] = await Promise.all([
       prisma.discountCodeUse.findMany({
-        where: { codeId: discountCode.id },
+        where: { codeId: discountCode.id, purchase: { paymentStatus: 'paid' } },
         include: {
           purchase: {
             include: {
@@ -74,10 +74,10 @@ export async function GET(request: NextRequest) {
         take: limit
       }),
       prisma.discountCodeUse.count({
-        where: { codeId: discountCode.id }
+        where: { codeId: discountCode.id, purchase: { paymentStatus: 'paid' } }
       }),
       prisma.discountCodeUse.aggregate({
-        where: { codeId: discountCode.id },
+        where: { codeId: discountCode.id, purchase: { paymentStatus: 'paid' } },
         _sum: {
           commissionAmount: true
         }
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
     // Calcular comisiones por estado
     const [pendingSum, paidSum] = await Promise.all([
       prisma.discountCodeUse.aggregate({
-        where: { codeId: discountCode.id, commissionStatus: 'pending' },
+        where: { codeId: discountCode.id, commissionStatus: 'pending', purchase: { paymentStatus: 'paid' } },
         _sum: { commissionAmount: true }
       }),
       prisma.discountCodeUse.aggregate({
