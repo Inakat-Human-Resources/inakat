@@ -1,6 +1,8 @@
 // RUTA: src/lib/email.ts
 
-import nodemailer from 'nodemailer';
+// nodemailer 10 + @types/nodemailer 8.x: los tipos dejaron de exponerse como
+// namespace (`nodemailer.Transporter`) y ahora se importan sueltos.
+import nodemailer, { type Transporter } from 'nodemailer';
 
 // =============================================
 // CONFIGURACIÓN SMTP (Zoho Mail)
@@ -16,9 +18,9 @@ function isEmailConfigured(): boolean {
   return Boolean(SMTP_USER && SMTP_PASS);
 }
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   if (!isEmailConfigured()) {
     console.warn('[Email] SMTP no configurado — emails deshabilitados');
     return null;
