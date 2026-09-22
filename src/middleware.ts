@@ -20,10 +20,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Excepción: GET a applications/check es público (verificar si ya aplicó)
-  if (pathname === '/api/applications/check' && request.method === 'GET') {
-    return NextResponse.next();
-  }
+  // PRIVACIDAD: `applications/check` YA NO es público. Recibía un email por
+  // query y respondía si esa persona había postulado a una vacante y en qué
+  // estado iba: un oráculo para cualquiera con una lista de correos. Su único
+  // consumidor (ApplyJobModal) está autenticado y consulta su propio correo,
+  // que ahora sale de la sesión.
 
   // Excepción: POST a upload es público (para registro de empresas)
   if (pathname === '/api/upload' && request.method === 'POST') {

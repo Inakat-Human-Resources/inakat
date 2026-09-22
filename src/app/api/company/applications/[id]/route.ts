@@ -329,15 +329,16 @@ export async function GET(
       }
     });
 
-    // Obtener notas del JobAssignment
-    const jobAssignment = await prisma.jobAssignment.findFirst({
-      where: { jobId: application.jobId }
-    });
+    // PRIVACIDAD (#50/#51): esta respuesta va a la EMPRESA. `notes` de la
+    // postulación, `notas` del candidato y las notas de reclutador/especialista
+    // del JobAssignment son material interno de INAKAT; el arreglo de junio se
+    // aplicó al dashboard pero no a esta ruta, que las seguía entregando enteras.
+    const { notes: _internalNotes, ...applicationPublic } = application;
 
     return NextResponse.json({
       success: true,
       data: {
-        ...application,
+        ...applicationPublic,
         candidateProfile: candidate ? {
           id: candidate.id,
           nombre: candidate.nombre,
@@ -357,11 +358,8 @@ export async function GET(
           cvUrl: candidate.cvUrl,
           linkedinUrl: candidate.linkedinUrl,
           portafolioUrl: candidate.portafolioUrl,
-          notas: candidate.notas,
           educacion: candidate.educacion // FEATURE: Educación múltiple
-        } : null,
-        recruiterNotes: jobAssignment?.recruiterNotes || null,
-        specialistNotes: jobAssignment?.specialistNotes || null
+        } : null
       }
     });
   } catch (error) {

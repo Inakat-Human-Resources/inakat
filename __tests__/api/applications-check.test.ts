@@ -111,12 +111,20 @@ describe('Applications Check API Tests', () => {
       // La API retornaría 400 con error
     });
 
-    it('debería requerir email', () => {
-      const params: { email?: string; jobId?: number } = { jobId: 1 };
-      const hasEmail = !!params.email;
+    it('NO debería aceptar el email por query (sale de la sesión)', () => {
+      // La ruta era pública y respondía si CUALQUIER correo había postulado a
+      // una vacante y en qué estado iba. Ahora exige sesión y usa el email del
+      // usuario autenticado, así que el parámetro dejó de existir.
+      const fs = require('fs');
+      const path = require('path');
+      const route = fs.readFileSync(
+        path.join(process.cwd(), 'src/app/api/applications/check/route.ts'),
+        'utf-8'
+      );
 
-      expect(hasEmail).toBe(false);
-      // La API retornaría 400 con error
+      expect(route).toContain('requireAuth');
+      expect(route).toContain('auth.user.email.toLowerCase()');
+      expect(route).not.toContain("searchParams.get('email')");
     });
   });
 

@@ -2,22 +2,35 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * GET /api/applications/check
- * Verifica si un email ya aplicó a una vacante específica
- * Query params: jobId, email
+ * Verifica si la persona autenticada ya postuló a una vacante.
+ * Query params: jobId
+ *
+ * PRIVACIDAD: esta ruta era pública y recibía el email por query, así que
+ * respondía si CUALQUIER persona había postulado a una vacante y en qué estado
+ * iba — un oráculo para quien tuviera una lista de correos. El email ya no se
+ * acepta por parámetro: sale de la sesión, que es lo que su único consumidor
+ * (ApplyJobModal) hacía de todos modos.
  */
 export async function GET(request: Request) {
   try {
+    const auth = await requireAuth();
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
-    const email = searchParams.get('email');
 
-    // Validar parámetros requeridos
-    if (!jobId || !email) {
+    if (!jobId || Number.isNaN(parseInt(jobId))) {
       return NextResponse.json(
-        { success: false, error: 'Parámetros requeridos: jobId, email' },
+        { success: false, error: 'Parámetro requerido: jobId' },
         { status: 400 }
       );
     }
@@ -26,7 +39,7 @@ export async function GET(request: Request) {
     const existingApplication = await prisma.application.findFirst({
       where: {
         jobId: parseInt(jobId),
-        candidateEmail: email.toLowerCase()
+        candidateEmail: auth.user.email.toLowerCase()
       },
       select: {
         id: true,

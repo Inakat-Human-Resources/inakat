@@ -62,7 +62,10 @@ export async function GET(request: NextRequest) {
     });
 
     // Parse JSON text fields for each interview request (tolerante a datos corruptos)
-    const data = interviewRequests.map((ir) => ({
+    // PRIVACIDAD (#50/#51): `adminNotes` son, según el esquema, «Notas internas
+    // del admin». El include no usaba select, así que el spread las entregaba
+    // enteras a la empresa.
+    const data = interviewRequests.map(({ adminNotes: _adminNotes, ...ir }) => ({
       ...ir,
       participants: safeJsonParse(ir.participants, null),
       availableSlots: safeJsonParse(ir.availableSlots, [] as unknown[]),

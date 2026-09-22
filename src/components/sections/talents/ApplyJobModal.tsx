@@ -147,9 +147,9 @@ const ApplyJobModal = ({
       setProfile(profileData.data);
 
       // 2. Verificar si ya aplicó
-      const checkRes = await fetch(
-        `/api/applications/check?jobId=${jobId}&email=${encodeURIComponent(profileData.data.email)}`
-      );
+      // El email ya no se manda: la ruta lo toma de la sesión (antes era pública
+      // y respondía por cualquier correo que se le pasara).
+      const checkRes = await fetch(`/api/applications/check?jobId=${jobId}`);
       if (!checkRes.ok) {
         const errorData = await checkRes.json().catch(() => ({}));
         throw new Error(errorData.error || 'Error al verificar aplicación');

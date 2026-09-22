@@ -144,7 +144,9 @@ export async function GET(
           createdAt: app.createdAt,
           cvUrl: app.cvUrl,
           coverLetter: app.coverLetter,
-          notes: app.notes,
+          // PRIVACIDAD (#50/#51): `notes` son las notas internas de INAKAT sobre
+          // la postulación y no se envían a la empresa. Lo que sí ve son las
+          // notas de evaluación marcadas como públicas.
           publicEvaluationNotes,
           candidateProfile: candidate
             ? {
@@ -165,7 +167,7 @@ export async function GET(
                 cvUrl: candidate.cvUrl,
                 linkedinUrl: candidate.linkedinUrl,
                 portafolioUrl: candidate.portafolioUrl,
-                notas: candidate.notas,
+                // PRIVACIDAD (#50/#51): `notas` del candidato son internas del admin.
                 educacion: candidate.educacion, // FEATURE: Educación múltiple
                 fotoUrl: candidate.fotoUrl, // FEAT-2: Foto de perfil
                 cartaPresentacion: candidate.cartaPresentacion || null,

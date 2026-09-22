@@ -25,6 +25,12 @@ function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
   // Ocultar datos sensibles para vacantes confidenciales
   return {
     ...job,
+    // Una vacante confidencial no puede ser des-anonimizable: `userId`
+    // identifica a la empresa dueña (y /api/company/... la resuelve), y las
+    // coordenadas exactas apuntan a su domicilio. Se ocultan junto al nombre.
+    userId: null,
+    latitude: null,
+    longitude: null,
     company: 'Empresa Confidencial',
     location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México', // Solo estado/país
     logoUrl: null, // Ocultar logo en vacantes confidenciales

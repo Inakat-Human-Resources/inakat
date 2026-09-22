@@ -285,10 +285,14 @@ export async function GET(request: Request) {
         allJobs: jobs.map((job) => {
           // SEGURIDAD (#50/#51): notasInternas es información interna de INAKAT
           // ("no visible para candidatos"), no debe exponerse a la empresa.
-          const { notasInternas: _notasInternas, ...jobPublic } = job;
+          const { notasInternas: _notasInternas, applications, ...jobPublic } = job;
           return {
             ...jobPublic,
-            applicationCount: job.applications.length
+            // PRIVACIDAD (#50/#51): estas applications venían del include
+            // completo y conservaban `notes` (notas internas). El filtro de
+            // arriba sólo cubría `enrichedApplications`, no éstas.
+            applications: applications.map(({ notes: _n, ...app }) => app),
+            applicationCount: applications.length
           };
         })
       }

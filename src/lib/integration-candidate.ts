@@ -194,7 +194,11 @@ async function buildCandidato(
     cvUrl: application.cvUrl ?? candidate?.cvUrl ?? null,
     evaluacionPsicologica,
     evaluacionTecnica,
-    notasAdicionales: application.notes ?? null,
+    // PRIVACIDAD (#50/#51): `application.notes` son las notas internas de
+    // INAKAT. Exportarlas al integrador reabría por el puente la misma fuga
+    // que se cerró en el producto. Si hiciera falta mandar notas, tendrían
+    // que ser las de evaluación marcadas como públicas.
+    notasAdicionales: null,
     puesto: application.job.title ?? null,
     universidad: candidate?.universidad ?? null,
     carrera: candidate?.carrera ?? null,
