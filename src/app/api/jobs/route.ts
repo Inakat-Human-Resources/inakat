@@ -6,6 +6,16 @@ import { getOptionalAuthUser, requireRole } from '@/lib/auth';
 import { calculateJobCreditCost } from '@/lib/pricing';
 import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 
+/** El saldo no alcanzó al reclamarlo dentro de la transacción de publicación. */
+class InsufficientCreditsError extends Error {
+  readonly available: number;
+  constructor(available: number) {
+    super('INSUFFICIENT_CREDITS');
+    this.name = 'InsufficientCreditsError';
+    this.available = available;
+  }
+}
+
 // Función para sanitizar vacantes confidenciales en vistas públicas
 function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
   if (!job.isConfidential || isOwnerOrAdmin) {
@@ -288,46 +298,30 @@ export async function POST(request: Request) {
 
     let initialStatus = 'draft';
 
+    // COBRO (#VAC): publicar exige los tres campos que determinan el precio. Sin
+    // ellos `creditCost` quedaba en 0 y la vacante se publicaba GRATIS con sólo
+    // omitirlos del body.
+    if (publishNow && userRole === 'company' && !(profile && seniority && workMode)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Para publicar hay que indicar especialidad, seniority y modalidad de trabajo: de ellos depende el costo en créditos.',
+          missing: [
+            !profile && 'profile',
+            !seniority && 'seniority',
+            !workMode && 'workMode'
+          ].filter(Boolean)
+        },
+        { status: 400 }
+      );
+    }
+
     if (publishNow && userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (user) {
-        if (user.role === 'admin') {
-          initialStatus = 'active';
-        } else if (user.role === 'company') {
-          if (user.credits >= creditCost) {
-            initialStatus = 'active';
-
-            await prisma.user.update({
-              where: { id: userId },
-              data: { credits: { decrement: creditCost } }
-            });
-
-            await prisma.creditTransaction.create({
-              data: {
-                userId: userId,
-                type: 'spend',
-                amount: -creditCost,
-                balanceBefore: user.credits,
-                balanceAfter: user.credits - creditCost,
-                description: `Publicación de vacante: ${title}`
-              }
-            });
-          } else {
-            return NextResponse.json(
-              {
-                success: false,
-                error: 'Créditos insuficientes para publicar',
-                required: creditCost,
-                available: user.credits,
-                savedAsDraft: false
-              },
-              { status: 402 }
-            );
-          }
-        }
+      if (userRole === 'admin') {
+        initialStatus = 'active';
+      } else if (userRole === 'company') {
+        initialStatus = 'active';
       }
     }
 
@@ -337,9 +331,44 @@ export async function POST(request: Request) {
       ? new Date(Date.now() + 4 * 60 * 60 * 1000)
       : null;
 
-    // Crear vacante
-    const job = await prisma.job.create({
-      data: {
+    // ATOMICIDAD (#VAC): cobro, ledger y creación de la vacante en UNA transacción.
+    // Antes eran tres llamadas sueltas con un `findUnique` previo para comprobar el
+    // saldo: dos publicaciones simultáneas leían el mismo saldo y ambas cobraban
+    // (saldo negativo), y si `job.create` fallaba el cobro ya estaba hecho.
+    // El saldo se reclama con un `updateMany` condicionado a que alcance, que es
+    // atómico en la base de datos y no depende de una lectura previa.
+    const cobra = initialStatus === 'active' && userRole === 'company' && creditCost > 0;
+
+    const job = await prisma.$transaction(async (tx) => {
+      let balanceBefore = 0;
+      let balanceAfter = 0;
+
+      if (cobra) {
+        const claimed = await tx.user.updateMany({
+          where: { id: userId, credits: { gte: creditCost } },
+          data: { credits: { decrement: creditCost } }
+        });
+
+        if (claimed.count === 0) {
+          // El saldo se lee aquí y viaja con el error: tras el rollback ya no
+          // habría forma de saber con cuánto se quedó corto.
+          const actual = await tx.user.findUnique({
+            where: { id: userId },
+            select: { credits: true }
+          });
+          throw new InsufficientCreditsError(actual?.credits ?? 0);
+        }
+
+        const after = await tx.user.findUnique({
+          where: { id: userId },
+          select: { credits: true }
+        });
+        balanceAfter = after?.credits ?? 0;
+        balanceBefore = balanceAfter + creditCost;
+      }
+
+      const created = await tx.job.create({
+        data: {
         title,
         company,
         location,
@@ -371,19 +400,28 @@ export async function POST(request: Request) {
         notasInternas: notasInternas || null,
         // Vacante confidencial
         isConfidential: isConfidential || false
-      }
-    });
-
-    if (initialStatus === 'active' && userId && userRole === 'company') {
-      await prisma.creditTransaction.updateMany({
-        where: {
-          userId,
-          description: `Publicación de vacante: ${title}`,
-          jobId: null
-        },
-        data: { jobId: job.id }
+        }
       });
-    }
+
+      if (cobra) {
+        // El ledger se escribe con el jobId ya conocido. Antes se creaba antes que
+        // la vacante y se ataba después con un updateMany que buscaba por
+        // descripción: con dos vacantes del mismo título, ataba las dos.
+        await tx.creditTransaction.create({
+          data: {
+            userId,
+            type: 'spend',
+            amount: -creditCost,
+            balanceBefore,
+            balanceAfter,
+            description: `Publicación de vacante: ${title}`,
+            jobId: created.id
+          }
+        });
+      }
+
+      return created;
+    });
 
     return NextResponse.json(
       {
@@ -398,7 +436,20 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof InsufficientCreditsError) {
+      // La transacción hizo rollback: no se cobró nada y no se creó la vacante.
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Créditos insuficientes para publicar',
+          available: error.available,
+          savedAsDraft: false
+        },
+        { status: 402 }
+      );
+    }
+    console.error('Error creating job:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create job' },
       { status: 500 }

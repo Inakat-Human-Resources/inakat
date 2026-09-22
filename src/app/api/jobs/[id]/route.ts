@@ -213,15 +213,20 @@ export async function PATCH(
       );
     }
 
-    // SEGURIDAD (#39): No permitir PUBLICAR GRATIS un borrador desde PATCH.
-    // Sólo draft -> active es "publicación gratis" (un borrador nunca pagó
-    // créditos); debe pasar por /api/jobs/publish, que valida y cobra. En cambio
-    // paused/closed -> active es REANUDAR una vacante que YA pagó créditos, y
-    // debe seguir permitido para el owner (flujo "Reanudar vacante" del dashboard).
-    // Admin puede activar directamente en cualquier caso.
+    // SEGURIDAD (#39 + #VAC): no publicar gratis desde PATCH.
+    //
+    // Un borrador nunca pagó créditos, así que para el owner es un callejón sin
+    // salida: de `draft` sólo se sale por /api/jobs/publish, que valida y cobra.
+    // Antes sólo se bloqueaba draft -> active, y como no hay máquina de estados
+    // el bloqueo se rodeaba en dos pasos: draft -> paused -> active, que sí
+    // estaba permitido porque el segundo salto ya no partía de un borrador.
+    //
+    // (No se usa `creditCost > 0` como prueba de pago: las vacantes anteriores al
+    // cobro tienen 0 y dejarían a su dueño sin poder reanudarlas.)
     if (
-      body.status === 'active' &&
       existingJob.status === 'draft' &&
+      body.status !== undefined &&
+      body.status !== 'draft' &&
       auth.role !== 'admin'
     ) {
       return NextResponse.json(
@@ -288,11 +293,34 @@ export async function PATCH(
     }
 
     // Whitelist de campos permitidos (previene inyección de userId, creditCost, editableUntil)
+    //
+    // COBRO (#VAC): `profile`, `seniority` y `workMode` determinan el precio, y
+    // PATCH no recalcula ni cobra nada. Estaban en la lista, así que se podía
+    // publicar como junior/remoto (barato) y ascender después a senior/presencial
+    // gratis. El que sí recalcula y cobra la diferencia es PUT, que es además lo
+    // que usa el formulario de edición; desde PATCH sólo los toca un admin.
+    const PRICE_FIELDS = ['profile', 'subcategory', 'seniority', 'workMode'];
     const allowedPatchFields = ['status', 'closedReason', 'title', 'company', 'location',
-      'latitude', 'longitude', 'salary', 'salaryMin', 'salaryMax', 'jobType', 'workMode',
-      'description', 'requirements', 'companyRating', 'profile', 'subcategory', 'seniority',
+      'latitude', 'longitude', 'salary', 'salaryMin', 'salaryMax', 'jobType',
+      'description', 'requirements', 'companyRating',
       'educationLevel', 'habilidades', 'responsabilidades', 'resultadosEsperados',
-      'valoresActitudes', 'informacionAdicional', 'notasInternas', 'isConfidential'];
+      'valoresActitudes', 'informacionAdicional', 'notasInternas', 'isConfidential',
+      ...(auth.role === 'admin' ? PRICE_FIELDS : [])];
+
+    if (auth.role !== 'admin') {
+      const intentados = PRICE_FIELDS.filter((f) => body[f] !== undefined);
+      if (intentados.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Especialidad, seniority y modalidad determinan el costo de la vacante: edítalos desde el formulario de la vacante, que recalcula y ajusta los créditos.',
+            fields: intentados
+          },
+          { status: 400 }
+        );
+      }
+    }
     const updateData: Record<string, any> = {};
     for (const field of allowedPatchFields) {
       if (body[field] !== undefined) updateData[field] = body[field];
@@ -471,38 +499,66 @@ export async function PUT(
           );
         }
 
+        // ATOMICIDAD (#VAC): el ajuste va en UNA transacción, y el cobro reclama
+        // el saldo con una condición que resuelve la base de datos. Antes eran
+        // `user.update` + `creditTransaction.create` sueltos sobre un saldo leído
+        // antes: dos ediciones simultáneas devolvían los créditos dos veces
+        // —acuñando créditos de la nada— o cobraban por debajo de cero.
         if (difference > 0) {
-          // Cobrar diferencia - verificar créditos suficientes
-          if (company.credits < difference) {
+          try {
+            const cobrado = await prisma.$transaction(async (tx) => {
+              const claimed = await tx.user.updateMany({
+                where: { id: existingJob.userId!, credits: { gte: difference } },
+                data: { credits: { decrement: difference } }
+              });
+
+              if (claimed.count === 0) {
+                const actual = await tx.user.findUnique({
+                  where: { id: existingJob.userId! },
+                  select: { credits: true }
+                });
+                return { ok: false as const, available: actual?.credits ?? 0 };
+              }
+
+              const after = await tx.user.findUnique({
+                where: { id: existingJob.userId! },
+                select: { credits: true }
+              });
+              const balanceAfter = after?.credits ?? 0;
+
+              await tx.creditTransaction.create({
+                data: {
+                  userId: existingJob.userId!,
+                  type: 'spend',
+                  amount: -difference,
+                  balanceBefore: balanceAfter + difference,
+                  balanceAfter,
+                  description: `Ajuste por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
+                  jobId: jobId
+                }
+              });
+
+              return { ok: true as const };
+            });
+
+            if (!cobrado.ok) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: `Créditos insuficientes. Necesitas ${difference} créditos adicionales para este cambio.`,
+                  required: difference,
+                  available: cobrado.available
+                },
+                { status: 402 }
+              );
+            }
+          } catch (e) {
+            console.error('Error cobrando el ajuste de la vacante:', e);
             return NextResponse.json(
-              {
-                success: false,
-                error: `Créditos insuficientes. Necesitas ${difference} créditos adicionales para este cambio.`,
-                required: difference,
-                available: company.credits
-              },
-              { status: 402 }
+              { success: false, error: 'No se pudo aplicar el ajuste de créditos' },
+              { status: 500 }
             );
           }
-
-          // Descontar créditos
-          await prisma.user.update({
-            where: { id: existingJob.userId! },
-            data: { credits: { decrement: difference } }
-          });
-
-          // Registrar transacción de créditos
-          await prisma.creditTransaction.create({
-            data: {
-              userId: existingJob.userId!,
-              type: 'spend',
-              amount: -difference,
-              balanceBefore: company.credits,
-              balanceAfter: company.credits - difference,
-              description: `Ajuste por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
-              jobId: jobId
-            }
-          });
 
           creditChange = {
             original: originalCost,
@@ -511,26 +567,58 @@ export async function PUT(
             action: 'charged'
           };
         } else if (difference < 0) {
-          // Devolver créditos (diferencia es negativa)
+          // Devolver créditos (diferencia es negativa).
+          // El guard `creditCost: originalCost` es el que hace la devolución
+          // idempotente: si otra petición ya devolvió y dejó el coste en newCost,
+          // esta no encuentra la fila y no vuelve a devolver.
           const refundAmount = Math.abs(difference);
 
-          await prisma.user.update({
-            where: { id: existingJob.userId! },
-            data: { credits: { increment: refundAmount } }
-          });
+          try {
+            const devuelto = await prisma.$transaction(async (tx) => {
+              const claimed = await tx.job.updateMany({
+                where: { id: jobId, creditCost: originalCost },
+                data: { creditCost: newCost }
+              });
 
-          // Registrar transacción de créditos (devolución)
-          await prisma.creditTransaction.create({
-            data: {
-              userId: existingJob.userId!,
-              type: 'refund',
-              amount: refundAmount,
-              balanceBefore: company.credits,
-              balanceAfter: company.credits + refundAmount,
-              description: `Devolución por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
-              jobId: jobId
+              if (claimed.count === 0) return false;
+
+              const after = await tx.user.update({
+                where: { id: existingJob.userId! },
+                data: { credits: { increment: refundAmount } },
+                select: { credits: true }
+              });
+
+              await tx.creditTransaction.create({
+                data: {
+                  userId: existingJob.userId!,
+                  type: 'refund',
+                  amount: refundAmount,
+                  balanceBefore: after.credits - refundAmount,
+                  balanceAfter: after.credits,
+                  description: `Devolución por edición de vacante: ${existingJob.title} (${currentSeniority} → ${newSeniority})`,
+                  jobId: jobId
+                }
+              });
+
+              return true;
+            });
+
+            if (!devuelto) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: 'La vacante se modificó mientras se aplicaba el cambio. Vuelve a intentarlo.'
+                },
+                { status: 409 }
+              );
             }
-          });
+          } catch (e) {
+            console.error('Error devolviendo créditos del ajuste:', e);
+            return NextResponse.json(
+              { success: false, error: 'No se pudo aplicar el ajuste de créditos' },
+              { status: 500 }
+            );
+          }
 
           creditChange = {
             original: originalCost,
