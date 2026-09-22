@@ -141,17 +141,25 @@ export default function AdminDashboardPage() {
 
     try {
       // Fetch múltiples endpoints en paralelo (allSettled para resiliencia)
+      // Las cifras salen de /api/admin/stats, que cuenta en la base de datos.
+      // Calcularlas aquí con `.length` daba números falsos: estas respuestas
+      // están paginadas (se topaban en 20/30) y /api/jobs devuelve sólo vacantes
+      // activas por defecto, así que borradores, pausadas y cerradas salían
+      // siempre en 0. La tabla sí necesita las filas, y pide el máximo por
+      // página incluyendo borradores.
       const results = await Promise.allSettled([
-        fetch('/api/jobs').then(r => r.json()),
+        fetch('/api/jobs?includeDrafts=true&limit=100').then(r => r.json()),
         fetch('/api/company-requests').then(r => r.json()),
-        fetch('/api/admin/candidates').then(r => r.json()),
-        fetch('/api/applications').then(r => r.json())
+        fetch('/api/admin/stats').then(r => r.json())
       ]);
 
       const jobsData = results[0].status === 'fulfilled' ? results[0].value : { success: false };
       const requestsData = results[1].status === 'fulfilled' ? results[1].value : { success: false };
-      const candidatesData = results[2].status === 'fulfilled' ? results[2].value : { success: false };
-      const applicationsData = results[3].status === 'fulfilled' ? results[3].value : { success: false };
+      const statsData = results[2].status === 'fulfilled' ? results[2].value : { success: false };
+
+      if (statsData.success && statsData.data) {
+        setStats(prev => ({ ...prev, ...statsData.data }));
+      }
 
       // Procesar vacantes
       if (jobsData.success) {
@@ -166,36 +174,11 @@ export default function AdminDashboardPage() {
         // Extraer especialidades únicas (excluyendo null/undefined)
         const uniqueProfiles = [...new Set(allJobs.map((j: Job) => j.profile).filter(Boolean))].sort() as string[];
         setProfiles(uniqueProfiles);
-
-        // Calcular stats de vacantes
-        setStats(prev => ({
-          ...prev,
-          totalJobs: allJobs.length,
-          activeJobs: allJobs.filter((j: Job) => j.status === 'active').length,
-          pausedJobs: allJobs.filter((j: Job) => j.status === 'paused').length,
-          draftJobs: allJobs.filter((j: Job) => j.status === 'draft').length,
-          closedJobs: allJobs.filter((j: Job) => j.status === 'closed').length,
-          totalCompanies: uniqueCompanies.length
-        }));
       }
 
-      // Solicitudes pendientes
-      if (requestsData.success) {
-        const pendingCount = (requestsData.data || []).filter(
-          (r: any) => r.status === 'pending'
-        ).length;
-        setStats(prev => ({ ...prev, pendingRequests: pendingCount }));
-      }
-
-      // Total candidatos
-      if (candidatesData.success) {
-        setStats(prev => ({ ...prev, totalCandidates: candidatesData.data?.length || 0 }));
-      }
-
-      // Total aplicaciones
-      if (applicationsData.success) {
-        setStats(prev => ({ ...prev, totalApplications: applicationsData.data?.length || 0 }));
-      }
+      // Las solicitudes pendientes también vienen contadas de /api/admin/stats;
+      // esta respuesta sólo se usa para la lista.
+      void requestsData;
 
     } catch (err) {
       console.error('Error fetching dashboard:', err);

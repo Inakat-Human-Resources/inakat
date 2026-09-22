@@ -97,7 +97,7 @@ export default function AdminInterviewsPage() {
   const fetchInterviews = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/interviews');
+      const res = await fetch('/api/admin/interviews?limit=100');
       const data = await res.json();
       if (data.success) {
         setInterviews(data.data);

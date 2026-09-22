@@ -129,7 +129,7 @@ const SearchPositionsSection = () => {
   const fetchJobs = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/jobs?status=active');
+      const response = await fetch('/api/jobs?status=active&limit=100');
       const data = await response.json();
 
       if (data.success) {
