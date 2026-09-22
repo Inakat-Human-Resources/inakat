@@ -211,27 +211,47 @@ describe('Page: /reset-password', () => {
 // 2F: Migration SQL
 // ============================================================
 
-describe('Migration: PENDING_reset_token.sql', () => {
+// El SQL vive en prisma/archived-sql/ desde el PR #6, que lo sacó de
+// prisma/migrations/ porque ahí bloqueaba `prisma migrate deploy`. Estos tests
+// seguían apuntando a la ruta vieja y dejaron `main` en rojo.
+const SQL_RESET = 'prisma/archived-sql/20260514_reset_token.sql';
+
+describe(`Migration: ${SQL_RESET}`, () => {
   it('should exist', () => {
-    const filePath = path.join(process.cwd(), 'prisma/migrations/_archived/20260514_reset_token.sql');
-    expect(fs.existsSync(filePath)).toBe(true);
+    expect(fs.existsSync(path.join(process.cwd(), SQL_RESET))).toBe(true);
   });
 
   it('should add resetToken column', () => {
-    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
+    const content = readFile(SQL_RESET);
     expect(content).toContain('resetToken');
     expect(content).toContain('ALTER TABLE');
   });
 
   it('should add resetTokenExpiry column', () => {
-    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
+    const content = readFile(SQL_RESET);
     expect(content).toContain('resetTokenExpiry');
   });
 
   it('should create unique index on resetToken', () => {
-    const content = readFile('prisma/migrations/_archived/20260514_reset_token.sql');
+    const content = readFile(SQL_RESET);
     expect(content).toContain('UNIQUE INDEX');
     expect(content).toContain('User_resetToken_key');
+  });
+});
+
+// Lo que el bloque de arriba quería garantizar de verdad es que el esquema tenga
+// los campos del reset. El SQL archivado es un registro histórico; el esquema es
+// la fuente de verdad, así que se comprueba también ahí — si alguien borra el
+// archivo, esto sigue protegiendo la funcionalidad.
+describe('Schema: campos de reset de contraseña', () => {
+  const schema = readFile('prisma/schema.prisma');
+
+  it('el modelo User tiene resetToken único', () => {
+    expect(schema).toMatch(/resetToken\s+String\?\s+@unique/);
+  });
+
+  it('el modelo User tiene resetTokenExpiry', () => {
+    expect(schema).toMatch(/resetTokenExpiry\s+DateTime\?/);
   });
 });
 
