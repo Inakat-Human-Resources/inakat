@@ -63,8 +63,24 @@ propio en cookie · MercadoPago · Vercel Blob.
      Querétaro, León y Mérida.
 
 **Siguiente paso**
-- Seguir con los hallazgos altos que quedan: las listas topadas a 20/30 registros, que
-  son las que hoy esconden datos reales a quien usa el panel.
+- **Memo:** dar de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS` (sin ellas no hay correos ni confirmación de pagos asíncronos). Después, Parte B del plan: sistema de diseño y rediseño de las 40 páginas.
+
+---
+
+## 23/09/2026 — Parte A: 327 hallazgos más arreglados y en producción
+
+**Qué cambió**
+- 15 agentes en paralelo, uno por módulo con archivos disjuntos, más un integrador: 327 hallazgos arreglados, 277 saltados con motivo, 79 handoffs aplicados. 1778 tests pasan (117 suites; 57 nuevas). Deploy `inakat-501e4tsx1-izalith`.
+- Verificado en producción: `/api/auth/me` sin sesión da 200 con `user: null` (antes 401 en la consola de cada visitante); `/api/admin/contact-messages` y `/api/applications/check` exigen sesión; las 2 vacantes confidenciales salen sin `userId` ni coordenadas.
+
+**Decisiones y descartes**
+- **El bloqueo a empresas no aprobadas se implementó pero se dejó APAGADO** (`ENFORCE_COMPANY_APPROVAL`). Afecta publicar, comprar créditos y ver candidatos; hay empresas operando sin aprobación formal y encenderlo las dejaría sin servicio. Antes de activarlo, aprobarlas en /admin/requests.
+- **La validación de entorno del build avisa en vez de fallar** (`STRICT_ENV_CHECK=true` la endurece). Al activarla se descubrió que en Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`: en producción **no sale ningún correo** y **el webhook de pagos responde 500**, así que los pagos OXXO/SPEI nunca se confirman solos. Tumbar el deploy habría bloqueado todos los arreglos.
+- La CSP va en *Report-Only*: avisa, no bloquea. Pasarla a enforce requiere revisar la consola con Maps y MercadoPago.
+- Migración `20260922000000` aditiva e idempotente, **no aplicada** (el build no migra). Sin columnas nuevas: una columna en el schema sin migrar haría fallar los SELECT con P2022.
+
+**Lo que salió mal**
+- El integrador falló la primera vez por límite de sesión y quedaron 19 tests rojos por choques entre agentes; al reanudar el workflow, los 15 agentes salieron de caché y sólo corrió el integrador.
 
 ---
 
