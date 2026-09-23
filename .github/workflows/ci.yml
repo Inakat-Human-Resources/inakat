@@ -4,15 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # Cancelar runs anteriores del mismo ref si llega uno nuevo.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# El GITHUB_TOKEN sólo necesita leer el repo (INFRA-010).
+permissions:
+  contents: read
+
 jobs:
   verify:
-    name: typecheck + lint + tests
+    name: typecheck + lint + tests + build
     runs-on: ubuntu-latest
 
     # Valores DUMMY sólo para el entorno de CI:
@@ -20,24 +25,34 @@ jobs:
     # - DATABASE_URL/DIRECT_URL: el cliente Prisma exige la variable al construirse.
     #   No se conecta a ninguna DB real: los tests de integración están gateados
     #   (describe.skip salvo RUN_INTEGRATION_TESTS=true) y el resto mockea Prisma.
+    #   El build tampoco consulta la base (ninguna página la usa al prerenderizar).
+    # - NEXT_PUBLIC_APP_URL: la usan sitemap/robots/metadata al construir.
     env:
       JWT_SECRET: ci-dummy-jwt-secret-de-mas-de-treinta-y-dos-chars
       DATABASE_URL: postgresql://user:pass@localhost:5432/inakat_ci?schema=public
       DIRECT_URL: postgresql://user:pass@localhost:5432/inakat_ci?schema=public
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: 1
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # INFRA-026: la versión de Node sale de .nvmrc, la misma que declara
+      # package.json#engines y la que debe tener el proyecto de Vercel.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       # `npm ci` ejecuta postinstall -> `prisma generate` (necesario para tsc/tests).
       - name: Install dependencies
         run: npm ci
+
+      # INFRA-010: un schema.prisma inválido rompía el deploy sin que el CI avisara.
+      - name: Validate Prisma schema
+        run: npx prisma validate
 
       - name: Typecheck (tsc)
         run: npx tsc --noEmit
@@ -47,3 +62,155 @@ jobs:
 
       - name: Tests (jest)
         run: npm test
+
+      # INFRA-010: tsc, eslint y jest no detectan un useSearchParams() sin
+      # <Suspense>, un import de servidor en un componente 'use client' ni un
+      # prerender roto: sólo `next build` lo hace, y antes lo descubría Vercel
+      # ya con el cambio en main.
+      - name: Build (next build)
+        run: npm run build
+
+      # Informativo mientras haya vulnerabilidades que sólo se cierran con un
+      # salto de major (next 16, mercadopago 3), que se planifica aparte. Cuando
+      # el informe salga limpio, quitar continue-on-error para que bloquee.
+      - name: Audit de dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+  # DB-001: las migraciones tienen que reproducir el schema en una base vacía.
+  # Informativo (continue-on-error): el diff muestra como diferencia ESPERADA
+  # los índices únicos parciales (DB-009, DB-022) y el único condicional de
+  # Application, que schema.prisma no puede declarar. Cualquier otra línea del
+  # diff es drift real entre prisma/migrations y prisma/schema.prisma.
+  migraciones:
+    name: migraciones vs schema (drift)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inakat
+          POSTGRES_PASSWORD: inakat
+          POSTGRES_DB: inakat_migraciones
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U inakat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://inakat:inakat@localhost:5432/inakat_migraciones?schema=public
+      DIRECT_URL: postgresql://inakat:inakat@localhost:5432/inakat_migraciones?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Aplicar migraciones sobre una base vacía
+        run: npx prisma migrate deploy
+
+      - name: Diff migraciones -> schema
+        run: >-
+          npx prisma migrate diff
+          --from-url "$DATABASE_URL"
+          --to-schema-datamodel prisma/schema.prisma
+          --script
+          --exit-code
+
+  e2e:
+    name: e2e (Playwright)
+    runs-on: ubuntu-latest
+    needs: verify
+    # Todavía NO bloquea: la suite no se había ejecutado nunca en ningún sitio
+    # (INFRA-010/INFRA-015) y primero tiene que estabilizarse. El informe queda
+    # como artefacto en cada run. Quitar esta línea cuando pase en verde de forma
+    # estable.
+    continue-on-error: true
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inakat
+          POSTGRES_PASSWORD: inakat
+          POSTGRES_DB: inakat_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U inakat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Base efímera del propio runner: nada de esto es un secreto. Las cuentas
+    # que siembra el seed son las que usa __tests__/e2e/helpers/auth.ts, así que
+    # cada E2E_<ROL>_PASSWORD es igual a su SEED_<ROL>_PASSWORD.
+    env:
+      CI: true
+      JWT_SECRET: ci-e2e-jwt-secret-de-mas-de-treinta-y-dos-chars
+      DATABASE_URL: postgresql://inakat:inakat@localhost:5432/inakat_e2e?schema=public
+      DIRECT_URL: postgresql://inakat:inakat@localhost:5432/inakat_e2e?schema=public
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: 1
+      ADMIN_EMAIL: admin@inakat.com
+      SEED_ADMIN_PASSWORD: ci-e2e-admin-Pass1
+      SEED_COMPANY_PASSWORD: ci-e2e-company-Pass1
+      SEED_RECRUITER_PASSWORD: ci-e2e-recruiter-Pass1
+      SEED_SPECIALIST_PASSWORD: ci-e2e-specialist-Pass1
+      SEED_CANDIDATE_PASSWORD: ci-e2e-candidate-Pass1
+      SEED_USER_PASSWORD: ci-e2e-user-Pass1
+      E2E_BASE_URL: http://localhost:3000
+      E2E_ADMIN_PASSWORD: ci-e2e-admin-Pass1
+      E2E_COMPANY_PASSWORD: ci-e2e-company-Pass1
+      E2E_RECRUITER_PASSWORD: ci-e2e-recruiter-Pass1
+      E2E_SPECIALIST_PASSWORD: ci-e2e-specialist-Pass1
+      E2E_CANDIDATE_PASSWORD: ci-e2e-candidate-Pass1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # db push (no migrate deploy) mientras el historial de migraciones no
+      # tenga baseline aplicada en todos los entornos (INFRA-013 / DB-001).
+      - name: Crear el esquema
+        run: npx prisma db push --skip-generate
+
+      - name: Sembrar la base
+        run: npx prisma db seed
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Sólo el proyecto de escritorio: el de móvil emula WebKit (iPhone 14).
+      - name: Playwright
+        run: npx playwright test --project=chromium
+
+      - name: Subir informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

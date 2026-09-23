@@ -66,6 +66,11 @@ logs/
 tmp/
 temp/
 
+# Subidas locales (INFRA-011): sin BLOB_READ_WRITE_TOKEN, /api/upload guarda
+# CV, identificaciones y actas en public/uploads. Son datos personales reales:
+# nunca deben llegar al repositorio.
+/public/uploads/
+
 # Playwright
 /test-results/
 /playwright-report/
@@ -75,3 +80,6 @@ temp/
 
 # Security - never commit secret rotation docs with actual values
 TOKENS_TO_ROTATE.md
+
+# Ajustes locales de Claude Code (DB-023): no se versionan.
+.claude/settings.local.json

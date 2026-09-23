@@ -1,0 +1,26 @@
+# INFRA-010: avisos de dependencias vulnerables o desactualizadas.
+# Los saltos de major (p. ej. next 16, mercadopago 3) se planifican a mano: aquí
+# sólo se proponen minors y parches, agrupados para no inundar de PRs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      produccion:
+        dependency-type: production
+        update-types: ["minor", "patch"]
+      desarrollo:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
