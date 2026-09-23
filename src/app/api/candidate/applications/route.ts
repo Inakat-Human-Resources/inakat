@@ -1,9 +1,12 @@
 // RUTA: src/app/api/candidate/applications/route.ts
 
 import { NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { getCandidateStatusView } from '@/lib/application-status';
+import { publicConfidentialLocation } from '@/lib/jobs-public';
 
 /**
  * GET /api/candidate/applications
@@ -64,10 +67,32 @@ export async function GET() {
       );
     }
 
-    // Buscar aplicaciones por el email del candidato
+    // Buscar aplicaciones del candidato.
+    //
+    // CORRECTNESS (#VAC): se buscaba SÓLO por `Candidate.email`, pero la
+    // postulación rápida se guarda con el email del `User` (ApplyJobModal manda
+    // profile.email) y con su userId. Si el admin corrige el correo en
+    // /admin/candidates (PUT /api/admin/candidates/[id] toca Candidate.email sin
+    // tocar User.email), los dos divergen y "Mis Postulaciones" sale vacío
+    // aunque el control de duplicados sí detecte la postulación.
+    //
+    // PRIVACIDAD (AUTH-001): pero el vínculo POR EMAIL sólo vale si la cuenta
+    // demostró que controla ese correo. El registro no lo verifica, así que
+    // cualquiera podía darse de alta con el correo de otra persona y leer aquí
+    // las postulaciones que ella hizo como invitada (CV, teléfono, carta).
+    // Mientras `emailVerified` sea null, sólo cuentan las hechas con la sesión.
+    const criterios: Prisma.ApplicationWhereInput[] = [{ userId: user.id }];
+
+    if (user.emailVerified) {
+      const emailsDelCandidato = Array.from(
+        new Set([candidate.email.toLowerCase(), user.email.toLowerCase()])
+      );
+      criterios.push({ candidateEmail: { in: emailsDelCandidato } });
+    }
+
     const applications = await prisma.application.findMany({
       where: {
-        candidateEmail: candidate.email.toLowerCase()
+        OR: criterios
       },
       include: {
         job: {
@@ -123,9 +148,9 @@ export async function GET() {
           job: {
             ...jobWithoutUser,
             company: 'Empresa Confidencial',
-            location: app.job.location?.includes(',')
-              ? app.job.location.split(',').pop()?.trim() || app.job.location
-              : app.job.location,
+            // PRIVACIDAD (#VAC-022): una dirección sin comas se devolvía
+            // COMPLETA al candidato. Mismo helper que el listado público.
+            location: publicConfidentialLocation(app.job.location),
             logoUrl: null, // Asegurar que el logo esté oculto
           }
         };
@@ -133,47 +158,21 @@ export async function GET() {
       return { ...app, job: jobWithoutUser };
     });
 
-    // Mapear los status a labels amigables para el candidato
+    // Mapear los status a labels amigables para el candidato.
+    //
+    // ETIQUETAS (#VAC): el switch cubría 8 de los 12 estados y el resto caía en
+    // el default "En revisión": a un candidato descartado por el reclutador
+    // (`discarded`) se le decía "En revisión" indefinidamente, y cuando la
+    // empresa mostraba interés (`company_interested`) la etiqueta RETROCEDÍA de
+    // "Enviado a empresa" a "En revisión". Ahora sale del mapa compartido, que
+    // cubre los 12 y es el mismo que usan /my-applications y el modal.
     const applicationsWithLabels = sanitizedApplications.map(app => {
-      let statusLabel = '';
-      let statusColor = '';
-
-      switch (app.status) {
-        case 'pending':
-        case 'injected_by_admin':
-          statusLabel = 'En revisión';
-          statusColor = 'yellow';
-          break;
-        case 'reviewing':
-        case 'sent_to_specialist':
-          statusLabel = 'En proceso';
-          statusColor = 'blue';
-          break;
-        case 'sent_to_company':
-          statusLabel = 'Enviado a empresa';
-          statusColor = 'purple';
-          break;
-        case 'interviewed':
-          statusLabel = 'Entrevistado';
-          statusColor = 'indigo';
-          break;
-        case 'accepted':
-          statusLabel = 'Aceptado';
-          statusColor = 'green';
-          break;
-        case 'rejected':
-          statusLabel = 'No seleccionado';
-          statusColor = 'gray';
-          break;
-        default:
-          statusLabel = 'En revisión';
-          statusColor = 'yellow';
-      }
+      const vista = getCandidateStatusView(app.status);
 
       return {
         ...app,
-        statusLabel,
-        statusColor,
+        statusLabel: vista.label,
+        statusColor: vista.color,
         // No mostrar notas internas al candidato, solo notas públicas si las hubiera
         notes: null
       };

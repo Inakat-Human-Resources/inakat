@@ -15,8 +15,14 @@ import {
   Briefcase,
   ArrowRight
 } from 'lucide-react';
+import { isSafeHttpUrl } from '@/lib/sanitize';
 
-const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+// Sólo http(s) absoluto llega al href del CV; un dominio suelto se fuerza a
+// https y cualquier otro esquema se anula (mismo criterio que los paneles).
+const ensureUrl = (url: string): string | undefined => {
+  const candidata = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  return isSafeHttpUrl(candidata) ? candidata : undefined;
+};
 
 interface ApplyJobModalProps {
   jobId: number;
@@ -270,9 +276,11 @@ const ApplyJobModal = ({
 
       // Subir CV si existe
       if (cvFile) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        // PERF-028: /api/upload rechaza por encima de 4MB y Vercel corta los cuerpos
+        // de más de 4.5MB con un 413 que no es JSON.
+        const MAX_FILE_SIZE = 4 * 1024 * 1024;
         if (cvFile.size > MAX_FILE_SIZE) {
-          throw new Error('El archivo CV excede el tamaño máximo de 5MB');
+          throw new Error('El archivo CV excede el tamaño máximo de 4MB');
         }
 
         const cvFormData = new FormData();
@@ -335,7 +343,8 @@ const ApplyJobModal = ({
   };
 
   const goToLogin = () => {
-    router.push(`/login?redirect=/talents`);
+    // Vuelve a ESTA vacante tras el login (SearchPositionsSection lee ?vacante=).
+    router.push(`/login?redirect=${encodeURIComponent(`/talents?vacante=${jobId}`)}`);
     onClose();
   };
 
@@ -576,7 +585,7 @@ const ApplyJobModal = ({
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">CV:</span>
                     <a
-                      href={profile.candidate.cvUrl ? ensureUrl(profile.candidate.cvUrl) : '#'}
+                      href={(profile.candidate.cvUrl && ensureUrl(profile.candidate.cvUrl)) || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline text-sm"
@@ -691,7 +700,7 @@ const ApplyJobModal = ({
                     className="w-full p-3 border border-gray-300 rounded-lg"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    PDF, DOC, DOCX (máx. 5MB)
+                    PDF, DOC, DOCX (máx. 4MB)
                   </p>
                 </div>
 

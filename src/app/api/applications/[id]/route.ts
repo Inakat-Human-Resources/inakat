@@ -1,9 +1,10 @@
 // RUTA: src/app/api/applications/[id]/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { dispatchCandidateAccepted } from '@/lib/worky2-webhook';
+import { syncCandidateStatus } from '@/lib/candidate-status';
 
 // ============================================================================
 // TYPES
@@ -13,37 +14,6 @@ interface AuthUser {
   userId: number;
   email: string;
   role: string;
-}
-
-interface ApplicationWithRelations {
-  id: number;
-  jobId: number;
-  userId: number | null;
-  candidateEmail: string;
-  job: {
-    id: number;
-    userId: number | null;
-    title: string;
-    company: string;
-    location?: string;
-    isConfidential?: boolean;
-    logoUrl?: string | null;
-    assignment?: {
-      recruiterId: number | null;
-      specialistId: number | null;
-    } | null;
-    user?: {
-      companyRequest?: {
-        logoUrl?: string | null;
-      } | null;
-    } | null;
-  };
-  user?: {
-    id: number;
-    nombre: string;
-    email: string;
-  } | null;
-  [key: string]: unknown;
 }
 
 // ============================================================================
@@ -85,44 +55,30 @@ async function getCurrentUser(request: NextRequest): Promise<AuthUser | null> {
   }
 }
 
+/**
+ * Esta ruta es ADMIN-ONLY, y así se declara aquí.
+ *
+ * CÓDIGO MUERTO (#VAC): antes había ramas para candidate, user, company,
+ * recruiter y specialist que NUNCA se ejecutaban —el middleware restringe todo
+ * /api/applications/* a rol admin (ver la lista `isAdminRoute` en
+ * src/middleware.ts)— y que además duplicaban src/lib/authz-applications.ts.
+ * No sólo eran inútiles: hacían creer que el candidato podía consultar su
+ * postulación por aquí, cuando el GET devuelve `candidateProfile.notas` (las
+ * notas internas del admin SOBRE él) y sus documentos. Si alguien relajaba el
+ * middleware fiándose de este código, esa fuga se abría sola.
+ *
+ * Los demás roles acceden por sus propias rutas: /api/company/applications/[id],
+ * /api/recruiter/dashboard, /api/specialist/dashboard.
+ */
 function checkApplicationPermission(
-  user: AuthUser | null,
-  application: ApplicationWithRelations
+  user: AuthUser | null
 ): { hasPermission: boolean; reason?: string } {
   // Sin autenticación, no tiene permiso
   if (!user) {
     return { hasPermission: false, reason: 'Autenticación requerida' };
   }
 
-  // Admin puede ver todo
   if (user.role === 'admin') {
-    return { hasPermission: true };
-  }
-
-  // El candidato puede ver su propia aplicación (por userId o email)
-  if (user.role === 'candidate' || user.role === 'user') {
-    if (application.userId === user.userId) {
-      return { hasPermission: true };
-    }
-    if (application.candidateEmail.toLowerCase() === user.email.toLowerCase()) {
-      return { hasPermission: true };
-    }
-  }
-
-  // La empresa dueña del job puede verla
-  if (user.role === 'company' && application.job?.userId === user.userId) {
-    return { hasPermission: true };
-  }
-
-  // Recruiter asignado al job puede verla
-  if (user.role === 'recruiter' &&
-      application.job?.assignment?.recruiterId === user.userId) {
-    return { hasPermission: true };
-  }
-
-  // Especialista asignado al job puede verla
-  if (user.role === 'specialist' &&
-      application.job?.assignment?.specialistId === user.userId) {
     return { hasPermission: true };
   }
 
@@ -199,10 +155,7 @@ export async function GET(
     }
 
     // SECURITY: Verificar permisos
-    const permissionCheck = checkApplicationPermission(
-      currentUser,
-      application as unknown as ApplicationWithRelations
-    );
+    const permissionCheck = checkApplicationPermission(currentUser);
 
     if (!permissionCheck.hasPermission) {
       console.warn('[Applications] Access denied:', {
@@ -253,13 +206,16 @@ export async function GET(
       }
     });
 
-    // Agregar logoUrl al job y sanitizar vacantes confidenciales para candidatos/usuarios
+    // Agregar logoUrl al job (sin user anidado).
+    //
+    // CÓDIGO MUERTO (#VAC-034): aquí había una rama que anonimizaba la vacante
+    // confidencial "para candidatos/usuarios", inalcanzable porque sólo un admin
+    // pasa checkApplicationPermission, y que además copiaba la versión con fuga
+    // de la ubicación (una dirección sin comas salía completa). El admin ve la
+    // vacante tal cual; la vista pública vive en src/lib/jobs-public.ts.
     const logoUrl = application.job?.user?.companyRequest?.logoUrl || null;
-    const isCandidateOrUser = ['candidate', 'user'].includes(currentUser?.role || '');
-    const isConfidential = application.job?.isConfidential;
 
-    // Construir job con logoUrl (sin user anidado)
-    let jobForResponse = application.job ? {
+    const jobForResponse = application.job ? {
       id: application.job.id,
       userId: application.job.userId,
       title: application.job.title,
@@ -267,20 +223,8 @@ export async function GET(
       location: application.job.location,
       isConfidential: application.job.isConfidential,
       assignment: application.job.assignment,
-      logoUrl: (isCandidateOrUser && isConfidential) ? null : logoUrl,
+      logoUrl,
     } : null;
-
-    // Sanitizar datos adicionales si es confidencial y es candidato/usuario
-    if (isCandidateOrUser && isConfidential && jobForResponse) {
-      jobForResponse = {
-        ...jobForResponse,
-        company: 'Empresa Confidencial',
-        location: application.job?.location?.includes(',')
-          ? application.job.location.split(',').pop()?.trim() || application.job.location
-          : application.job?.location,
-        logoUrl: null,
-      };
-    }
 
     const responseData = {
       ...application,
@@ -351,13 +295,10 @@ export async function PATCH(
       );
     }
 
-    // SECURITY: Verificar permisos para modificar
-    // Solo admin, empresa dueña, recruiter asignado, o especialista asignado pueden modificar
-    const canModify =
-      currentUser?.role === 'admin' ||
-      (currentUser?.role === 'company' && existingApplication.job?.userId === currentUser.userId) ||
-      (currentUser?.role === 'recruiter' && existingApplication.job?.assignment?.recruiterId === currentUser.userId) ||
-      (currentUser?.role === 'specialist' && existingApplication.job?.assignment?.specialistId === currentUser.userId);
+    // SECURITY: ruta admin-only (ver checkApplicationPermission). Las ramas para
+    // company/recruiter/specialist que había aquí eran inalcanzables: el
+    // middleware ya corta cualquier otro rol antes de llegar.
+    const canModify = currentUser?.role === 'admin';
 
     if (!canModify) {
       console.warn('[Applications] Modification denied:', {
@@ -417,10 +358,41 @@ export async function PATCH(
       updateData.notes = notes;
     }
 
-    // Actualizar aplicación
-    const updatedApplication = await prisma.application.update({
+    // IDEMPOTENCIA (#VAC): la aceptación se reclama de forma atómica.
+    //
+    // El webhook candidate.accepted se disparaba mirando el estado LEÍDO antes
+    // del update, así que dos peticiones simultáneas (doble clic sobre
+    // "Aceptar") leían ambas 'pending', ambas actualizaban y ambas notificaban:
+    // Worky2 daba de alta al mismo candidato dos veces. Con `updateMany`
+    // condicionado a que aún no esté aceptada, sólo una petición cuenta count 1
+    // y sólo esa notifica.
+    let esPrimeraAceptacion = false;
+
+    if (status === 'accepted' && existingApplication.status !== 'accepted') {
+      const reclamada = await prisma.application.updateMany({
+        where: { id: applicationId, status: { not: 'accepted' } },
+        data: updateData
+      });
+      esPrimeraAceptacion = reclamada.count === 1;
+
+      if (!esPrimeraAceptacion) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Esta postulación ya fue aceptada (¿se hizo doble clic?)'
+          },
+          { status: 409 }
+        );
+      }
+    } else {
+      await prisma.application.update({
+        where: { id: applicationId },
+        data: updateData
+      });
+    }
+
+    const updatedApplication = await prisma.application.findUnique({
       where: { id: applicationId },
-      data: updateData,
       include: {
         job: {
           select: {
@@ -435,9 +407,16 @@ export async function PATCH(
 
     // Integración Worky2: si la Application transiciona a 'accepted' (y no lo
     // estaba ya), notificar candidate.accepted a los webhooks activos de la
-    // empresa dueña de la vacante (fire-and-forget: nunca bloquea la respuesta).
-    if (status === 'accepted' && existingApplication.status !== 'accepted') {
-      void dispatchCandidateAccepted(applicationId);
+    // empresa dueña de la vacante. Con `after()` (waitUntil en Vercel) en vez
+    // de un `void` desnudo, que se perdía al congelarse la función.
+    if (esPrimeraAceptacion) {
+      after(() => dispatchCandidateAccepted(applicationId));
+    }
+
+    // ADM-028: Candidate.status sigue a sus postulaciones (hired / in_process /
+    // available).
+    if (status !== undefined && status !== existingApplication.status) {
+      await syncCandidateStatus(existingApplication.candidateEmail);
     }
 
     // Si el status cambia a 'sent_to_specialist', actualizar JobAssignment
@@ -526,6 +505,9 @@ export async function DELETE(
     await prisma.application.delete({
       where: { id: applicationId }
     });
+
+    // ADM-028: sin esta postulación el candidato puede quedar sin procesos vivos.
+    await syncCandidateStatus(existingApplication.candidateEmail);
 
     return NextResponse.json({
       success: true,

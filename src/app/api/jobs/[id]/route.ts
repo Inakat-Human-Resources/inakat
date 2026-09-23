@@ -3,10 +3,36 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateJobCreditCost } from '@/lib/pricing';
-import { cookies } from 'next/headers';
-import { verifyToken } from '@/lib/auth';
+import { requireAuth, getOptionalAuthUser, requireApprovedCompany } from '@/lib/auth';
+import {
+  WORK_MODES,
+  isValidWorkMode,
+  parseHabilidades,
+  parseCoordinate,
+  resolveCompanyName
+} from '@/lib/jobs-validation';
+// La vista pública de una confidencial (sin nombre, logo, userId, coordenadas
+// ni dirección) vive en un solo sitio para las tres rutas de vacantes.
+import { sanitizeConfidentialJob } from '@/lib/jobs-public';
+
+/** El saldo no alcanzó al reclamarlo dentro de la transacción de ajuste. */
+class CreditosInsuficientesError extends Error {
+  readonly available: number;
+  constructor(available: number) {
+    super('INSUFFICIENT_CREDITS');
+    this.name = 'CreditosInsuficientesError';
+    this.available = available;
+  }
+}
 
 // Helper para verificar autenticación y ownership
+//
+// AUTORIZACIÓN (#VAC): antes se decidía SÓLO con lo que dice el JWT (userId y
+// role), sin mirar la base. El token dura 7 días, así que una empresa
+// desactivada por fraude seguía editando, borrando y publicando sus vacantes
+// durante una semana, y un admin degradado conservaba su bypass hasta que el
+// token expirara. `requireAuth` consulta el usuario y comprueba `isActive` y su
+// rol ACTUAL; es el mismo helper que ya usa POST /api/jobs.
 async function verifyJobOwnership(jobUserId: number | null): Promise<{
   authenticated: boolean;
   authorized: boolean;
@@ -14,47 +40,32 @@ async function verifyJobOwnership(jobUserId: number | null): Promise<{
   role?: string;
   error?: string;
 }> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
+  const auth = await requireAuth();
 
-  if (!token) {
-    return { authenticated: false, authorized: false, error: 'No autenticado' };
+  if ('error' in auth) {
+    // 401 = no hay sesión utilizable; 403 = la hay pero el usuario ya no sirve
+    // (desactivado). `authenticated` distingue cuál de los dos responde la ruta.
+    return {
+      authenticated: auth.status !== 401,
+      authorized: false,
+      error: auth.error
+    };
   }
 
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { authenticated: false, authorized: false, error: 'Token inválido' };
-  }
-
-  const isAdmin = payload.role === 'admin';
-  const isOwner = jobUserId === payload.userId;
+  const isAdmin = auth.user.role === 'admin';
+  const isOwner = jobUserId === auth.user.id;
 
   if (!isAdmin && !isOwner) {
-    return { authenticated: true, authorized: false, userId: payload.userId, role: payload.role, error: 'No tienes permiso para modificar esta vacante' };
+    return {
+      authenticated: true,
+      authorized: false,
+      userId: auth.user.id,
+      role: auth.user.role,
+      error: 'No tienes permiso para modificar esta vacante'
+    };
   }
 
-  return { authenticated: true, authorized: true, userId: payload.userId, role: payload.role };
-}
-
-// Función para sanitizar vacantes confidenciales
-function sanitizeConfidentialJob(job: any, isOwnerOrAdmin: boolean) {
-  if (!job.isConfidential || isOwnerOrAdmin) {
-    return job;
-  }
-
-  // Ocultar datos sensibles para vacantes confidenciales
-  return {
-    ...job,
-    // Una vacante confidencial no puede ser des-anonimizable: `userId`
-    // identifica a la empresa dueña (y /api/company/... la resuelve), y las
-    // coordenadas exactas apuntan a su domicilio. Se ocultan junto al nombre.
-    userId: null,
-    latitude: null,
-    longitude: null,
-    company: 'Empresa Confidencial',
-    location: job.location ? job.location.split(',').pop()?.trim() || 'México' : 'México',
-    logoUrl: null, // Ocultar logo en vacantes confidenciales
-  };
+  return { authenticated: true, authorized: true, userId: auth.user.id, role: auth.user.role };
 }
 
 // GET - Obtener vacante por ID
@@ -93,17 +104,25 @@ export async function GET(
       );
     }
 
-    // Verificar si el usuario es propietario o admin
-    let isOwnerOrAdmin = false;
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
+    // Verificar si el usuario es propietario o admin.
+    // Se consulta la base (getOptionalAuthUser) en vez de fiarse del JWT: un
+    // usuario desactivado no es propietario de nada.
+    const authUser = await getOptionalAuthUser();
+    const isOwnerOrAdmin =
+      !!authUser && (authUser.role === 'admin' || job.userId === authUser.id);
 
-    if (token) {
-      const payload = verifyToken(token);
-      if (payload?.userId) {
-        // Es admin o es el propietario de la vacante
-        isOwnerOrAdmin = payload.role === 'admin' || job.userId === payload.userId;
-      }
+    // SEGURIDAD (#VAC): la ficha se devolvía sea cual sea su estado, así que
+    // bastaba con enumerar /api/jobs/1..N para leer los borradores no publicados
+    // de cualquier empresa (puesto, salario, descripción) y sus vacantes
+    // pausadas o cerradas. Fuera del propietario sólo existe lo publicado y
+    // vigente; el resto responde 404, que es además lo que ve quien no debería
+    // saber siquiera que la vacante existe.
+    const vigente = !job.expiresAt || job.expiresAt > new Date();
+    if (!isOwnerOrAdmin && (job.status !== 'active' || !vigente)) {
+      return NextResponse.json(
+        { success: false, error: 'Job not found' },
+        { status: 404 }
+      );
     }
 
     // Transformar para incluir logoUrl directamente
@@ -192,6 +211,17 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
     }
 
+    // EMP-002: reactivar una vacante (-> active) exige empresa aprobada.
+    if (body.status === 'active' && auth.role === 'company' && auth.userId !== undefined) {
+      const aprobacion = await requireApprovedCompany(auth.userId, auth.role);
+      if (aprobacion) {
+        return NextResponse.json(
+          { success: false, error: aprobacion.error, code: aprobacion.code },
+          { status: aprobacion.status }
+        );
+      }
+    }
+
     // Verificar si el tiempo de edición ha expirado (4 horas)
     // Solo aplica para ediciones de contenido, no para cambios de status
     const allowedFieldsAfterExpiry = ['status', 'closedReason'];
@@ -278,23 +308,54 @@ export async function PATCH(
       }
     }
 
-    // Validar rango de salario si se proporcionan min/max
-    if (body.salaryMin !== undefined && body.salaryMax !== undefined) {
-      const minNum = parseInt(body.salaryMin) || 0;
-      const maxNum = parseInt(body.salaryMax) || 0;
+    // Validar el rango salarial y el mínimo de la matriz de precios.
+    //
+    // VALIDACIÓN (#VAC): el rango sólo se comprobaba si llegaban LOS DOS campos
+    // y el mínimo de la matriz no se comprobaba nunca en PATCH. Mandando sólo
+    // `salaryMin: 3000` sobre una vacante de 30,000-38,000 se quedaba con un
+    // rango de 35,000 de diferencia y por debajo del mínimo de su especialidad.
+    // Se valida con los valores FINALES (lo que llega o, si no, lo guardado).
+    if (body.salaryMin !== undefined || body.salaryMax !== undefined) {
+      const minNum =
+        body.salaryMin !== undefined ? parseInt(body.salaryMin) || 0 : existingJob.salaryMin ?? 0;
+      const maxNum =
+        body.salaryMax !== undefined ? parseInt(body.salaryMax) || 0 : existingJob.salaryMax ?? 0;
 
-      if (minNum > maxNum) {
-        return NextResponse.json(
-          { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
-          { status: 400 }
-        );
+      if (minNum > 0 && maxNum > 0) {
+        if (minNum > maxNum) {
+          return NextResponse.json(
+            { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
+            { status: 400 }
+          );
+        }
+
+        if (maxNum - minNum > 10000) {
+          return NextResponse.json(
+            { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
+            { status: 400 }
+          );
+        }
       }
 
-      if (maxNum - minNum > 10000) {
-        return NextResponse.json(
-          { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
-          { status: 400 }
-        );
+      const perfilFinal = body.profile !== undefined ? body.profile : existingJob.profile;
+      const seniorityFinal = body.seniority !== undefined ? body.seniority : existingJob.seniority;
+      const workModeFinal = body.workMode !== undefined ? body.workMode : existingJob.workMode;
+
+      if (minNum > 0 && perfilFinal && seniorityFinal && workModeFinal) {
+        const pricingEntry = await prisma.pricingMatrix.findFirst({
+          where: { profile: perfilFinal, seniority: seniorityFinal, workMode: workModeFinal, isActive: true }
+        });
+
+        if (pricingEntry?.minSalary && minNum < pricingEntry.minSalary) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `El salario mínimo ofrecido ($${minNum.toLocaleString()} MXN) es menor al mínimo requerido para esta especialidad ($${pricingEntry.minSalary.toLocaleString()} MXN)`,
+              minSalaryRequired: pricingEntry.minSalary
+            },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -306,12 +367,18 @@ export async function PATCH(
     // gratis. El que sí recalcula y cobra la diferencia es PUT, que es además lo
     // que usa el formulario de edición; desde PATCH sólo los toca un admin.
     const PRICE_FIELDS = ['profile', 'subcategory', 'seniority', 'workMode'];
-    const allowedPatchFields = ['status', 'closedReason', 'title', 'company', 'location',
+    // SUPLANTACIÓN Y RESEÑAS FALSAS (#VAC): `company` permitía renombrar la
+    // vacante como si fuera de otra empresa (phishing a candidatos) y
+    // `companyRating` pintaba estrellas que nadie ha dado — no existe un sistema
+    // de reseñas detrás. Ambos sólo los toca un admin, como los de precio.
+    const ADMIN_ONLY_FIELDS = ['company', 'companyRating'];
+    const allowedPatchFields = ['status', 'closedReason', 'title', 'location',
       'latitude', 'longitude', 'salary', 'salaryMin', 'salaryMax', 'jobType',
-      'description', 'requirements', 'companyRating',
+      'description', 'requirements',
       'educationLevel', 'habilidades', 'responsabilidades', 'resultadosEsperados',
       'valoresActitudes', 'informacionAdicional', 'notasInternas', 'isConfidential',
-      ...(auth.role === 'admin' ? PRICE_FIELDS : [])];
+      ...(auth.role === 'admin' ? PRICE_FIELDS : []),
+      ...(auth.role === 'admin' ? ADMIN_ONLY_FIELDS : [])];
 
     if (auth.role !== 'admin') {
       const intentados = PRICE_FIELDS.filter((f) => body[f] !== undefined);
@@ -331,6 +398,45 @@ export async function PATCH(
     for (const field of allowedPatchFields) {
       if (body[field] !== undefined) updateData[field] = body[field];
     }
+
+    // habilidades es un JSON array de strings: cualquier otra cosa deja la
+    // vacante imposible de abrir en el formulario de edición.
+    if (updateData.habilidades !== undefined) {
+      const parsed = parseHabilidades(updateData.habilidades);
+      if (!parsed.ok) {
+        return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
+      }
+      updateData.habilidades = parsed.value;
+    }
+
+    for (const campo of ['latitude', 'longitude'] as const) {
+      if (updateData[campo] !== undefined) {
+        const parsed = parseCoordinate(updateData[campo], campo);
+        if (!parsed.ok) {
+          return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
+        }
+        updateData[campo] = parsed.value;
+      }
+    }
+
+    if (updateData.workMode !== undefined && !isValidWorkMode(updateData.workMode)) {
+      return NextResponse.json(
+        { success: false, error: `Modalidad de trabajo inválida. Debe ser una de: ${WORK_MODES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    if (updateData.companyRating !== undefined) {
+      const rating = Number(updateData.companyRating);
+      if (!Number.isFinite(rating) || rating < 0 || rating > 5) {
+        return NextResponse.json(
+          { success: false, error: 'companyRating debe ser un número entre 0 y 5' },
+          { status: 400 }
+        );
+      }
+      updateData.companyRating = rating;
+    }
+
     // Convertir salaryMin/salaryMax a Int si existen
     if (updateData.salaryMin !== undefined) {
       updateData.salaryMin = updateData.salaryMin ? parseInt(updateData.salaryMin) : null;
@@ -444,19 +550,25 @@ export async function PUT(
       isConfidential
     } = body;
 
-    // Validar rango de salario si se proporcionan min/max
-    if (salaryMin !== undefined && salaryMax !== undefined) {
-      const minNum = parseInt(salaryMin) || 0;
-      const maxNum = parseInt(salaryMax) || 0;
+    // Validar rango de salario con los valores FINALES.
+    //
+    // VALIDACIÓN (#VAC-041): sólo se comprobaba si llegaban LOS DOS extremos, así
+    // que mandar únicamente `salaryMin` (o `salaryMax`) abría un rango de más de
+    // $10,000 o invertido sobre lo ya guardado. Mismo criterio que PATCH.
+    if (salaryMin !== undefined || salaryMax !== undefined) {
+      const minNum =
+        salaryMin !== undefined ? parseInt(salaryMin) || 0 : existingJob.salaryMin ?? 0;
+      const maxNum =
+        salaryMax !== undefined ? parseInt(salaryMax) || 0 : existingJob.salaryMax ?? 0;
 
-      if (minNum > maxNum) {
+      if (minNum > 0 && maxNum > 0 && minNum > maxNum) {
         return NextResponse.json(
           { success: false, error: 'El salario mínimo no puede ser mayor al máximo' },
           { status: 400 }
         );
       }
 
-      if (maxNum - minNum > 10000) {
+      if (minNum > 0 && maxNum > 0 && maxNum - minNum > 10000) {
         return NextResponse.json(
           { success: false, error: 'La diferencia máxima permitida entre salarios es $10,000 MXN' },
           { status: 400 }
@@ -464,12 +576,93 @@ export async function PUT(
       }
     }
 
+    if (workMode !== undefined && workMode !== null && workMode !== '' && !isValidWorkMode(workMode)) {
+      return NextResponse.json(
+        { success: false, error: `Modalidad de trabajo inválida. Debe ser una de: ${WORK_MODES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // VALIDACIÓN (#VAC): el mínimo salarial de la matriz sólo se comprobaba al
+    // crear. Se podía crear con un salario válido y bajarlo después por PUT.
+    const perfilFinal = profile !== undefined ? profile : existingJob.profile;
+    const seniorityFinal = seniority !== undefined ? seniority : existingJob.seniority;
+    const workModeFinal = workMode !== undefined ? (workMode || 'presential') : existingJob.workMode;
+    const salarioMinFinal =
+      salaryMin !== undefined ? parseInt(salaryMin) || 0 : existingJob.salaryMin ?? 0;
+
+    if (perfilFinal && seniorityFinal && workModeFinal && salarioMinFinal > 0) {
+      const pricingEntry = await prisma.pricingMatrix.findFirst({
+        where: { profile: perfilFinal, seniority: seniorityFinal, workMode: workModeFinal, isActive: true }
+      });
+
+      if (pricingEntry?.minSalary && salarioMinFinal < pricingEntry.minSalary) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El salario mínimo ofrecido ($${salarioMinFinal.toLocaleString()} MXN) es menor al mínimo requerido para esta especialidad ($${pricingEntry.minSalary.toLocaleString()} MXN)`,
+            minSalaryRequired: pricingEntry.minSalary
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const habilidadesParsed = parseHabilidades(habilidades);
+    if (!habilidadesParsed.ok) {
+      return NextResponse.json({ success: false, error: habilidadesParsed.error }, { status: 400 });
+    }
+
+    // COORDENADAS (#VAC): el formulario las envía pero el PUT ni las
+    // desestructuraba, así que al cambiar la ubicación de Monterrey a
+    // Guadalajara el texto se actualizaba y las coordenadas seguían apuntando a
+    // la sede anterior (es lo que usa el reclutador para calcular distancias).
+    const latParsed = parseCoordinate(body.latitude, 'latitude');
+    if (!latParsed.ok) {
+      return NextResponse.json({ success: false, error: latParsed.error }, { status: 400 });
+    }
+    const lonParsed = parseCoordinate(body.longitude, 'longitude');
+    if (!lonParsed.ok) {
+      return NextResponse.json({ success: false, error: lonParsed.error }, { status: 400 });
+    }
+
+    // El nombre de la empresa no lo elige el body (ver POST /api/jobs).
+    const companyName = await resolveCompanyName(
+      existingJob.userId ?? auth.userId!,
+      auth.role === 'admin' ? 'admin' : 'company',
+      company
+    );
+
+    // companyRating: sólo admin, y dentro de 0-5.
+    let companyRatingFinal: number | null | undefined = undefined;
+    if (auth.role === 'admin' && companyRating !== undefined) {
+      if (companyRating === null || companyRating === '') {
+        companyRatingFinal = null;
+      } else {
+        const rating = Number(companyRating);
+        if (!Number.isFinite(rating) || rating < 0 || rating > 5) {
+          return NextResponse.json(
+            { success: false, error: 'companyRating debe ser un número entre 0 y 5' },
+            { status: 400 }
+          );
+        }
+        companyRatingFinal = rating;
+      }
+    }
+
     // ========== VALIDACIÓN DE CRÉDITOS AL EDITAR ==========
-    // Solo aplica a vacantes activas cuando cambian campos que afectan el precio
+    // Aplica a toda vacante YA PUBLICADA cuando cambian campos que afectan el
+    // precio.
+    //
+    // COBRO (#VAC): antes sólo miraba `status === 'active'`. Una vacante pausada
+    // (o cerrada) seguía dentro de su ventana de edición, así que bastaba con
+    // pausarla, subirla de Jr a Director por PUT sin que se cobrara nada, y
+    // reanudarla con PATCH paused -> active, que no cobra. El borrador queda
+    // fuera: su precio se calcula y se cobra entero al publicarlo.
     let creditChange: { original: number; new: number; difference: number; action: string } | null = null;
     let newCreditCost: number | undefined = undefined;
 
-    if (existingJob.status === 'active') {
+    if (existingJob.status !== 'draft') {
       const originalCost = existingJob.creditCost || 0;
 
       // Determinar valores actuales y nuevos para comparación
@@ -505,6 +698,39 @@ export async function PUT(
           );
         }
 
+        // COBRO (#VAC): una combinación que no está en la matriz devuelve
+        // found:false con el precio por defecto (5). Al publicar ya se rechaza
+        // (POST /api/jobs y PUT /api/jobs/publish); aquí no, así que una vacante
+        // de Director (p. ej. 18 créditos) editada a seniority 'Director.' —con
+        // punto— bajaba a 5 y DEVOLVÍA 13 créditos por un valor inventado.
+        if (company.role !== 'admin' && !newCostResult.found) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                'No hay un precio configurado para esa combinación de especialidad, seniority y modalidad. Revisa los datos de la vacante.',
+              profile: newProfile,
+              seniority: newSeniority,
+              workMode: newWorkMode
+            },
+            { status: 400 }
+          );
+        }
+
+        // CRÉDITOS (#VAC): el ajuste no miraba el rol del propietario. Un admin
+        // publica sin pagar (POST /api/jobs no le cobra), así que al subir de
+        // nivel su propia vacante recibía un 402 "créditos insuficientes" que le
+        // impedía guardar, y al bajarla se le "devolvían" créditos que nunca
+        // pagó, con un asiento 'refund' ficticio en el ledger. Para un
+        // propietario admin sólo se actualiza el coste de referencia.
+        if (company.role === 'admin') {
+          await prisma.job.updateMany({
+            where: { id: jobId, creditCost: originalCost },
+            data: { creditCost: newCost }
+          });
+          newCreditCost = newCost;
+        } else {
+
         // ATOMICIDAD (#VAC): el ajuste va en UNA transacción, y el cobro reclama
         // el saldo con una condición que resuelve la base de datos. Antes eran
         // `user.update` + `creditTransaction.create` sueltos sobre un saldo leído
@@ -513,6 +739,19 @@ export async function PUT(
         if (difference > 0) {
           try {
             const cobrado = await prisma.$transaction(async (tx) => {
+              // El mismo anclaje que la devolución: el ajuste se aplica sobre el
+              // `creditCost` que se leyó o no se aplica. Sin él, dos ediciones
+              // simultáneas partían las dos del precio viejo y cobraban la
+              // diferencia dos veces por un único cambio.
+              const reclamada = await tx.job.updateMany({
+                where: { id: jobId, creditCost: originalCost },
+                data: { creditCost: newCost }
+              });
+
+              if (reclamada.count === 0) {
+                return { ok: false as const };
+              }
+
               const claimed = await tx.user.updateMany({
                 where: { id: existingJob.userId!, credits: { gte: difference } },
                 data: { credits: { decrement: difference } }
@@ -523,7 +762,10 @@ export async function PUT(
                   where: { id: existingJob.userId! },
                   select: { credits: true }
                 });
-                return { ok: false as const, available: actual?.credits ?? 0 };
+                // Se LANZA (no se devuelve) para que el rollback deshaga también
+                // el reclamo de la vacante: devolverlo lo dejaría confirmado y la
+                // vacante subiría de precio sin haber cobrado.
+                throw new CreditosInsuficientesError(actual?.credits ?? 0);
               }
 
               const after = await tx.user.findUnique({
@@ -551,14 +793,24 @@ export async function PUT(
               return NextResponse.json(
                 {
                   success: false,
+                  error: 'La vacante se modificó mientras se aplicaba el cambio. Vuelve a intentarlo.'
+                },
+                { status: 409 }
+              );
+            }
+          } catch (e) {
+            if (e instanceof CreditosInsuficientesError) {
+              // La transacción hizo rollback: ni se cobró ni subió el precio.
+              return NextResponse.json(
+                {
+                  success: false,
                   error: `Créditos insuficientes. Necesitas ${difference} créditos adicionales para este cambio.`,
                   required: difference,
-                  available: cobrado.available
+                  available: e.available
                 },
                 { status: 402 }
               );
             }
-          } catch (e) {
             console.error('Error cobrando el ajuste de la vacante:', e);
             return NextResponse.json(
               { success: false, error: 'No se pudo aplicar el ajuste de créditos' },
@@ -636,6 +888,7 @@ export async function PUT(
 
         // Actualizar el creditCost del job
         newCreditCost = newCost;
+        }
       }
     }
     // ========== FIN VALIDACIÓN DE CRÉDITOS ==========
@@ -645,8 +898,13 @@ export async function PUT(
       where: { id: jobId },
       data: {
         title,
-        company,
+        company: companyName,
         location,
+        // Si el body no trae coordenadas se dejan como están: `parseCoordinate`
+        // convierte `undefined` en null y un cliente que no las envía borraba
+        // las de la vacante. Un `null` explícito sí las limpia.
+        ...(body.latitude !== undefined && { latitude: latParsed.value }),
+        ...(body.longitude !== undefined && { longitude: lonParsed.value }),
         salary,
         salaryMin: salaryMin !== undefined ? (salaryMin ? parseInt(salaryMin) : null) : undefined,
         salaryMax: salaryMax !== undefined ? (salaryMax ? parseInt(salaryMax) : null) : undefined,
@@ -654,12 +912,13 @@ export async function PUT(
         workMode: workMode || 'presential',
         description,
         requirements: requirements || null,
-        companyRating: companyRating || null,
+        // Sólo un admin puede tocar las estrellas; para el resto se deja como está.
+        ...(companyRatingFinal !== undefined && { companyRating: companyRatingFinal }),
         profile: profile || null,
         subcategory: subcategory || null,
         seniority: seniority || null,
         educationLevel: educationLevel || null,
-        habilidades: habilidades || null,
+        habilidades: habilidadesParsed.value,
         responsabilidades: responsabilidades || null,
         resultadosEsperados: resultadosEsperados || null,
         valoresActitudes: valoresActitudes || null,
@@ -715,7 +974,8 @@ export async function DELETE(
 
     // Verificar que la vacante existe
     const existingJob = await prisma.job.findUnique({
-      where: { id: jobId }
+      where: { id: jobId },
+      include: { _count: { select: { applications: true } } }
     });
 
     if (!existingJob) {
@@ -732,6 +992,40 @@ export async function DELETE(
     }
     if (!auth.authorized) {
       return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    }
+
+    // INTEGRIDAD (#VAC): el DELETE sólo comprobaba la propiedad, y Application
+    // cuelga de Job con onDelete: Cascade (y de Application cuelgan en cascada
+    // las notas de evaluación, las calificaciones de habilidades y las
+    // solicitudes de entrevista). Una empresa borrando una vacante activa se
+    // llevaba por delante el trabajo de reclutadores y especialistas y el
+    // historial de todos los candidatos, sin rastro ni forma de recuperarlo.
+    //
+    // Para rol company el borrado físico queda sólo para el borrador vacío: lo
+    // demás se cierra (PATCH status 'closed'), que es lo que hace el dashboard.
+    if (auth.role !== 'admin') {
+      if (existingJob.status !== 'draft') {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Solo se pueden eliminar borradores. Para retirar una vacante publicada ciérrala (status "closed"); así se conservan las postulaciones y su historial.'
+          },
+          { status: 409 }
+        );
+      }
+
+      if (existingJob._count.applications > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Esta vacante tiene postulaciones: eliminarla borraría también las candidaturas y sus evaluaciones. Ciérrala en lugar de eliminarla.',
+            applications: existingJob._count.applications
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // Eliminar vacante

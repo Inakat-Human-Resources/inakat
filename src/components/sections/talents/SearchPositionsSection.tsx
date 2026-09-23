@@ -2,16 +2,15 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   MapPin,
   Briefcase,
-  Bookmark,
-  MoreVertical,
   Building2,
   ChevronDown  // FIX-05: Para dropdown de ordenamiento
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import ApplyJobModal from './ApplyJobModal';
 import CompanyLogo from '@/components/shared/CompanyLogo';
 
@@ -47,11 +46,18 @@ interface User {
   role: string;
 }
 
+/** Tamaño de página del listado público (la API admite hasta 100). */
+const JOBS_POR_PAGINA = 20;
+
 const SearchPositionsSection = () => {
+  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [page, setPage] = useState(1);
 
   // Usuario actual
   const [user, setUser] = useState<User | null>(null);
@@ -76,6 +82,27 @@ const SearchPositionsSection = () => {
   // Ref para cerrar dropdown al hacer click fuera
   const sortDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Identifica la última petición del listado (ver fetchJobs).
+  const peticionVacantesRef = useRef(0);
+
+  // Vacante pedida por URL (/talents?vacante=ID). Es a donde vuelve el login
+  // desde "INICIA SESIÓN PARA POSTULARTE": antes se volvía a /talents a secas y
+  // el candidato aterrizaba en la primera vacante, no en la que había elegido.
+  // Se consume una sola vez, con la primera carga del listado.
+  const vacantePedidaRef = useRef<number | null>(null);
+  const vacantePedidaResueltaRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const id = Number(new URLSearchParams(window.location.search).get('vacante'));
+      if (Number.isInteger(id) && id > 0) {
+        vacantePedidaRef.current = id;
+      }
+    } catch {
+      // Sin query legible: se comporta como /talents normal.
+    }
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
@@ -91,11 +118,6 @@ const SearchPositionsSection = () => {
     fetchCurrentUser();
   }, []);
 
-  // Cargar vacantes desde la API
-  useEffect(() => {
-    fetchJobs();
-  }, []);
-
   // FIX-06: Cargar especialidades al montar
   useEffect(() => {
     fetch('/api/specialties')
@@ -106,10 +128,19 @@ const SearchPositionsSection = () => {
       .catch(err => console.error('Error fetching specialties:', err));
   }, []);
 
-  // Aplicar filtros cuando cambien (FIX-05: agregado sortOrder, FIX-06: agregado specialtyFilter)
+  // Los filtros se resuelven EN EL SERVIDOR (GET /api/jobs ya acepta search,
+  // location, jobType, profile, page y limit). Filtrar en el cliente sobre la
+  // primera página escondía todas las vacantes fuera de ella: una vacante pagada
+  // publicada semanas atrás no aparecía ni buscándola por su título exacto.
+  // Se espera 300 ms para no disparar una consulta por tecla.
   useEffect(() => {
-    applyFilters();
-  }, [jobs, searchTerm, locationFilter, jobTypeFilter, sortOrder, specialtyFilter]);
+    const temporizador = setTimeout(() => {
+      setPage(1);
+      fetchJobs(1, false);
+    }, 300);
+    return () => clearTimeout(temporizador);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, locationFilter, jobTypeFilter, specialtyFilter]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -126,71 +157,150 @@ const SearchPositionsSection = () => {
     }
   };
 
-  const fetchJobs = async () => {
+  /** Construye la query del listado con los filtros activos. */
+  const construirQueryVacantes = (paginaPedida: number) => {
+    const params = new URLSearchParams();
+    params.set('status', 'active');
+    params.set('page', String(paginaPedida));
+    params.set('limit', String(JOBS_POR_PAGINA));
+
+    if (searchTerm.trim()) params.set('search', searchTerm.trim());
+    if (locationFilter.trim()) params.set('location', locationFilter.trim());
+    if (jobTypeFilter && jobTypeFilter !== 'all') {
+      params.set('jobType', jobTypeFilter);
+    }
+    if (specialtyFilter) params.set('profile', specialtyFilter);
+
+    return params.toString();
+  };
+
+  /**
+   * Pide una página del listado. `append` distingue el "Cargar más" (acumula)
+   * de un cambio de filtros (reemplaza).
+   */
+  const fetchJobs = async (paginaPedida = 1, append = false) => {
+    // Cada búsqueda lleva número: si una respuesta llega tarde (el usuario ya
+    // tecleó otra cosa) se descarta en vez de pisar los resultados nuevos.
+    const peticion = ++peticionVacantesRef.current;
+
     try {
-      setIsLoading(true);
-      const response = await fetch('/api/jobs?status=active&limit=100');
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      const response = await fetch(`/api/jobs?${construirQueryVacantes(paginaPedida)}`);
       const data = await response.json();
+      if (peticion !== peticionVacantesRef.current) return;
 
       if (data.success) {
-        setJobs(data.data);
-        if (data.data.length > 0) {
-          setSelectedJob(data.data[0]);
+        const recibidas: Job[] = data.data || [];
+        setJobs((previas) => {
+          if (!append) return recibidas;
+          // La vacante pedida por URL pudo entrar antes de su página: sin
+          // duplicarla al llegar a ella con "Cargar más".
+          const yaCargadas = new Set(previas.map((job) => job.id));
+          return [...previas, ...recibidas.filter((job) => !yaCargadas.has(job.id))];
+        });
+        setTotalJobs(data.pagination?.total ?? recibidas.length);
+        setHasNext(Boolean(data.pagination?.hasNext));
+        if (!append) {
+          await resolverVacantePedida(recibidas);
         }
       }
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
-      setIsLoading(false);
+      if (peticion === peticionVacantesRef.current) {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
     }
   };
 
-  const applyFilters = () => {
-    let filtered = [...jobs];
+  /**
+   * Selecciona la vacante de /talents?vacante=ID tras la primera carga. Si no
+   * está en la primera página se pide aparte y se antepone al listado, siempre
+   * que siga activa.
+   */
+  const resolverVacantePedida = async (recibidas: Job[]) => {
+    const id = vacantePedidaRef.current;
+    if (id === null || vacantePedidaResueltaRef.current) return;
+    vacantePedidaResueltaRef.current = true;
 
-    if (searchTerm.trim()) {
-      const query = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (job) =>
-          job.title.toLowerCase().includes(query) ||
-          job.company.toLowerCase().includes(query) ||
-          job.description.toLowerCase().includes(query)
+    const enLista = recibidas.find((job) => job.id === id);
+    if (enLista) {
+      setSelectedJob(enLista);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${id}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      const job: Job | undefined = data?.data;
+      if (!data?.success || !job || job.status !== 'active') return;
+
+      setJobs((previas) =>
+        previas.some((previa) => previa.id === job.id) ? previas : [job, ...previas]
       );
+      setSelectedJob(job);
+    } catch {
+      // Si falla, el listado sigue funcionando con su primera vacante.
     }
+  };
 
-    if (locationFilter.trim()) {
-      filtered = filtered.filter((job) =>
-        job.location.toLowerCase().includes(locationFilter.toLowerCase())
-      );
-    }
+  /** Login que vuelve a esta misma vacante al terminar. */
+  const irALoginParaPostular = (jobId: number) => {
+    const destino = `/talents?vacante=${jobId}`;
+    router.push(`/login?redirect=${encodeURIComponent(destino)}`);
+  };
 
-    if (jobTypeFilter && jobTypeFilter !== 'all') {
-      filtered = filtered.filter((job) => job.jobType === jobTypeFilter);
-    }
+  const cargarMasVacantes = () => {
+    if (isLoadingMore || !hasNext) return;
+    const siguiente = page + 1;
+    setPage(siguiente);
+    fetchJobs(siguiente, true);
+  };
 
-    // FIX-06: Filtro por especialidad
-    if (specialtyFilter) {
-      filtered = filtered.filter(job => job.profile === specialtyFilter);
-    }
+  // El orden se aplica sobre las vacantes ya cargadas. 'newest' coincide con el
+  // orden del servidor (createdAt desc), así que es global; los demás ordenan lo
+  // que hay en pantalla hasta que la API acepte un parámetro `sort`.
+  const jobsOrdenadas = useMemo(() => {
+    const listado = [...jobs];
 
-    // FIX-05: Ordenamiento
     switch (sortOrder) {
       case 'newest':
-        filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        listado.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         break;
       case 'oldest':
-        filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        listado.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         break;
       case 'az':
-        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        listado.sort((a, b) => a.title.localeCompare(b.title));
         break;
       case 'za':
-        filtered.sort((a, b) => b.title.localeCompare(a.title));
+        listado.sort((a, b) => b.title.localeCompare(a.title));
         break;
     }
 
-    setFilteredJobs(filtered);
-  };
+    return listado;
+  }, [jobs, sortOrder]);
+
+  // El detalle debe seguir a la lista: si la vacante seleccionada ya no está en
+  // los resultados, se pasa a la primera (antes quedaba el detalle y el botón
+  // POSTULARME de una vacante que el filtro ya había descartado).
+  useEffect(() => {
+    if (jobsOrdenadas.length === 0) {
+      if (selectedJob !== null) setSelectedJob(null);
+      return;
+    }
+    if (!selectedJob || !jobsOrdenadas.some((job) => job.id === selectedJob.id)) {
+      setSelectedJob(jobsOrdenadas[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobsOrdenadas]);
 
   const getTimeSincePosted = (createdAt: string) => {
     const now = new Date();
@@ -239,6 +349,13 @@ const SearchPositionsSection = () => {
   // Bloqueamos: empresas, admins, reclutadores, especialistas
   const blockedRoles = ['company', 'admin', 'recruiter', 'specialist'];
   const canApply = !user || !blockedRoles.includes(user.role);
+
+  const hayFiltrosActivos = Boolean(
+    searchTerm.trim() ||
+      locationFilter.trim() ||
+      (jobTypeFilter && jobTypeFilter !== 'all') ||
+      specialtyFilter
+  );
 
   return (
     <section className="bg-custom-beige text-text-black pt-20">
@@ -395,21 +512,18 @@ const SearchPositionsSection = () => {
 
         {/* Filtros de estado y ordenamiento */}
         <div className="flex justify-between items-center mb-6">
-          {/* FIX-04: Solo mostrar estos botones si es candidato logueado */}
-          {user && user.role === 'candidate' && (
-            <div className="flex gap-2">
-              <button className="text-black font-bold border-2 border-button-green px-6 py-2 rounded-full bg-button-green text-white">
-                Guardados
-              </button>
-              <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
-                Postulados
-              </button>
-              <button className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green">
-                Vencidos
-              </button>
-            </div>
-          )}
-          {(!user || user.role !== 'candidate') && <div />} {/* Spacer cuando no es candidato */}
+          {/* Los botones 'Guardados' / 'Postulados' / 'Vencidos' se retiraron:
+              no tenían onClick ni estado, 'Guardados' aparecía siempre activo y
+              no existe modelo ni API de vacantes guardadas. Se reponen cuando la
+              función exista de verdad. */}
+          <div className="text-sm text-gray-600">
+            {!isLoading && totalJobs > 0 && (
+              <>
+                Mostrando {jobsOrdenadas.length} de {totalJobs} vacante
+                {totalJobs === 1 ? '' : 's'}
+              </>
+            )}
+          </div>
 
           {/* FIX-05: Dropdown funcional de ordenamiento con click-outside */}
           <div className="relative" ref={sortDropdownRef}>
@@ -449,22 +563,22 @@ const SearchPositionsSection = () => {
         )}
 
         {/* No hay vacantes */}
-        {!isLoading && filteredJobs.length === 0 && (
+        {!isLoading && jobsOrdenadas.length === 0 && (
           <div className="text-center py-20">
             <p className="text-gray-600 text-lg">
-              {jobs.length === 0
-                ? 'No hay vacantes disponibles en este momento.'
-                : 'No se encontraron vacantes que coincidan con tu búsqueda.'}
+              {hayFiltrosActivos
+                ? 'No se encontraron vacantes que coincidan con tu búsqueda.'
+                : 'No hay vacantes disponibles en este momento.'}
             </p>
           </div>
         )}
 
         {/* Lista y Detalle */}
-        {!isLoading && filteredJobs.length > 0 && (
+        {!isLoading && jobsOrdenadas.length > 0 && (
           <div className="flex flex-col md:flex-row gap-6 md:h-[calc(100vh-220px)]">
             {/* Columna Izquierda: Lista */}
             <div className="w-full md:w-1/2 space-y-4 md:overflow-y-auto md:pr-2">
-              {filteredJobs.map((job) => (
+              {jobsOrdenadas.map((job) => (
                 <div
                   key={job.id}
                   role="button"
@@ -484,14 +598,9 @@ const SearchPositionsSection = () => {
                       : ''
                   }`}
                 >
-                  {/* Solo mostrar iconos de guardar/menú para candidatos */}
-                  {user && user.role === 'candidate' && (
-                    <div className="absolute top-4 right-4 flex gap-2">
-                      <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
-                      <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
-                    </div>
-                  )}
-
+                  {/* Los iconos Bookmark/MoreVertical se retiraron: no tenían
+                      onClick, ni foco, ni nombre accesible, y no hay función de
+                      guardar vacantes detrás. */}
                   <p className="text-gray-500 text-sm">
                     {getTimeSincePosted(job.createdAt)}
                   </p>
@@ -506,10 +615,10 @@ const SearchPositionsSection = () => {
                       <h3 className="text-xl font-bold text-black">
                         {job.title}
                       </h3>
-                      <p className="text-gray-600">
-                        {job.company}{' '}
-                        {job.companyRating && `★ ${job.companyRating}`}
-                      </p>
+                      {/* DB-003: sin estrella de companyRating hasta que haya
+                          reseñas reales; las vacantes antiguas conservan el 5.0
+                          del default y parecía reputación verificada. */}
+                      <p className="text-gray-600">{job.company}</p>
                       <p className="text-gray-600">{job.location}</p>
                     </div>
                   </div>
@@ -525,20 +634,25 @@ const SearchPositionsSection = () => {
                   </div>
                 </div>
               ))}
+
+              {/* Paginación: la API devuelve la página y si quedan más. Sin esto
+                  las vacantes fuera de la primera página eran inalcanzables. */}
+              {hasNext && (
+                <button
+                  type="button"
+                  onClick={cargarMasVacantes}
+                  disabled={isLoadingMore}
+                  className="w-full bg-white border-2 border-button-green text-button-green font-bold py-3 rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoadingMore ? 'CARGANDO...' : 'CARGAR MÁS VACANTES'}
+                </button>
+              )}
             </div>
 
             {/* Columna Derecha: Detalle */}
             <div className="w-full md:w-1/2 md:overflow-y-auto md:pl-2">
               {selectedJob && (
                 <div className="bg-white p-6 rounded-lg shadow-lg relative">
-                  {/* Solo mostrar iconos de guardar/menú para candidatos */}
-                  {user && user.role === 'candidate' && (
-                    <div className="absolute top-4 right-4 flex gap-2">
-                      <Bookmark className="text-gray-500 hover:text-button-green cursor-pointer" />
-                      <MoreVertical className="text-gray-500 hover:text-button-green cursor-pointer" />
-                    </div>
-                  )}
-
                   <p className="text-gray-500 text-sm">
                     {getTimeSincePosted(selectedJob.createdAt)}
                   </p>
@@ -553,11 +667,7 @@ const SearchPositionsSection = () => {
                       <h2 className="text-2xl font-bold text-black">
                         {selectedJob.title}
                       </h2>
-                      <p className="text-gray-600 mt-1">
-                        {selectedJob.company}{' '}
-                        {selectedJob.companyRating &&
-                          `★ ${selectedJob.companyRating}`}
-                      </p>
+                      <p className="text-gray-600 mt-1">{selectedJob.company}</p>
                       <p className="text-gray-600">{selectedJob.location}</p>
                     </div>
                   </div>
@@ -681,7 +791,7 @@ const SearchPositionsSection = () => {
                   {!user ? (
                     // No logueado → botón que lleva a login
                     <button
-                      onClick={() => window.location.href = '/login?redirect=/talents'}
+                      onClick={() => irALoginParaPostular(selectedJob.id)}
                       className="w-full bg-button-orange text-white font-bold py-3 rounded-lg mt-6 hover:bg-orange-600 transition-colors"
                     >
                       INICIA SESIÓN PARA POSTULARTE

@@ -3,6 +3,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { getCandidateStatusLabel } from '@/lib/application-status';
+import { parseId } from '@/lib/pagination';
 
 /**
  * GET /api/applications/check
@@ -26,20 +28,38 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const jobId = searchParams.get('jobId');
+    const jobId = parseId(searchParams.get('jobId'));
 
-    if (!jobId || Number.isNaN(parseInt(jobId))) {
+    if (jobId === null) {
       return NextResponse.json(
         { success: false, error: 'Parámetro requerido: jobId' },
         { status: 400 }
       );
     }
 
+    // PRIVACIDAD (#VAC, mismo criterio que AUTH-001 en /api/my-applications):
+    // el vínculo POR EMAIL sólo vale si la cuenta demostró que controla ese
+    // correo. Sin verificar, quien se registrara con el correo de otra persona
+    // podía preguntar aquí, vacante por vacante, si ella había postulado como
+    // invitada y en qué estado iba. Sin verificar sólo cuenta lo hecho con la
+    // sesión (userId).
+    const cuenta = await prisma.user.findUnique({
+      where: { id: auth.user.id },
+      select: { emailVerified: true }
+    });
+
+    const criterios: Array<{ userId: number } | { candidateEmail: string }> = [
+      { userId: auth.user.id }
+    ];
+    if (cuenta?.emailVerified) {
+      criterios.push({ candidateEmail: auth.user.email.toLowerCase() });
+    }
+
     // Buscar aplicación existente
     const existingApplication = await prisma.application.findFirst({
       where: {
-        jobId: parseInt(jobId),
-        candidateEmail: auth.user.email.toLowerCase()
+        jobId,
+        OR: criterios
       },
       select: {
         id: true,
@@ -49,25 +69,18 @@ export async function GET(request: Request) {
     });
 
     if (existingApplication) {
-      // Mapear status a label amigable
-      const statusLabels: Record<string, string> = {
-        pending: 'En revisión',
-        injected_by_admin: 'En revisión',
-        reviewing: 'En proceso',
-        sent_to_specialist: 'En proceso',
-        sent_to_company: 'Enviado a empresa',
-        interviewed: 'Entrevistado',
-        accepted: 'Aceptado',
-        rejected: 'No seleccionado'
-      };
-
+      // ETIQUETAS (#VAC): esta ruta tenía su propio mapa, incompleto y distinto
+      // del de /api/candidate/applications y del de la página /my-applications
+      // (aquí el default era "En proceso", allá "En revisión" y "Pendiente"), de
+      // modo que la MISMA postulación se llamaba de tres formas según la
+      // pantalla. El mapa vive ahora en src/lib/application-status.ts.
       return NextResponse.json({
         success: true,
         hasApplied: true,
         application: {
           id: existingApplication.id,
           status: existingApplication.status,
-          statusLabel: statusLabels[existingApplication.status] || 'En proceso',
+          statusLabel: getCandidateStatusLabel(existingApplication.status),
           appliedAt: existingApplication.createdAt
         }
       });

@@ -86,7 +86,12 @@ export default function CandidateApplicationsPage() {
     switch (status) {
       case 'accepted':
         return <CheckCircle className="text-green-500" size={20} />;
+      // 'discarded' y 'archived' también cierran el proceso (la API ya los
+      // etiqueta 'No seleccionado' / 'Proceso finalizado'); con el reloj de
+      // "en espera" el icono contradecía a la etiqueta.
       case 'rejected':
+      case 'discarded':
+      case 'archived':
         return <XCircle className="text-gray-500" size={20} />;
       case 'interviewed':
         return <CheckCircle className="text-indigo-500" size={20} />;
@@ -117,11 +122,22 @@ export default function CandidateApplicationsPage() {
   };
 
   // Estadísticas
+  // 'evaluating' y 'company_interested' también son estados en proceso (los ponen
+  // el especialista y la empresa). Faltaban aquí, así que esas postulaciones no
+  // sumaban en ninguna tarjeta y el total no cuadraba.
+  const ESTADOS_EN_PROCESO = [
+    'pending',
+    'injected_by_admin',
+    'reviewing',
+    'evaluating',
+    'sent_to_specialist',
+    'sent_to_company',
+    'company_interested'
+  ];
+
   const stats = {
     total: applications.length,
-    inProcess: applications.filter(a =>
-      ['pending', 'injected_by_admin', 'reviewing', 'sent_to_specialist', 'sent_to_company'].includes(a.status)
-    ).length,
+    inProcess: applications.filter(a => ESTADOS_EN_PROCESO.includes(a.status)).length,
     interviewed: applications.filter(a => a.status === 'interviewed').length,
     accepted: applications.filter(a => a.status === 'accepted').length
   };

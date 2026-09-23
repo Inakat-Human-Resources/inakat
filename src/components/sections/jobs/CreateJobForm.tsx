@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
@@ -54,6 +54,33 @@ interface UserInfo {
   credits: number;
   role: string;
   companyName?: string; // Nombre de la empresa pre-cargado
+}
+
+/**
+ * Convierte el campo `habilidades` de la vacante en una lista de strings sin
+ * lanzar nunca: acepta el JSON válido que escribe este formulario y degrada
+ * cualquier otro valor (array con basura, texto plano «React, Node») a algo
+ * editable en vez de romper la pantalla de edición.
+ */
+export function parseHabilidades(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((h): h is string => typeof h === 'string');
+  }
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((h): h is string => typeof h === 'string');
+    }
+  } catch {
+    // No era JSON: se trata como lista separada por comas.
+  }
+
+  return raw
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
 }
 
 const CreateJobForm = () => {
@@ -121,11 +148,19 @@ const CreateJobForm = () => {
   const [calculatedCost, setCalculatedCost] = useState<number>(0);
   const [minSalaryRequired, setMinSalaryRequired] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  // Identifica la última petición de cálculo de costo (ver calculateCost).
+  const calculoCostoRef = useRef(0);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showInsufficientCreditsModal, setShowInsufficientCreditsModal] =
     useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  // Cifras del 402 al EDITAR (créditos que pide el cambio y saldo actual). En
+  // null el modal usa el costo de publicación.
+  const [faltaCreditos, setFaltaCreditos] = useState<{
+    requeridos: number;
+    disponibles: number;
+  } | null>(null);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | 'draft' | null;
     message: string;
@@ -139,11 +174,45 @@ const CreateJobForm = () => {
   const [successData, setSuccessData] = useState<{
     creditCost: number;
     action: 'published' | 'draft' | 'updated';
+    message?: string;
   } | null>(null);
 
+  // Datos de la vacante tal como estaba al abrir la edición. Sirven para saber
+  // si el cambio de perfil/nivel/modalidad va a mover créditos.
+  const [vacanteOriginal, setVacanteOriginal] = useState<{
+    status: string;
+    creditCost: number;
+    profile: string;
+    seniority: string;
+    workMode: string;
+  } | null>(null);
+
+  // Cobro/devolución pendiente de confirmar antes de mandar el PUT de edición.
+  const [cambioCreditosPendiente, setCambioCreditosPendiente] = useState<{
+    costoOriginal: number;
+    costoNuevo: number;
+    delta: number;
+  } | null>(null);
+  const confirmacionCreditosRef = useRef(false);
+
+  // Temporizador de redirección tras guardar un borrador (ver handleSubmit).
+  const redireccionBorradorRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redireccionBorradorRef.current) {
+        clearTimeout(redireccionBorradorRef.current);
+      }
+    };
+  }, []);
+
   // Estados para Google Maps
+  // markerPosition arranca en null a propósito: el mapa puede centrarse en CDMX,
+  // pero mientras el usuario no elija un punto (autocompletado, clic o arrastre)
+  // la vacante NO debe guardar las coordenadas del Zócalo. Esas coordenadas las
+  // usan reclutador y especialista para calcular la distancia al candidato.
   const [mapCenter, setMapCenter] = useState(defaultCenter);
-  const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  const [markerPosition, setMarkerPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   // Cargar Google Maps
@@ -195,6 +264,18 @@ const CreateJobForm = () => {
         }));
       }
     }
+  };
+
+  /**
+   * El usuario teclea la ubicación a mano: lo que haya en el mapa deja de
+   * corresponder al texto, así que se descarta el punto. Si después elige una
+   * sugerencia del autocompletado, onPlaceChanged vuelve a fijarlo (ese evento
+   * llega después del onChange del input).
+   */
+  const handleLocationTyped = (value: string) => {
+    setFormData((prev) => ({ ...prev, location: value }));
+    setMarkerPosition(null);
+    clearFieldError('location');
   };
 
   const onMapClick = (e: google.maps.MapMouseEvent) => {
@@ -258,16 +339,19 @@ const CreateJobForm = () => {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // Limpiar subcategoría cuando cambia el perfil
-  useEffect(() => {
-    setFormData((prev) => ({ ...prev, subcategory: '' }));
-  }, [formData.profile]);
+  // La subcategoría se limpia en el onChange del select de especialidad, NO en un
+  // efecto sobre formData.profile: en modo edición fetchJobData cambia `profile`
+  // de '' al valor guardado, el efecto se disparaba tras ese render y borraba la
+  // sub-especialidad ya cargada, así que guardar un typo en la descripción
+  // mandaba subcategory:'' y la API la persistía como null.
 
   // Calcular costo cuando cambian los campos relevantes
   useEffect(() => {
     if (formData.profile && formData.seniority && formData.workMode) {
       calculateCost();
     } else {
+      calculoCostoRef.current++; // invalida cualquier cálculo en vuelo
+      setIsCalculating(false);
       setCalculatedCost(0);
       setMinSalaryRequired(null);
     }
@@ -294,9 +378,11 @@ const CreateJobForm = () => {
 
       if (data.success && data.data) {
         const job = data.data;
-        const parsedHabilidades = job.habilidades
-          ? JSON.parse(job.habilidades)
-          : [];
+        // `habilidades` se guarda como JSON, pero la API acepta cualquier string
+        // (datos legados o escritos por API). Un JSON.parse suelto caía en el
+        // catch general y dejaba la vacante imposible de editar con el mensaje
+        // 'Error de conexión'. Se degrada a lista separada por comas.
+        const parsedHabilidades = parseHabilidades(job.habilidades);
 
         // Extraer salaryMin y salaryMax (pueden venir del job o parsear el salary string)
         let salaryMinVal = job.salaryMin ? String(job.salaryMin) : '';
@@ -333,6 +419,30 @@ const CreateJobForm = () => {
           notasInternas: job.notasInternas || '',
           isConfidential: job.isConfidential || false
         });
+
+        // Guardar el estado de partida para detectar movimientos de créditos.
+        setVacanteOriginal({
+          status: job.status || '',
+          creditCost: Number(job.creditCost) || 0,
+          profile: job.profile || '',
+          seniority: job.seniority || '',
+          workMode: job.workMode || 'presential'
+        });
+
+        // Recuperar el punto guardado: sin esto el mapa de edición mostraba
+        // siempre CDMX aunque la vacante estuviera en otra ciudad, y al guardar
+        // se enviaban coordenadas nulas o equivocadas.
+        const lat = Number(job.latitude);
+        const lng = Number(job.longitude);
+        if (
+          job.latitude !== null && job.latitude !== undefined &&
+          job.longitude !== null && job.longitude !== undefined &&
+          Number.isFinite(lat) && Number.isFinite(lng) &&
+          Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+        ) {
+          setMapCenter({ lat, lng });
+          setMarkerPosition({ lat, lng });
+        }
       } else {
         setLoadError('Error al cargar los datos de la vacante.');
       }
@@ -407,6 +517,9 @@ const CreateJobForm = () => {
   };
 
   const calculateCost = async () => {
+    // Contador de petición: si el usuario cambia de nivel dos veces seguidas, la
+    // respuesta que llegue tarde (la del nivel viejo) ya no debe pisar el costo.
+    const peticion = ++calculoCostoRef.current;
     setIsCalculating(true);
     try {
       const response = await fetch('/api/pricing/calculate', {
@@ -419,6 +532,7 @@ const CreateJobForm = () => {
         })
       });
       const data = await response.json();
+      if (peticion !== calculoCostoRef.current) return; // respuesta obsoleta
       if (data.success) {
         setCalculatedCost(data.credits);
         setMinSalaryRequired(data.minSalary || null);
@@ -426,7 +540,9 @@ const CreateJobForm = () => {
     } catch {
       // Silent fail - cost remains at 0
     } finally {
-      setIsCalculating(false);
+      if (peticion === calculoCostoRef.current) {
+        setIsCalculating(false);
+      }
     }
   };
 
@@ -513,11 +629,37 @@ const CreateJobForm = () => {
     return true;
   };
 
+  /**
+   * Diferencia de créditos que provocará el PUT de edición.
+   *
+   * PUT /api/jobs/[id] cobra o devuelve la diferencia cuando cambian perfil,
+   * nivel o modalidad de una vacante ACTIVA. Hasta ahora el formulario ocultaba
+   * el costo en edición, así que el movimiento pasaba desapercibido.
+   * Devuelve 0 cuando no hay cobro/devolución posible.
+   */
+  const calcularDeltaCreditos = (): number => {
+    if (!isEditing || !vacanteOriginal) return 0;
+    if (vacanteOriginal.status !== 'active') return 0;
+    if (userInfo?.role === 'admin') return 0;
+    if (!calculatedCost) return 0;
+
+    const cambioPricing =
+      formData.profile !== vacanteOriginal.profile ||
+      formData.seniority !== vacanteOriginal.seniority ||
+      formData.workMode !== vacanteOriginal.workMode;
+    if (!cambioPricing) return 0;
+
+    return calculatedCost - vacanteOriginal.creditCost;
+  };
+
   const handleSubmit = async (
     e: React.FormEvent,
-    publishNow: boolean = false
+    publishNow: boolean = false,
+    opciones: { redirigirTrasBorrador?: boolean } = {}
   ): Promise<boolean> => {
     e.preventDefault();
+
+    const { redirigirTrasBorrador = true } = opciones;
 
     // Limpiar errores previos
     setFieldErrors({});
@@ -557,7 +699,22 @@ const CreateJobForm = () => {
     // Verificar créditos antes de publicar (solo para nuevas vacantes)
     if (!isEditing && publishNow && userInfo && userInfo.role !== 'admin') {
       if (userInfo.credits < calculatedCost) {
+        setFaltaCreditos(null);
         setShowInsufficientCreditsModal(true);
+        return false;
+      }
+    }
+
+    // Editar perfil/nivel/modalidad de una vacante activa mueve créditos: se
+    // avisa y se pide confirmación ANTES de mandar el PUT.
+    if (!confirmacionCreditosRef.current) {
+      const delta = calcularDeltaCreditos();
+      if (delta !== 0) {
+        setCambioCreditosPendiente({
+          costoOriginal: vacanteOriginal?.creditCost ?? 0,
+          costoNuevo: calculatedCost,
+          delta
+        });
         return false;
       }
     }
@@ -581,8 +738,8 @@ const CreateJobForm = () => {
           salary: salaryStr,
           salaryMin: salaryMinNum,
           salaryMax: salaryMaxNum,
-          latitude: markerPosition?.lat || null,
-          longitude: markerPosition?.lng || null,
+          latitude: markerPosition ? markerPosition.lat : null,
+          longitude: markerPosition ? markerPosition.lng : null,
           habilidades:
             formData.habilidades.length > 0 ? JSON.stringify(formData.habilidades) : null,
           publishNow: isEditing ? undefined : publishNow // No enviar publishNow en edición
@@ -592,24 +749,57 @@ const CreateJobForm = () => {
       const data = await response.json();
 
       if (response.status === 402) {
-        // Créditos insuficientes
+        // Créditos insuficientes. En edición lo que falta es la DIFERENCIA del
+        // cambio, no el costo total: se guardan las cifras que manda la API
+        // para que el modal no diga «te faltan 7» cuando faltan 2.
+        setFaltaCreditos(
+          isEditing
+            ? {
+                requeridos: Number(data?.required) || 0,
+                disponibles: Number(data?.available) || 0
+              }
+            : null
+        );
         setShowInsufficientCreditsModal(true);
         return false;
       }
 
       if (response.status === 403) {
+        // El 403 del servidor no es siempre «no eres el dueño»: también cubre la
+        // ventana de edición de 4 h vencida y el rol no autorizado al crear. Se
+        // muestra su mensaje cuando lo trae.
         setSubmitStatus({
           type: 'error',
-          message: 'No tienes permiso para editar esta vacante.'
+          message: data?.error || 'No tienes permiso para editar esta vacante.'
         });
         return false;
       }
 
       if (data.success) {
         if (isEditing) {
-          // Para edición, mostrar modal de éxito
-          setSuccessData({ creditCost: 0, action: 'updated' });
+          // Para edición, mostrar modal de éxito con el movimiento de créditos
+          // que informa la API (data.message / data.creditChange).
+          setSuccessData({
+            creditCost: 0,
+            action: 'updated',
+            message: typeof data.message === 'string' ? data.message : undefined
+          });
           setShowSuccessModal(true);
+          // El saldo cambió si hubo cobro o devolución: se relee.
+          if (data.creditChange) {
+            fetchUserInfo();
+            setVacanteOriginal((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    creditCost: data.creditChange.new ?? prev.creditCost,
+                    profile: formData.profile,
+                    seniority: formData.seniority,
+                    workMode: formData.workMode
+                  }
+                : prev
+            );
+          }
         } else if (data.status === 'active') {
           // Para publicación, mostrar modal de éxito (BUG-03)
           setSuccessData({ creditCost: data.creditCost, action: 'published' });
@@ -622,14 +812,27 @@ const CreateJobForm = () => {
             });
           }
         } else {
-          // Borrador guardado
+          // Borrador guardado.
+          // El temporizador sólo se programa cuando este guardado ES el destino
+          // final. Desde el modal de créditos insuficientes NO: ahí se navega a
+          // /credits/purchase y un push diferido a /company/dashboard sacaba a la
+          // empresa del embudo de pago 1,5 s después. Además se guarda el id para
+          // poder cancelarlo al desmontar.
           setSubmitStatus({
             type: 'draft',
-            message: 'Vacante guardada como borrador. Redirigiendo...'
+            message: redirigirTrasBorrador
+              ? 'Vacante guardada como borrador. Redirigiendo...'
+              : 'Vacante guardada como borrador.'
           });
-          setTimeout(() => {
-            router.push('/company/dashboard');
-          }, 1500);
+          if (redirigirTrasBorrador) {
+            if (redireccionBorradorRef.current) {
+              clearTimeout(redireccionBorradorRef.current);
+            }
+            redireccionBorradorRef.current = setTimeout(() => {
+              redireccionBorradorRef.current = null;
+              router.push('/company/dashboard');
+            }, 1500);
+          }
         }
         return true;
       } else {
@@ -689,6 +892,9 @@ const CreateJobForm = () => {
   const hasEnoughCredits = userInfo
     ? userInfo.role === 'admin' || userInfo.credits >= calculatedCost
     : false;
+
+  // Cobro/devolución que provocaría guardar la edición actual (0 si no aplica).
+  const deltaCreditosEdicion = calcularDeltaCreditos();
 
   // Mostrar loading mientras carga datos de vacante en modo edición
   if (isLoadingJob) {
@@ -888,10 +1094,7 @@ const CreateJobForm = () => {
               <input
                 type="text"
                 value={formData.location}
-                onChange={(e) => {
-                  setFormData({ ...formData, location: e.target.value });
-                  clearFieldError('location');
-                }}
+                onChange={(e) => handleLocationTyped(e.target.value)}
                 placeholder="Cargando mapa... ej. Monterrey, Nuevo León"
                 className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green ${
                   fieldErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'
@@ -918,10 +1121,7 @@ const CreateJobForm = () => {
                     <input
                       type="text"
                       value={formData.location}
-                      onChange={(e) => {
-                        setFormData({ ...formData, location: e.target.value });
-                        clearFieldError('location');
-                      }}
+                      onChange={(e) => handleLocationTyped(e.target.value)}
                       placeholder="Busca una dirección..."
                       className={`w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-button-green ${
                         fieldErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'
@@ -943,15 +1143,19 @@ const CreateJobForm = () => {
                     fullscreenControl: false,
                   }}
                 >
-                  <Marker
-                    position={markerPosition}
-                    draggable={true}
-                    onDragEnd={(e) => {
-                      if (e.latLng) {
-                        onMapClick(e as google.maps.MapMouseEvent);
-                      }
-                    }}
-                  />
+                  {/* Sin punto elegido no hay marcador: un marcador por defecto
+                      hacía creer que la ubicación exacta ya estaba seleccionada. */}
+                  {markerPosition && (
+                    <Marker
+                      position={markerPosition}
+                      draggable={true}
+                      onDragEnd={(e) => {
+                        if (e.latLng) {
+                          onMapClick(e as google.maps.MapMouseEvent);
+                        }
+                      }}
+                    />
+                  )}
                 </GoogleMap>
 
                 <p className="text-xs text-gray-500">
@@ -1107,7 +1311,13 @@ const CreateJobForm = () => {
               <select
                 value={formData.profile}
                 onChange={(e) => {
-                  setFormData({ ...formData, profile: e.target.value });
+                  // Al cambiar de especialidad la sub-especialidad anterior deja
+                  // de existir en el catálogo, por eso se limpia aquí.
+                  setFormData({
+                    ...formData,
+                    profile: e.target.value,
+                    subcategory: ''
+                  });
                   clearFieldError('profile');
                 }}
                 className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green bg-white ${
@@ -1266,6 +1476,30 @@ const CreateJobForm = () => {
                 </span>
               </div>
             )}
+
+          {/* En edición el precio sí se recalcula en el servidor: se avisa antes
+              de guardar, no después de ver el saldo. */}
+          {isEditing && deltaCreditosEdicion !== 0 && (
+            <div className="mt-4 p-4 rounded-lg bg-amber-50 border border-amber-300 flex items-start gap-2">
+              <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
+              <p className="text-sm text-amber-800">
+                Este cambio recalcula el precio de la vacante:{' '}
+                {deltaCreditosEdicion > 0 ? (
+                  <>
+                    se te cobrarán{' '}
+                    <strong>{deltaCreditosEdicion} créditos</strong> adicionales
+                    al guardar.
+                  </>
+                ) : (
+                  <>
+                    se te devolverán{' '}
+                    <strong>{Math.abs(deltaCreditosEdicion)} créditos</strong> al
+                    guardar.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Descripción */}
@@ -1566,7 +1800,9 @@ const CreateJobForm = () => {
               <button
                 type="button"
                 onClick={(e) => handleSubmit(e, true)}
-                disabled={isSubmitting || !calculatedCost || !!salaryError}
+                // `isCalculating` también bloquea: mientras se recalcula, el
+                // botón seguía mostrando (y usando) el costo del perfil anterior.
+                disabled={isSubmitting || isCalculating || !calculatedCost || !!salaryError}
                 className={`flex-1 font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 order-1 sm:order-2 ${
                   hasEnoughCredits
                     ? 'bg-button-green text-white hover:bg-green-700'
@@ -1577,6 +1813,8 @@ const CreateJobForm = () => {
                 <span className="hidden sm:inline">
                   {isSubmitting
                     ? 'PUBLICANDO...'
+                    : isCalculating
+                    ? 'CALCULANDO COSTO...'
                     : hasEnoughCredits
                     ? `PUBLICAR (${calculatedCost} créditos)`
                     : 'COMPRAR CRÉDITOS'}
@@ -1584,6 +1822,8 @@ const CreateJobForm = () => {
                 <span className="sm:hidden">
                   {isSubmitting
                     ? 'PUBLICANDO...'
+                    : isCalculating
+                    ? 'CALCULANDO...'
                     : hasEnoughCredits
                     ? `PUBLICAR (${calculatedCost})`
                     : 'COMPRAR CRÉDITOS'}
@@ -1614,16 +1854,25 @@ const CreateJobForm = () => {
               </div>
               <h3 className="text-xl font-bold mb-2">Créditos Insuficientes</h3>
               <p className="text-gray-600 mb-4">
-                Necesitas <strong>{calculatedCost} créditos</strong> para
-                publicar esta vacante.
+                Necesitas{' '}
+                <strong>
+                  {faltaCreditos ? faltaCreditos.requeridos : calculatedCost} créditos
+                </strong>{' '}
+                {faltaCreditos ? 'para aplicar este cambio.' : 'para publicar esta vacante.'}
                 <br />
                 Actualmente tienes{' '}
-                <strong>{userInfo?.credits || 0} créditos</strong>.
+                <strong>
+                  {faltaCreditos ? faltaCreditos.disponibles : userInfo?.credits || 0} créditos
+                </strong>
+                .
               </p>
               <p className="text-sm text-gray-500 mb-6">
                 Te faltan{' '}
                 <strong className="text-red-600">
-                  {calculatedCost - (userInfo?.credits || 0)} créditos
+                  {faltaCreditos
+                    ? Math.max(0, faltaCreditos.requeridos - faltaCreditos.disponibles)
+                    : calculatedCost - (userInfo?.credits || 0)}{' '}
+                  créditos
                 </strong>
                 .
               </p>
@@ -1632,10 +1881,19 @@ const CreateJobForm = () => {
                 <button
                   disabled={isSavingDraft}
                   onClick={async () => {
+                    // En edición no hay borrador que guardar: reenviar el PUT
+                    // repetía el mismo 402 y cerraba el modal sin navegar. Se va
+                    // directo a comprar créditos.
+                    if (isEditing) {
+                      setShowInsufficientCreditsModal(false);
+                      router.push('/credits/purchase');
+                      return;
+                    }
                     setIsSavingDraft(true);
                     const saved = await handleSubmit(
                       new Event('submit') as unknown as React.FormEvent,
-                      false
+                      false,
+                      { redirigirTrasBorrador: false }
                     );
                     setIsSavingDraft(false);
                     if (saved) {
@@ -1655,6 +1913,8 @@ const CreateJobForm = () => {
                       </svg>
                       Guardando borrador...
                     </>
+                  ) : isEditing ? (
+                    'Comprar Créditos'
                   ) : (
                     'Comprar Créditos y Guardar en Borrador'
                   )}
@@ -1663,6 +1923,79 @@ const CreateJobForm = () => {
                   onClick={() => setShowInsufficientCreditsModal(false)}
                   disabled={isSavingDraft}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación del movimiento de créditos al editar */}
+      {cambioCreditosPendiente && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 md:p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
+                <Coins className="text-amber-600" size={32} />
+              </div>
+              <h3 className="text-xl font-bold mb-2">
+                {cambioCreditosPendiente.delta > 0
+                  ? 'Este cambio tiene costo'
+                  : 'Este cambio te devuelve créditos'}
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Cambiar la especialidad, el nivel o la modalidad recalcula el
+                precio de la vacante: pasa de{' '}
+                <strong>{cambioCreditosPendiente.costoOriginal} créditos</strong>{' '}
+                a <strong>{cambioCreditosPendiente.costoNuevo} créditos</strong>.
+              </p>
+              <p className="text-sm mb-6">
+                {cambioCreditosPendiente.delta > 0 ? (
+                  <>
+                    Se te cobrarán{' '}
+                    <strong className="text-red-600">
+                      {cambioCreditosPendiente.delta} créditos
+                    </strong>{' '}
+                    adicionales.
+                  </>
+                ) : (
+                  <>
+                    Se te devolverán{' '}
+                    <strong className="text-green-600">
+                      {Math.abs(cambioCreditosPendiente.delta)} créditos
+                    </strong>
+                    .
+                  </>
+                )}
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setCambioCreditosPendiente(null);
+                    confirmacionCreditosRef.current = true;
+                    try {
+                      await handleSubmit(
+                        new Event('submit') as unknown as React.FormEvent,
+                        false
+                      );
+                    } finally {
+                      confirmacionCreditosRef.current = false;
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 font-semibold"
+                >
+                  {cambioCreditosPendiente.delta > 0
+                    ? `Confirmar y pagar ${cambioCreditosPendiente.delta} créditos`
+                    : 'Confirmar cambio'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCambioCreditosPendiente(null)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
                 >
                   Cancelar
                 </button>
@@ -1742,10 +2075,11 @@ const CreateJobForm = () => {
                 </div>
               )}
 
-              {/* Mensaje para actualización */}
+              {/* Mensaje para actualización: se usa el del servidor, que dice si
+                  se cobraron o devolvieron créditos por el cambio. */}
               {successData.action === 'updated' && (
                 <p className="text-gray-600 mb-6">
-                  Los cambios se han guardado correctamente.
+                  {successData.message || 'Los cambios se han guardado correctamente.'}
                 </p>
               )}
 

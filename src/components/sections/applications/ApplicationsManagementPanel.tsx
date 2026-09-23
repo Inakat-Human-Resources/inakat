@@ -2,8 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { Eye, Mail, Phone, FileText, Calendar } from 'lucide-react';
+import { isSafeHttpUrl } from '@/lib/sanitize';
 
-const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+/**
+ * `cvUrl` llega de POST /api/applications, que es público: no puede ir crudo a
+ * un href. El helper anterior sólo miraba si empezaba por 'http', así que
+ * 'httpx:…' o cualquier esquema raro pasaba tal cual. Sólo se deja pasar
+ * http(s) absoluto; lo que parece un dominio suelto se fuerza a https y lo que
+ * no es URL se anula (el enlace no se pinta). Mismo criterio que
+ * /admin/direct-applications y /admin/assign-candidates.
+ */
+const ensureUrl = (url: string): string | undefined => {
+  const candidata = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  return isSafeHttpUrl(candidata) ? candidata : undefined;
+};
 
 interface Application {
   id: number;
@@ -418,7 +430,7 @@ const ApplicationsManagementPanel = () => {
                 </div>
 
                 {/* CV */}
-                {selectedApplication.cvUrl && (
+                {selectedApplication.cvUrl && ensureUrl(selectedApplication.cvUrl) && (
                   <div>
                     <h3 className="font-bold text-lg mb-3">Curriculum Vitae</h3>
                     <a

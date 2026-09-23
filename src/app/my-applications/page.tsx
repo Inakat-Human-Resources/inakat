@@ -12,6 +12,47 @@ import {
   AlertCircle
 } from 'lucide-react';
 import CompanyLogo from '@/components/shared/CompanyLogo';
+import { getCandidateStatusView } from '@/lib/application-status';
+
+/** Clases del badge según el color que devuelve el mapa de estados. */
+const CLASES_COLOR_ESTADO: Record<string, string> = {
+  yellow: 'bg-yellow-100 text-yellow-800',
+  blue: 'bg-blue-100 text-blue-800',
+  purple: 'bg-purple-100 text-purple-800',
+  indigo: 'bg-indigo-100 text-indigo-800',
+  green: 'bg-green-100 text-green-800',
+  gray: 'bg-gray-100 text-gray-800'
+};
+
+/**
+ * Filtros de la página agrupados como los ve el candidato. Cada filtro cubre
+ * todos los estados internos que comparten etiqueta: antes 'Pendientes' sólo
+ * miraba `pending` y 'Rechazados' sólo `rejected`, así que una postulación
+ * `discarded`, `evaluating` o `company_interested` no aparecía en ningún filtro
+ * y las tarjetas no sumaban el total.
+ */
+const GRUPOS_FILTRO: Record<string, string[]> = {
+  pending: ['pending', 'injected_by_admin'],
+  reviewing: [
+    'reviewing',
+    'evaluating',
+    'sent_to_specialist',
+    'sent_to_company',
+    'company_interested'
+  ],
+  interviewed: ['interviewed'],
+  accepted: ['accepted'],
+  rejected: ['rejected', 'discarded', 'archived']
+};
+
+/** Nombre de cada filtro, alineado con las etiquetas del mapa de estados. */
+const NOMBRES_FILTRO: Record<string, string> = {
+  pending: 'En revisión',
+  reviewing: 'En proceso',
+  interviewed: 'Entrevistados',
+  accepted: 'Aceptados',
+  rejected: 'No seleccionados'
+};
 
 interface Job {
   id: number;
@@ -33,7 +74,6 @@ interface Application {
   coverLetter: string | null;
   cvUrl: string | null;
   status: string;
-  notes: string | null;
   createdAt: string;
   updatedAt: string;
   reviewedAt: string | null;
@@ -93,40 +133,20 @@ export default function MyApplicationsPage() {
     }
   };
 
+  /**
+   * La etiqueta sale del mapa ÚNICO de src/lib/application-status.ts, el mismo
+   * que usan /api/candidate/applications, /api/my-applications y el modal de
+   * postulación. Esta página tenía su propio mapa, así que el mismo registro se
+   * leía 'Pendiente' aquí, 'En revisión' en /candidate/applications y 'En
+   * proceso' en el modal.
+   */
   const getStatusBadge = (status: string) => {
-    const badges: {
-      [key: string]: { bg: string; text: string; label: string };
-    } = {
-      pending: {
-        bg: 'bg-yellow-100',
-        text: 'text-yellow-800',
-        label: 'Pendiente'
-      },
-      reviewing: {
-        bg: 'bg-blue-100',
-        text: 'text-blue-800',
-        label: 'En Revisión'
-      },
-      interviewed: {
-        bg: 'bg-purple-100',
-        text: 'text-purple-800',
-        label: 'Entrevistado'
-      },
-      accepted: {
-        bg: 'bg-green-100',
-        text: 'text-green-800',
-        label: 'Aceptado'
-      },
-      rejected: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rechazado' }
-    };
-
-    const badge = badges[status] || badges.pending;
+    const vista = getCandidateStatusView(status);
+    const clases = CLASES_COLOR_ESTADO[vista.color] || CLASES_COLOR_ESTADO.yellow;
 
     return (
-      <span
-        className={`px-3 py-1 rounded-full text-sm font-medium ${badge.bg} ${badge.text}`}
-      >
-        {badge.label}
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${clases}`}>
+        {vista.label}
       </span>
     );
   };
@@ -134,14 +154,21 @@ export default function MyApplicationsPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
+      case 'injected_by_admin':
         return <Clock className="w-5 h-5 text-yellow-600" />;
       case 'reviewing':
+      case 'evaluating':
+      case 'sent_to_specialist':
+      case 'sent_to_company':
+      case 'company_interested':
         return <Eye className="w-5 h-5 text-blue-600" />;
       case 'interviewed':
         return <FileText className="w-5 h-5 text-purple-600" />;
       case 'accepted':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'rejected':
+      case 'discarded':
+      case 'archived':
         return <XCircle className="w-5 h-5 text-red-600" />;
       default:
         return <Clock className="w-5 h-5 text-gray-600" />;
@@ -157,10 +184,35 @@ export default function MyApplicationsPage() {
     });
   };
 
+  const todasLasAplicaciones = data?.applications || [];
+
   const filteredApplications =
     filterStatus === 'all'
-      ? data?.applications || []
-      : data?.applications.filter((app) => app.status === filterStatus) || [];
+      ? todasLasAplicaciones
+      : todasLasAplicaciones.filter((app) =>
+          (GRUPOS_FILTRO[filterStatus] || []).includes(app.status)
+        );
+
+  // Conteos por grupo calculados aquí, con los mismos grupos que el filtro:
+  // los de la API cuentan estados sueltos y dejaban fuera `discarded`,
+  // `evaluating`, `company_interested`, etc., así que las tarjetas no sumaban
+  // el total y el número del botón no coincidía con lo que mostraba el filtro.
+  const conteos: Stats = {
+    total: todasLasAplicaciones.length,
+    pending: 0,
+    reviewing: 0,
+    interviewed: 0,
+    accepted: 0,
+    rejected: 0
+  };
+  for (const app of todasLasAplicaciones) {
+    for (const [grupo, estados] of Object.entries(GRUPOS_FILTRO)) {
+      if (estados.includes(app.status)) {
+        conteos[grupo as Exclude<keyof Stats, 'total'>]++;
+        break;
+      }
+    }
+  }
 
   if (loading) {
     return (
@@ -212,7 +264,7 @@ export default function MyApplicationsPage() {
             <div className="flex items-center justify-between mb-2">
               <Briefcase className="w-5 h-5 text-gray-500" />
               <span className="text-2xl font-bold text-gray-900">
-                {data.stats.total}
+                {conteos.total}
               </span>
             </div>
             <p className="text-sm text-gray-600">Total</p>
@@ -222,27 +274,27 @@ export default function MyApplicationsPage() {
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-5 h-5 text-yellow-500" />
               <span className="text-2xl font-bold text-yellow-600">
-                {data.stats.pending}
+                {conteos.pending}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Pendientes</p>
+            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.pending}</p>
           </div>
 
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between mb-2">
               <Eye className="w-5 h-5 text-blue-500" />
               <span className="text-2xl font-bold text-blue-600">
-                {data.stats.reviewing}
+                {conteos.reviewing}
               </span>
             </div>
-            <p className="text-sm text-gray-600">En Revisión</p>
+            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.reviewing}</p>
           </div>
 
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between mb-2">
               <FileText className="w-5 h-5 text-purple-500" />
               <span className="text-2xl font-bold text-purple-600">
-                {data.stats.interviewed}
+                {conteos.interviewed}
               </span>
             </div>
             <p className="text-sm text-gray-600">Entrevistados</p>
@@ -252,7 +304,7 @@ export default function MyApplicationsPage() {
             <div className="flex items-center justify-between mb-2">
               <CheckCircle className="w-5 h-5 text-green-500" />
               <span className="text-2xl font-bold text-green-600">
-                {data.stats.accepted}
+                {conteos.accepted}
               </span>
             </div>
             <p className="text-sm text-gray-600">Aceptados</p>
@@ -262,10 +314,10 @@ export default function MyApplicationsPage() {
             <div className="flex items-center justify-between mb-2">
               <XCircle className="w-5 h-5 text-red-500" />
               <span className="text-2xl font-bold text-red-600">
-                {data.stats.rejected}
+                {conteos.rejected}
               </span>
             </div>
-            <p className="text-sm text-gray-600">Rechazados</p>
+            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.rejected}</p>
           </div>
         </div>
 
@@ -280,7 +332,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Todas ({data.stats.total})
+              Todas ({conteos.total})
             </button>
             <button
               onClick={() => setFilterStatus('pending')}
@@ -290,7 +342,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Pendientes ({data.stats.pending})
+              {NOMBRES_FILTRO.pending} ({conteos.pending})
             </button>
             <button
               onClick={() => setFilterStatus('reviewing')}
@@ -300,7 +352,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              En Revisión ({data.stats.reviewing})
+              {NOMBRES_FILTRO.reviewing} ({conteos.reviewing})
             </button>
             <button
               onClick={() => setFilterStatus('interviewed')}
@@ -310,7 +362,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Entrevistados ({data.stats.interviewed})
+              Entrevistados ({conteos.interviewed})
             </button>
             <button
               onClick={() => setFilterStatus('accepted')}
@@ -320,7 +372,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Aceptados ({data.stats.accepted})
+              Aceptados ({conteos.accepted})
             </button>
             <button
               onClick={() => setFilterStatus('rejected')}
@@ -330,7 +382,7 @@ export default function MyApplicationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Rechazados ({data.stats.rejected})
+              {NOMBRES_FILTRO.rejected} ({conteos.rejected})
             </button>
           </div>
         </div>
@@ -345,7 +397,7 @@ export default function MyApplicationsPage() {
             <p className="text-gray-600 mb-4">
               {filterStatus === 'all'
                 ? 'Aún no has aplicado a ninguna vacante'
-                : `No tienes aplicaciones con estado "${filterStatus}"`}
+                : `No tienes aplicaciones con estado "${NOMBRES_FILTRO[filterStatus] || filterStatus}"`}
             </p>
             <button
               onClick={() => router.push('/talents')}
@@ -391,14 +443,12 @@ export default function MyApplicationsPage() {
                       </div>
                     </div>
 
-                    {application.notes && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded border-l-4 border-button-orange">
-                        <p className="text-sm text-gray-700">
-                          <strong>Nota de la empresa:</strong>{' '}
-                          {application.notes}
-                        </p>
-                      </div>
-                    )}
+                    {/* Application.notes NO se pinta aquí: es la nota INTERNA
+                        que escriben admin, empresa y el inyector de candidatos
+                        ("Candidato inyectado por Admin. Fuente original: occ…",
+                        motivos de descarte). Se mostraba al candidato como
+                        "Nota de la empresa". Cuando exista un campo público
+                        (publicNote) se repone con ese. */}
                   </div>
 
                   {/* Right Side - Status & Date */}
