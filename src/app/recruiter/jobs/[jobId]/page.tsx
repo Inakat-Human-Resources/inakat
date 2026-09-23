@@ -32,6 +32,49 @@ import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_recruiter';
 
+/**
+ * Transiciones que la API acepta desde cada estado (espejo de
+ * allowedTransitions en src/app/api/recruiter/dashboard/route.ts).
+ * Los botones se pintan a partir de esta tabla: antes la pestaña "Por revisar"
+ * y "Descartados" ofrecían un botón "Enviar" que la API rechazaba siempre con
+ * un 400, porque sent_to_specialist sólo se permite desde 'reviewing'.
+ */
+const RECRUITER_TRANSITIONS: Record<string, string[]> = {
+  pending: ['reviewing', 'discarded'],
+  injected_by_admin: ['reviewing', 'discarded'],
+  reviewing: ['sent_to_specialist', 'discarded', 'pending'],
+  discarded: ['reviewing', 'pending']
+};
+
+const canMove = (from: string, to: string): boolean =>
+  (RECRUITER_TRANSITIONS[from] || []).includes(to);
+
+/**
+ * Estados en los que la postulación ya salió de manos del reclutador. La
+ * pestaña "Enviadas" filtraba sólo 'sent_to_specialist': en cuanto el
+ * especialista la tomaba (evaluating) o la empresa actuaba, el candidato no
+ * aparecía en ninguna pestaña de la vacante.
+ */
+const SENT_STATUSES = [
+  'sent_to_specialist',
+  'evaluating',
+  'sent_to_company',
+  'company_interested',
+  'interviewed',
+  'accepted',
+  'rejected'
+];
+
+const SENT_STATUS_LABELS: Record<string, string> = {
+  sent_to_specialist: 'Enviado',
+  evaluating: 'En evaluación',
+  sent_to_company: 'Enviado a empresa',
+  company_interested: 'Le interesa a la empresa',
+  interviewed: 'Entrevistado',
+  accepted: 'Contratado',
+  rejected: 'Rechazado'
+};
+
 type TabType = 'pending' | 'reviewing' | 'sent' | 'discarded';
 
 interface CandidateProfile {
@@ -111,7 +154,13 @@ export default function RecruiterJobCandidates() {
 
   const [assignment, setAssignment] = useState<AssignmentData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Dos errores distintos: el de CARGA sustituye la página (no hay nada que
+  // enseñar) y el de una ACCIÓN se muestra como alerta descartable sin tirar
+  // cabecera, pestañas ni scroll. Antes compartían estado, así que cualquier
+  // 400 de un botón borraba la página entera y la alerta inline con su '×'
+  // era código inalcanzable.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Pestaña activa
@@ -168,12 +217,17 @@ export default function RecruiterJobCandidates() {
     }
   };
 
-  const fetchJobData = async () => {
+  // `silencioso`: recarga sin pasar por el spinner de página completa (que
+  // desmontaría el modal abierto), p. ej. tras agregar un documento.
+  const fetchJobData = async (silencioso = false) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      if (!silencioso) setIsLoading(true);
+      setLoadError(null);
 
-      const response = await fetch('/api/recruiter/dashboard');
+      // ?jobId= para traer SOLO esta vacante: sin el filtro el endpoint
+      // devolvía todas las asignaciones del reclutador con todas sus
+      // postulaciones y el perfil completo de cada candidato.
+      const response = await fetch(`/api/recruiter/dashboard?jobId=${encodeURIComponent(jobId)}`);
 
       if (response.status === 401) {
         router.push('/login?redirect=/recruiter/dashboard');
@@ -181,7 +235,7 @@ export default function RecruiterJobCandidates() {
       }
 
       if (response.status === 403) {
-        setError('No tienes permisos de reclutador');
+        setLoadError('No tienes permisos de reclutador');
         return;
       }
 
@@ -195,14 +249,21 @@ export default function RecruiterJobCandidates() {
 
         if (foundAssignment) {
           setAssignment(foundAssignment);
+          // PERF-016: el modal muestra `selectedApplication`; sin esto un
+          // documento recién agregado no aparecía hasta cerrarlo y reabrirlo.
+          setSelectedApplication((prev) =>
+            prev
+              ? (foundAssignment as AssignmentData).job.applications.find((a) => a.id === prev.id) ?? prev
+              : prev
+          );
         } else {
-          setError('No tienes acceso a esta vacante o no existe');
+          setLoadError('No tienes acceso a esta vacante o no existe');
         }
       } else {
-        setError(data.error);
+        setLoadError(data.error);
       }
     } catch (err) {
-      setError('Error de conexión');
+      setLoadError('Error de conexión');
     } finally {
       setIsLoading(false);
     }
@@ -218,7 +279,7 @@ export default function RecruiterJobCandidates() {
       case 'reviewing':
         return applications.filter(app => app.status === 'reviewing');
       case 'sent':
-        return applications.filter(app => app.status === 'sent_to_specialist');
+        return applications.filter(app => SENT_STATUSES.includes(app.status));
       case 'discarded':
         return applications.filter(app => app.status === 'discarded');
       default:
@@ -238,7 +299,7 @@ export default function RecruiterJobCandidates() {
       case 'reviewing':
         return apps.filter(app => app.status === 'reviewing').length;
       case 'sent':
-        return apps.filter(app => app.status === 'sent_to_specialist').length;
+        return apps.filter(app => SENT_STATUSES.includes(app.status)).length;
       case 'discarded':
         return apps.filter(app => app.status === 'discarded').length;
       default:
@@ -248,9 +309,18 @@ export default function RecruiterJobCandidates() {
 
   // Mover candidato a otro estado
   const handleMoveApplication = async (applicationId: number, newStatus: string) => {
+    // Guardia local con la misma tabla que usa la API: si un botón pidiera una
+    // transición imposible, se avisa en la alerta inline en vez de gastar un
+    // round-trip que siempre acabaría en 400.
+    const current = assignment?.job.applications.find((app) => app.id === applicationId);
+    if (current && !canMove(current.status, newStatus)) {
+      setActionError(`No se puede mover de "${current.status}" a "${newStatus}"`);
+      return;
+    }
+
     try {
       setActionLoading(applicationId);
-      setError(null);
+      setActionError(null);
 
       const response = await fetch('/api/recruiter/dashboard', {
         method: 'PUT',
@@ -265,13 +335,28 @@ export default function RecruiterJobCandidates() {
 
       if (data.success) {
         setSuccess(data.message);
-        fetchJobData();
+        // Actualización local en vez de volver a descargar la vacante entera
+        // tras cada click (antes: spinner de pantalla completa y scroll perdido
+        // en cada movimiento de candidato).
+        setAssignment((prev) =>
+          prev
+            ? {
+                ...prev,
+                job: {
+                  ...prev.job,
+                  applications: prev.job.applications.map((app) =>
+                    app.id === applicationId ? { ...app, status: newStatus } : app
+                  )
+                }
+              }
+            : prev
+        );
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError(data.error);
+        setActionError(data.error);
       }
     } catch (err) {
-      setError('Error al actualizar');
+      setActionError('Error al actualizar');
     } finally {
       setActionLoading(null);
     }
@@ -330,12 +415,12 @@ export default function RecruiterJobCandidates() {
     );
   }
 
-  if (error || !assignment) {
+  if (loadError || !assignment) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <p className="text-gray-600">{error || 'Vacante no encontrada'}</p>
+          <p className="text-gray-600">{loadError || 'Vacante no encontrada'}</p>
           <button
             onClick={() => router.push('/recruiter/dashboard')}
             className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
@@ -417,11 +502,11 @@ export default function RecruiterJobCandidates() {
         </div>
 
         {/* Alerts */}
-        {error && (
+        {actionError && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto text-xl">×</button>
+            {actionError}
+            <button onClick={() => setActionError(null)} className="ml-auto text-xl">×</button>
           </div>
         )}
 
@@ -620,19 +705,9 @@ export default function RecruiterJobCandidates() {
                               )}
                               <span className="hidden sm:inline">Revisar</span>
                             </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                              disabled={actionLoading === app.id || !assignment.specialist}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title={assignment.specialist ? 'Enviar al especialista' : 'No hay especialista asignado'}
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
+                            {/* Sin botón "Enviar": la API exige pasar por
+                                'En proceso' (pending → sent_to_specialist no
+                                es una transición permitida). */}
                             <button
                               onClick={() => handleMoveApplication(app.id, 'discarded')}
                               disabled={actionLoading === app.id}
@@ -684,9 +759,11 @@ export default function RecruiterJobCandidates() {
                         )}
 
                         {activeTab === 'sent' && (
+                          /* Badge de sólo lectura con el estado REAL: a partir
+                             del envío mandan el especialista y la empresa. */
                           <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm flex items-center gap-1">
                             <CheckCircle size={14} />
-                            Enviado
+                            {SENT_STATUS_LABELS[app.status] || 'Enviado'}
                           </span>
                         )}
 
@@ -718,19 +795,8 @@ export default function RecruiterJobCandidates() {
                               )}
                               <span className="hidden sm:inline">En proceso</span>
                             </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                              disabled={actionLoading === app.id || !assignment.specialist}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title={assignment.specialist ? 'Enviar al especialista' : 'No hay especialista asignado'}
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
+                            {/* Sin botón "Enviar": desde 'Descartados' la API
+                                sólo deja reactivar a 'pending' o 'reviewing'. */}
                           </>
                         )}
                       </div>
@@ -754,8 +820,11 @@ export default function RecruiterJobCandidates() {
         onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
         currentIndex={currentCandidateIndex}
         totalCount={currentCandidatesList.length}
+        /* PERF-016: el modal hace POST a /api/evaluations/candidates/[id]/documents,
+           que comprueba que el reclutador tenga asignada una vacante con este
+           candidato (antes iba a /api/admin/... y siempre daba 403). */
         canAddDocuments={true}
-        onDocumentsUpdated={fetchJobData}
+        onDocumentsUpdated={() => fetchJobData(true)}
         userRole="recruiter"
         jobLatitude={job?.latitude}
         jobLongitude={job?.longitude}

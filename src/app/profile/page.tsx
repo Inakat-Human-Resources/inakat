@@ -27,10 +27,51 @@ import {
 } from 'lucide-react';
 
 import { useLoadScript, Autocomplete } from '@react-google-maps/api';
+import { normalizeUrl } from '@/lib/utils';
+import { notifyAuthChanged } from '@/lib/auth-events';
 
-const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
+/**
+ * #PERF-018: la versión anterior (`startsWith('http') ? url : https://…`)
+ * convertía las rutas locales que devuelve /api/upload en desarrollo
+ * ('/uploads/cv.pdf') en 'https:///uploads/cv.pdf', un enlace roto.
+ */
+const ensureUrl = (url: string) => normalizeUrl(url) ?? url;
 
 const MAPS_LIBRARIES: ('places')[] = ['places'];
+
+/** Límite real de /api/upload (#PERF-028): Vercel corta los cuerpos > 4.5 MB. */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_UPLOAD_LABEL = '4MB';
+
+/** Rango de años admisible en educación (#PERF-030). */
+const ANIO_MIN_EDUCACION = 1950;
+const ANIO_MAX_EDUCACION = new Date().getFullYear() + 8;
+
+/**
+ * Estatus de educación (#PERF-012).
+ *
+ * El registro guarda Cursando/Terminado/Trunco/Titulado, pero este formulario
+ * ofrecía Completa/En curso/Trunca: lo guardado desde el perfil salía siempre
+ * gris en las vistas de reclutador, empresa y admin, y al editar una entrada
+ * creada en el registro el <select> mostraba «Completa» aunque el estado
+ * conservara «Titulado». Aquí se usa el vocabulario del registro; los valores
+ * antiguos siguen siendo editables (se añaden como opción si aparecen) hasta
+ * que se migren los datos.
+ */
+const ESTATUS_EDUCACION = ['Cursando', 'Terminado', 'Titulado', 'Trunco'];
+
+/** Valores que significan «sin terminar»: no llevan año de fin. */
+const ESTATUS_EN_CURSO = ['Cursando', 'En curso'];
+
+const COLOR_ESTATUS_EDUCACION: Record<string, string> = {
+  Titulado: 'bg-green-100 text-green-700',
+  Completa: 'bg-green-100 text-green-700',
+  Terminado: 'bg-blue-100 text-blue-700',
+  Cursando: 'bg-yellow-100 text-yellow-700',
+  'En curso': 'bg-yellow-100 text-yellow-700',
+  Trunco: 'bg-orange-100 text-orange-700',
+  Trunca: 'bg-orange-100 text-orange-700'
+};
 
 interface Experience {
   id: number;
@@ -99,6 +140,18 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // #PERF-009: los modales son overlays fixed z-50 y el único banner de error
+  // se pinta al principio de la página, detrás del overlay. Con setError(...) el
+  // botón «Guardar» parecía no hacer nada. Cada modal tiene ahora su propio
+  // mensaje, renderizado dentro.
+  const [expError, setExpError] = useState('');
+  const [eduError, setEduError] = useState('');
+  const [docError, setDocError] = useState('');
+
+  // #PERF-010: refrescar la lista de experiencias no debe desmontar el
+  // formulario (loading) ni pisar los campos aún sin guardar.
+  const [refreshingExperiences, setRefreshingExperiences] = useState(false);
+
   // Form state - Datos de User
   const [nombre, setNombre] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -158,7 +211,7 @@ export default function ProfilePage() {
     carrera: '',
     añoInicio: '' as string | number,
     añoFin: '' as string | number,
-    estatus: 'Completa'
+    estatus: 'Terminado'
   });
 
   // CV
@@ -196,6 +249,20 @@ export default function ProfilePage() {
       }
     }
   }, [locationAutocomplete]);
+
+  /**
+   * Edición manual de «Ubicación cercana» (#PERF-033).
+   *
+   * Las coordenadas sólo se fijan desde onPlaceChanged. Al escribir a mano se
+   * quedaban las anteriores: alguien que se mudaba de Monterrey a CDMX veía su
+   * texto nuevo en la ficha mientras DistanceBadge seguía midiendo desde
+   * Monterrey. Escribir a mano invalida las coordenadas.
+   */
+  const handleUbicacionManual = (valor: string) => {
+    setUbicacionCercana(valor);
+    setCandidateLatitude(null);
+    setCandidateLongitude(null);
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -281,8 +348,18 @@ export default function ProfilePage() {
         setError('Las contraseñas nuevas no coinciden');
         return;
       }
+      // #PERF-024: misma política que registro y reset-password. Antes aquí
+      // sólo se exigía longitud y desde el perfil se podía bajar a 'aaaaaaaa'.
       if (newPassword.length < 8) {
         setError('La nueva contraseña debe tener al menos 8 caracteres');
+        return;
+      }
+      if (!/[A-Z]/.test(newPassword)) {
+        setError('La contraseña debe contener al menos una mayúscula');
+        return;
+      }
+      if (!/[0-9]/.test(newPassword)) {
+        setError('La contraseña debe contener al menos un número');
         return;
       }
     }
@@ -311,7 +388,10 @@ export default function ProfilePage() {
           ubicacionCercana: ubicacionCercana || null,
           latitude: candidateLatitude,
           longitude: candidateLongitude,
-          añosExperiencia: añosExperiencia === '' ? null : añosExperiencia,
+          // #PERF-008: la columna es Int NOT NULL. Mandar null al vaciar el
+          // input hacía reventar prisma.candidate.update y TODO el guardado
+          // respondía 500 sin decir por qué. Vacío = «no lo toques».
+          añosExperiencia: añosExperiencia === '' ? undefined : añosExperiencia,
           profile: profileField,
           seniority,
           linkedinUrl,
@@ -336,6 +416,8 @@ export default function ProfilePage() {
         setNewPassword('');
         setConfirmPassword('');
         fetchProfile();
+        // UI-004: nombre e iniciales del avatar (Navbar).
+        notifyAuthChanged();
       } else {
         setError(data.error || 'Error al actualizar');
       }
@@ -348,6 +430,7 @@ export default function ProfilePage() {
 
   // Experiencias - CRUD
   const openExpModal = (exp?: Experience) => {
+    setExpError(''); // #PERF-009: no arrastrar el error del intento anterior
     if (exp) {
       setEditingExp(exp);
       setExpForm({
@@ -374,23 +457,58 @@ export default function ProfilePage() {
     setShowExpModal(true);
   };
 
+  /**
+   * Recarga SOLO las experiencias (#PERF-010).
+   *
+   * Antes se llamaba a fetchProfile(), que pone loading=true (desmonta el
+   * formulario y pierde el scroll) y pisa TODOS los campos con lo que hay en
+   * servidor: la maestría recién agregada en «Educación» y el teléfono
+   * corregido desaparecían sin ningún aviso.
+   */
+  const refreshExperiences = async () => {
+    try {
+      setRefreshingExperiences(true);
+      const response = await fetch('/api/profile/experience', { credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setExperiences(data.data || []);
+        // El servidor recalcula los años con cada cambio de experiencia: sin
+        // esto, «Guardar Cambios» reenviaba el valor viejo y pisaba el nuevo.
+        if (typeof data.añosExperiencia === 'number') {
+          setAñosExperiencia(data.añosExperiencia);
+        }
+      }
+    } catch (err) {
+      console.error('Error refrescando experiencias:', err);
+    } finally {
+      setRefreshingExperiences(false);
+    }
+  };
+
   const saveExperience = async () => {
     if (!expForm.empresa || !expForm.puesto || !expForm.fechaInicio) {
-      setError('Empresa, puesto y fecha de inicio son requeridos');
+      setExpError('Empresa, puesto y fecha de inicio son requeridos');
+      return;
+    }
+
+    // #PERF-021: una experiencia no actual sin fecha de fin se contaba «hasta
+    // hoy» al recalcular los años de experiencia.
+    if (!expForm.esActual && !expForm.fechaFin) {
+      setExpError('Indica la fecha de fin o marca "Trabajo actual"');
       return;
     }
 
     // Validar que fechaFin no sea anterior a fechaInicio
     if (expForm.fechaFin && !expForm.esActual) {
       if (new Date(expForm.fechaFin) < new Date(expForm.fechaInicio)) {
-        setError('La fecha de fin no puede ser anterior a la fecha de inicio');
+        setExpError('La fecha de fin no puede ser anterior a la fecha de inicio');
         return;
       }
     }
 
     try {
       setSavingExp(true);
-      setError('');
+      setExpError('');
 
       const url = editingExp
         ? `/api/profile/experience/${editingExp.id}`
@@ -408,13 +526,14 @@ export default function ProfilePage() {
 
       if (data.success) {
         setShowExpModal(false);
+        setExpError('');
         setSuccess(editingExp ? 'Experiencia actualizada' : 'Experiencia agregada');
-        fetchProfile();
+        await refreshExperiences();
       } else {
-        setError(data.error || 'Error al guardar experiencia');
+        setExpError(data.error || 'Error al guardar experiencia');
       }
     } catch (err) {
-      setError('Error de conexión');
+      setExpError('Error de conexión');
     } finally {
       setSavingExp(false);
     }
@@ -433,7 +552,7 @@ export default function ProfilePage() {
 
       if (data.success) {
         setSuccess('Experiencia eliminada');
-        fetchProfile();
+        await refreshExperiences();
       } else {
         setError(data.error || 'Error al eliminar');
       }
@@ -444,6 +563,7 @@ export default function ProfilePage() {
 
   // Educación - CRUD (local, se guarda con el perfil)
   const openEduModal = (edu?: Education) => {
+    setEduError(''); // #PERF-009
     if (edu) {
       setEditingEdu(edu);
       setEduForm({
@@ -462,7 +582,7 @@ export default function ProfilePage() {
         carrera: '',
         añoInicio: '',
         añoFin: '',
-        estatus: 'Completa'
+        estatus: 'Terminado'
       });
     }
     setShowEduModal(true);
@@ -470,17 +590,40 @@ export default function ProfilePage() {
 
   const saveEducation = () => {
     if (!eduForm.nivel || !eduForm.institucion) {
-      setError('Nivel de estudios e institución son requeridos');
+      setEduError('Nivel de estudios e institución son requeridos');
       return;
     }
+
+    // #PERF-030: los modales se renderizan FUERA del <form> y «Guardar» es
+    // type=button, así que min/max de los inputs nunca se validaban: se podía
+    // guardar «20222 - 2018».
+    const inicio = eduForm.añoInicio === '' ? null : Number(eduForm.añoInicio);
+    const fin = eduForm.añoFin === '' ? null : Number(eduForm.añoFin);
+
+    if (inicio !== null && (!Number.isInteger(inicio) || inicio < ANIO_MIN_EDUCACION || inicio > ANIO_MAX_EDUCACION)) {
+      setEduError(`El año de inicio debe estar entre ${ANIO_MIN_EDUCACION} y ${ANIO_MAX_EDUCACION}`);
+      return;
+    }
+
+    if (fin !== null && (!Number.isInteger(fin) || fin < ANIO_MIN_EDUCACION || fin > ANIO_MAX_EDUCACION)) {
+      setEduError(`El año de fin debe estar entre ${ANIO_MIN_EDUCACION} y ${ANIO_MAX_EDUCACION}`);
+      return;
+    }
+
+    if (inicio !== null && fin !== null && fin < inicio) {
+      setEduError('El año de fin no puede ser anterior al de inicio');
+      return;
+    }
+
+    setEduError('');
 
     const newEdu: Education = {
       id: editingEdu ? editingEdu.id : Date.now(),
       nivel: eduForm.nivel,
       institucion: eduForm.institucion,
       carrera: eduForm.carrera,
-      añoInicio: eduForm.añoInicio ? Number(eduForm.añoInicio) : null,
-      añoFin: eduForm.añoFin ? Number(eduForm.añoFin) : null,
+      añoInicio: inicio,
+      añoFin: fin,
       estatus: eduForm.estatus
     };
 
@@ -507,9 +650,9 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar tamaño
-    if (file.size > 5 * 1024 * 1024) {
-      setError('El archivo excede el tamaño máximo de 5MB');
+    // Validar tamaño (#PERF-028)
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(`El archivo excede el tamaño máximo de ${MAX_UPLOAD_LABEL}`);
       return;
     }
 
@@ -552,8 +695,8 @@ export default function ProfilePage() {
       } else {
         setError(data.error || 'Error al guardar el CV en tu perfil');
       }
-    } catch {
-      setError('Error al subir archivo');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al subir archivo');
     } finally {
       setUploadingCv(false);
       if (cvInputRef.current) cvInputRef.current.value = '';
@@ -614,14 +757,13 @@ export default function ProfilePage() {
         method: 'POST',
         body: formData
       });
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Error al subir foto');
-      }
 
-      const uploadData = await uploadRes.json();
+      // #PERF-031: el error real del servidor («Archivo muy grande», «Tipo de
+      // archivo no permitido», «Demasiadas solicitudes») se perdía y la UI
+      // mostraba un genérico; el candidato reintentaba hasta acabar en 429.
+      const uploadData = await uploadRes.json().catch(() => ({}));
 
-      if (!uploadData.success) {
+      if (!uploadRes.ok || !uploadData.success) {
         setError(uploadData.error || 'Error al subir foto');
         return;
       }
@@ -645,7 +787,7 @@ export default function ProfilePage() {
         setError(data.error || 'Error al guardar foto');
       }
     } catch (err) {
-      setError('Error al subir foto');
+      setError(err instanceof Error ? err.message : 'Error al subir foto');
     } finally {
       setUploadingFoto(false);
       if (fotoInputRef.current) fotoInputRef.current.value = '';
@@ -655,17 +797,22 @@ export default function ProfilePage() {
   // Documentos adicionales - CRUD
   const handleAddDocument = async () => {
     if (!newDocName.trim()) {
-      setError('El nombre del documento es requerido');
+      setDocError('El nombre del documento es requerido');
       return;
     }
     if (!newDocFile) {
-      setError('Selecciona un archivo');
+      setDocError('Selecciona un archivo');
+      return;
+    }
+    // #PERF-031: validar tamaño en cliente antes de gastar una subida.
+    if (newDocFile.size > MAX_UPLOAD_BYTES) {
+      setDocError(`El archivo excede el tamaño máximo de ${MAX_UPLOAD_LABEL}`);
       return;
     }
 
     try {
       setSavingDoc(true);
-      setError('');
+      setDocError('');
 
       // 1. Subir archivo
       const formData = new FormData();
@@ -676,15 +823,12 @@ export default function ProfilePage() {
         credentials: 'include',
         body: formData
       });
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Error al subir archivo');
-      }
 
-      const uploadData = await uploadResponse.json();
+      // #PERF-031: conservar el mensaje real del servidor.
+      const uploadData = await uploadResponse.json().catch(() => ({}));
 
-      if (!uploadData.success) {
-        setError(uploadData.error || 'Error al subir archivo');
+      if (!uploadResponse.ok || !uploadData.success) {
+        setDocError(uploadData.error || 'Error al subir archivo');
         return;
       }
 
@@ -696,28 +840,29 @@ export default function ProfilePage() {
         body: JSON.stringify({
           name: newDocName.trim(),
           fileUrl: uploadData.url,
-          fileType: newDocFile.type.split('/')[1] || 'file'
+          // #PERF-032: con el subtipo MIME, un .docx guardaba
+          // 'vnd.openxmlformats-officedocument.wordprocessingml.document' y la
+          // ficha lo pintaba entero en mayúsculas.
+          fileType: newDocFile.name.split('.').pop()?.toLowerCase() || 'file'
         })
       });
-      if (!docResponse.ok) {
-        const errorData = await docResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Error al guardar documento');
+
+      const docData = await docResponse.json().catch(() => ({}));
+
+      if (!docResponse.ok || !docData.success) {
+        setDocError(docData.error || 'Error al guardar documento');
+        return;
       }
 
-      const docData = await docResponse.json();
-
-      if (docData.success) {
-        setShowAddDocModal(false);
-        setNewDocName('');
-        setNewDocFile(null);
-        if (docInputRef.current) docInputRef.current.value = '';
-        setSuccess('Documento agregado exitosamente');
-        fetchDocuments();
-      } else {
-        setError(docData.error || 'Error al guardar documento');
-      }
+      setShowAddDocModal(false);
+      setNewDocName('');
+      setNewDocFile(null);
+      setDocError('');
+      if (docInputRef.current) docInputRef.current.value = '';
+      setSuccess('Documento agregado exitosamente');
+      fetchDocuments();
     } catch (err) {
-      setError('Error de conexión');
+      setDocError(err instanceof Error ? err.message : 'Error de conexión');
     } finally {
       setSavingDoc(false);
     }
@@ -757,19 +902,24 @@ export default function ProfilePage() {
     return labels[role] || role;
   };
 
+  // #PERF-011: las fechas se guardan a medianoche UTC. Sin `timeZone: 'UTC'`,
+  // en México (UTC-6) una experiencia iniciada el 01/03/2020 se mostraba como
+  // «febrero de 2020», contradiciendo al propio formulario de edición.
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-MX', {
       year: 'numeric',
-      month: 'long'
+      month: 'long',
+      timeZone: 'UTC'
     });
   };
 
   const calculateAge = (birthDate: string) => {
-    const today = new Date();
     const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    if (Number.isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getUTCFullYear() - birth.getUTCFullYear();
+    const m = today.getUTCMonth() - birth.getUTCMonth();
+    if (m < 0 || (m === 0 && today.getUTCDate() < birth.getUTCDate())) {
       age--;
     }
     return age;
@@ -1046,7 +1196,7 @@ export default function ProfilePage() {
                       <input
                         type="text"
                         value={ubicacionCercana}
-                        onChange={(e) => setUbicacionCercana(e.target.value)}
+                        onChange={(e) => handleUbicacionManual(e.target.value)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
                         placeholder="Busca tu colonia, zona o referencia..."
                       />
@@ -1055,7 +1205,7 @@ export default function ProfilePage() {
                     <input
                       type="text"
                       value={ubicacionCercana}
-                      onChange={(e) => setUbicacionCercana(e.target.value)}
+                      onChange={(e) => handleUbicacionManual(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
                       placeholder="Colonia, zona o referencia"
                     />
@@ -1100,11 +1250,7 @@ export default function ProfilePage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-semibold text-gray-900">{edu.carrera || edu.nivel}</h4>
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              edu.estatus === 'Completa' ? 'bg-green-100 text-green-700' :
-                              edu.estatus === 'En curso' ? 'bg-blue-100 text-blue-700' :
-                              'bg-yellow-100 text-yellow-700'
-                            }`}>
+                            <span className={`text-xs px-2 py-0.5 rounded ${COLOR_ESTATUS_EDUCACION[edu.estatus] || 'bg-gray-100 text-gray-700'}`}>
                               {edu.estatus}
                             </span>
                           </div>
@@ -1321,7 +1467,7 @@ export default function ProfilePage() {
                       disabled={uploadingCv}
                     />
                   </label>
-                  <p className="text-xs text-gray-500 mt-2">PDF, DOC, DOCX (máx. 5MB)</p>
+                  <p className="text-xs text-gray-500 mt-2">PDF, DOC, DOCX (máx. {MAX_UPLOAD_LABEL})</p>
                 </div>
               )}
             </div>
@@ -1337,7 +1483,10 @@ export default function ProfilePage() {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowAddDocModal(true)}
+                  onClick={() => {
+                    setDocError(''); // #PERF-009
+                    setShowAddDocModal(true);
+                  }}
                   className="flex items-center gap-1 px-3 py-2 bg-button-orange text-white text-sm rounded-lg hover:bg-opacity-90"
                 >
                   <Plus size={16} />
@@ -1388,6 +1537,8 @@ export default function ProfilePage() {
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                   <Briefcase className="w-5 h-5" />
                   Experiencia Laboral
+                  {/* #PERF-010: refrescar la lista ya no desmonta el formulario */}
+                  {refreshingExperiences && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
                 </h2>
                 <button
                   type="button"
@@ -1565,6 +1716,14 @@ export default function ProfilePage() {
             </div>
 
             <div className="p-4 space-y-4">
+              {/* #PERF-009: el error se pinta DENTRO del modal; el banner de la
+                  página quedaba detrás del overlay. */}
+              {expError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {expError}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Empresa *
@@ -1703,6 +1862,13 @@ export default function ProfilePage() {
             </div>
 
             <div className="p-4 space-y-4">
+              {/* #PERF-009 */}
+              {eduError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {eduError}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nivel de Estudios *
@@ -1777,7 +1943,7 @@ export default function ProfilePage() {
                     onChange={(e) => setEduForm({ ...eduForm, añoFin: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
                     placeholder="Ej: 2022"
-                    disabled={eduForm.estatus === 'En curso'}
+                    disabled={ESTATUS_EN_CURSO.includes(eduForm.estatus)}
                   />
                 </div>
               </div>
@@ -1791,13 +1957,19 @@ export default function ProfilePage() {
                   onChange={(e) => setEduForm({
                     ...eduForm,
                     estatus: e.target.value,
-                    añoFin: e.target.value === 'En curso' ? '' : eduForm.añoFin
+                    añoFin: ESTATUS_EN_CURSO.includes(e.target.value) ? '' : eduForm.añoFin
                   })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-orange focus:border-button-orange"
                 >
-                  <option value="Completa">Completa</option>
-                  <option value="En curso">En curso</option>
-                  <option value="Trunca">Trunca</option>
+                  {ESTATUS_EDUCACION.map((estatus) => (
+                    <option key={estatus} value={estatus}>{estatus}</option>
+                  ))}
+                  {/* #PERF-012: valor heredado (Completa / En curso / Trunca).
+                      Sin esta opción el <select> controlado mostraba otra cosa
+                      distinta de lo que guardaba. */}
+                  {eduForm.estatus && !ESTATUS_EDUCACION.includes(eduForm.estatus) && (
+                    <option value={eduForm.estatus}>{eduForm.estatus}</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -1834,6 +2006,7 @@ export default function ProfilePage() {
                   setShowAddDocModal(false);
                   setNewDocName('');
                   setNewDocFile(null);
+                  setDocError('');
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -1842,6 +2015,13 @@ export default function ProfilePage() {
             </div>
 
             <div className="p-4 space-y-4">
+              {/* #PERF-009 */}
+              {docError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {docError}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nombre del documento *
@@ -1866,7 +2046,7 @@ export default function ProfilePage() {
                   className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-button-orange file:text-white hover:file:bg-opacity-90"
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 />
-                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. 5MB)</p>
+                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. {MAX_UPLOAD_LABEL})</p>
               </div>
 
               {newDocFile && (
@@ -1885,6 +2065,7 @@ export default function ProfilePage() {
                   setShowAddDocModal(false);
                   setNewDocName('');
                   setNewDocFile(null);
+                  setDocError('');
                 }}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >

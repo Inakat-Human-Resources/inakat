@@ -2,56 +2,122 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { verifyToken } from '@/lib/auth';
-import { cookies } from 'next/headers';
+import { requireAuth } from '@/lib/auth';
+import { z } from 'zod';
 
-// Obtener candidato autenticado
+/**
+ * AUTHZ (#PERF-004): ver nota en ../route.ts. requireAuth() consulta la base y
+ * rechaza a los usuarios con isActive=false; la autenticación ad-hoc anterior
+ * sólo verificaba la firma del JWT.
+ */
 async function getAuthenticatedCandidate() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
+  const auth = await requireAuth();
+  if ('error' in auth) return auth;
 
-  if (!token) {
-    return { error: 'No autenticado', status: 401 };
-  }
-
-  const payload = verifyToken(token);
-  if (!payload?.userId) {
-    return { error: 'Token inválido', status: 401 };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    include: { candidate: true }
+  const candidate = await prisma.candidate.findFirst({
+    where: { userId: auth.user.id }
   });
 
-  if (!user) {
-    return { error: 'Usuario no encontrado', status: 404 };
-  }
-
-  if (!user.candidate) {
+  if (!candidate) {
     return { error: 'No tienes un perfil de candidato', status: 403 };
   }
 
-  return { user, candidate: user.candidate };
+  return { user: auth.user, candidate };
 }
 
-// Función auxiliar para recalcular años de experiencia
+// =============================================
+// VALIDACIÓN (#PERF-020)
+// =============================================
+// Mismas reglas que en POST /api/profile/experience. Están duplicadas porque un
+// route.ts no puede exportar nada que no sea un handler; conviene moverlas a
+// src/lib cuando se centralice recalculateYearsOfExperience.
+
+const fechaValida = z
+  .union([z.string(), z.date()])
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), { message: 'Fecha inválida' })
+  .transform((v) => new Date(v));
+
+const fechaOpcional = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  fechaValida.optional()
+);
+
+/** Texto opcional: '' significa "bórralo" (null), no "no lo toques". */
+const textoOpcional = (max: number) =>
+  z.preprocess(
+    (v) => (v === '' ? null : v),
+    z.string().trim().max(max).nullable().optional()
+  );
+
+/**
+ * En PUT todos los campos son opcionales (actualización parcial), pero los que
+ * llegan tienen que ser válidos: antes `empresa: ''` se aceptaba y
+ * `fechaInicio: null` se guardaba como 1970-01-01.
+ */
+const experienciaParcialSchema = z.object({
+  empresa: z.string().trim().min(1, 'La empresa no puede estar vacía').max(150).optional(),
+  puesto: z.string().trim().min(1, 'El puesto no puede estar vacío').max(150).optional(),
+  ubicacion: textoOpcional(150),
+  fechaInicio: fechaValida.optional(),
+  fechaFin: fechaOpcional,
+  esActual: z.boolean().optional(),
+  descripcion: textoOpcional(3000)
+});
+
+/**
+ * Recalcula los años de experiencia fusionando los solapes (#PERF-021).
+ * Copia de la función de ../route.ts (ver nota arriba).
+ */
 async function recalculateYearsOfExperience(candidateId: number) {
   const experiences = await prisma.experience.findMany({
     where: { candidateId }
   });
 
-  let totalMonths = 0;
-  const now = new Date();
+  const ahora = new Date();
+  const intervalos: Array<[number, number]> = [];
 
   for (const exp of experiences) {
-    const start = new Date(exp.fechaInicio);
-    const end = exp.esActual || !exp.fechaFin ? now : new Date(exp.fechaFin);
+    const inicio = new Date(exp.fechaInicio);
+    if (Number.isNaN(inicio.getTime())) continue;
 
-    const months = (end.getFullYear() - start.getFullYear()) * 12 +
-                   (end.getMonth() - start.getMonth());
-    totalMonths += Math.max(0, months);
+    let fin: Date;
+    if (exp.esActual) {
+      fin = ahora;
+    } else if (exp.fechaFin) {
+      fin = new Date(exp.fechaFin);
+    } else {
+      continue;
+    }
+
+    if (Number.isNaN(fin.getTime())) continue;
+
+    const mesInicio = inicio.getFullYear() * 12 + inicio.getMonth();
+    const mesFin = fin.getFullYear() * 12 + fin.getMonth();
+    if (mesFin <= mesInicio) continue;
+
+    intervalos.push([mesInicio, mesFin]);
   }
+
+  intervalos.sort((a, b) => a[0] - b[0]);
+
+  let totalMonths = 0;
+  let inicioActual: number | null = null;
+  let finActual = 0;
+
+  for (const [inicio, fin] of intervalos) {
+    if (inicioActual === null) {
+      inicioActual = inicio;
+      finActual = fin;
+    } else if (inicio <= finActual) {
+      finActual = Math.max(finActual, fin);
+    } else {
+      totalMonths += finActual - inicioActual;
+      inicioActual = inicio;
+      finActual = fin;
+    }
+  }
+
+  if (inicioActual !== null) totalMonths += finActual - inicioActual;
 
   const years = Math.round(totalMonths / 12);
 
@@ -166,21 +232,57 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
-    const { empresa, puesto, ubicacion, fechaInicio, fechaFin, esActual, descripcion } = body;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Cuerpo de la petición inválido' },
+        { status: 400 }
+      );
+    }
 
-    // Validar que fechaFin no sea anterior a fechaInicio
-    const effectiveFechaInicio = fechaInicio !== undefined ? fechaInicio : existing.fechaInicio;
-    const effectiveFechaFin = fechaFin !== undefined ? fechaFin : existing.fechaFin;
+    const parsed = experienciaParcialSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: parsed.error.issues[0]?.message || 'Datos inválidos' },
+        { status: 400 }
+      );
+    }
+
+    const { empresa, puesto, ubicacion, fechaInicio, fechaFin, esActual, descripcion } = parsed.data;
+    const seEnvioFechaFin = body !== null && typeof body === 'object' && 'fechaFin' in body;
+
+    // Estado resultante tras aplicar el parche, para validar coherencia
+    const effectiveFechaInicio = fechaInicio ?? new Date(existing.fechaInicio);
     const effectiveEsActual = esActual !== undefined ? esActual : existing.esActual;
+    const effectiveFechaFin = seEnvioFechaFin
+      ? fechaFin ?? null
+      : existing.fechaFin
+        ? new Date(existing.fechaFin)
+        : null;
 
-    if (effectiveFechaFin && !effectiveEsActual) {
-      if (new Date(effectiveFechaFin) < new Date(effectiveFechaInicio)) {
-        return NextResponse.json(
-          { success: false, error: 'La fecha de fin no puede ser anterior a la fecha de inicio' },
-          { status: 400 }
-        );
-      }
+    if (effectiveFechaInicio.getTime() > Date.now()) {
+      return NextResponse.json(
+        { success: false, error: 'La fecha de inicio no puede ser futura' },
+        { status: 400 }
+      );
+    }
+
+    if (!effectiveEsActual && !effectiveFechaFin) {
+      // #PERF-021: una experiencia no actual sin fecha de fin se contaba "hasta
+      // hoy" al recalcular los años de experiencia.
+      return NextResponse.json(
+        { success: false, error: 'Indica la fecha de fin o marca "Trabajo actual"' },
+        { status: 400 }
+      );
+    }
+
+    if (effectiveFechaFin && !effectiveEsActual && effectiveFechaFin < effectiveFechaInicio) {
+      return NextResponse.json(
+        { success: false, error: 'La fecha de fin no puede ser anterior a la fecha de inicio' },
+        { status: 400 }
+      );
     }
 
     // Si es trabajo actual, forzar fechaFin a null
@@ -191,8 +293,8 @@ export async function PUT(
     if (empresa !== undefined) updateData.empresa = empresa;
     if (puesto !== undefined) updateData.puesto = puesto;
     if (ubicacion !== undefined) updateData.ubicacion = ubicacion;
-    if (fechaInicio !== undefined) updateData.fechaInicio = new Date(fechaInicio);
-    if (fechaFin !== undefined || esActual !== undefined) updateData.fechaFin = finalFechaFin ? new Date(finalFechaFin) : null;
+    if (fechaInicio !== undefined) updateData.fechaInicio = fechaInicio;
+    if (seEnvioFechaFin || esActual !== undefined) updateData.fechaFin = finalFechaFin;
     if (esActual !== undefined) updateData.esActual = esActual;
     if (descripcion !== undefined) updateData.descripcion = descripcion;
 

@@ -3,7 +3,43 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
-import { createNotification } from '@/lib/notifications';
+import { createNotification, runAfterResponse } from '@/lib/notifications';
+import { parseId } from '@/lib/authz-applications';
+import { syncCandidateStatus } from '@/lib/candidate-status';
+import { sendCandidateSentToCompany } from '@/lib/email';
+import { absoluteUrl } from '@/lib/site-url';
+
+/**
+ * Postulaciones que el especialista ve de sus vacantes.
+ * Incluye los estados que escribe la EMPRESA (company_interested, interviewed,
+ * accepted, rejected): sin ellos el especialista perdía de vista a sus
+ * candidatos en cuanto la empresa actuaba y nunca conocía el resultado de su
+ * propia evaluación.
+ */
+const SPECIALIST_VISIBLE_STATUSES = [
+  'sent_to_specialist',
+  'evaluating',
+  'sent_to_company',
+  'company_interested',
+  'interviewed',
+  'accepted',
+  'rejected',
+  'discarded'
+];
+
+/**
+ * Transiciones que el especialista puede aplicar sobre una Application.
+ * Fuente de verdad única: la UI de /specialist/jobs/[jobId] pinta sus botones
+ * a partir de esta misma tabla (ver SPECIALIST_TRANSITIONS allí).
+ */
+const allowedTransitions: Record<string, string[]> = {
+  'sent_to_specialist': ['evaluating', 'discarded'],
+  'evaluating': ['sent_to_company', 'discarded', 'sent_to_specialist'], // sent_to_specialist para revertir
+  'discarded': ['evaluating', 'sent_to_specialist'] // Permite reactivar a cualquier estado anterior
+};
+
+// Todos los status a los que el especialista puede mover una postulación.
+const TARGET_STATUSES = new Set(Object.values(allowedTransitions).flat());
 
 /**
  * GET /api/specialist/dashboard
@@ -23,7 +59,19 @@ export async function GET(request: Request) {
 
     const { user } = auth;
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+
+    // La página de detalle sólo necesita UNA vacante: con ?jobId= se evita
+    // descargar todas las asignaciones del especialista con todas sus
+    // postulaciones y perfiles en cada carga y tras cada acción.
+    const jobIdParam = searchParams.get('jobId');
+    const jobIdFilter = jobIdParam ? parseId(jobIdParam) : null;
+
+    if (jobIdParam && jobIdFilter === null) {
+      return NextResponse.json(
+        { success: false, error: 'jobId inválido' },
+        { status: 400 }
+      );
+    }
 
     // Obtener asignaciones del especialista
     const whereClause: Record<string, unknown> = {
@@ -32,8 +80,8 @@ export async function GET(request: Request) {
       recruiterStatus: 'sent_to_specialist'
     };
 
-    if (status && status !== 'all') {
-      whereClause.specialistStatus = status;
+    if (jobIdFilter !== null) {
+      whereClause.jobId = jobIdFilter;
     }
 
     const assignments = await prisma.jobAssignment.findMany({
@@ -47,14 +95,15 @@ export async function GET(request: Request) {
                 companyRequest: {
                   select: {
                     nombreEmpresa: true,
-                    correoEmpresa: true
+                    correoEmpresa: true,
+                    logoUrl: true // La cabecera de la vacante pinta el logo
                   }
                 }
               }
             },
             applications: {
               where: {
-                status: { in: ['sent_to_specialist', 'evaluating', 'sent_to_company', 'discarded'] }
+                status: { in: SPECIALIST_VISIBLE_STATUSES }
               },
               orderBy: { createdAt: 'desc' },
               select: {
@@ -89,20 +138,7 @@ export async function GET(request: Request) {
     // En lugar de múltiples queries anidadas, hacemos 2 queries batch
     // =========================================================================
 
-    // 1. Recolectar todos los IDs de candidatos enviados (de candidatesSentToSpecialist)
-    const allCandidateIds: number[] = [];
-    for (const assignment of assignments) {
-      if (assignment.candidatesSentToSpecialist) {
-        const ids = assignment.candidatesSentToSpecialist
-          .split(',')
-          .map(id => parseInt(id))
-          .filter(id => !isNaN(id));
-        allCandidateIds.push(...ids);
-      }
-    }
-    const uniqueCandidateIds = [...new Set(allCandidateIds)];
-
-    // 2. Recolectar todos los emails de applications
+    // 1. Recolectar todos los emails de applications
     const allEmails: string[] = [];
     for (const assignment of assignments) {
       for (const app of assignment.job.applications) {
@@ -111,18 +147,7 @@ export async function GET(request: Request) {
     }
     const uniqueEmails = [...new Set(allEmails)];
 
-    // 3. Una sola query para obtener candidatos por ID (los enviados explícitamente)
-    const candidatesById = uniqueCandidateIds.length > 0
-      ? await prisma.candidate.findMany({
-          where: { id: { in: uniqueCandidateIds } },
-          include: {
-            experiences: { orderBy: { fechaInicio: 'desc' } },
-            documents: { orderBy: { createdAt: 'desc' } }
-          }
-        })
-      : [];
-
-    // 4. Una sola query para obtener candidatos por email (para enriquecer applications)
+    // 2. Una sola query para obtener candidatos por email (para enriquecer applications)
     const candidatesByEmail = uniqueEmails.length > 0
       ? await prisma.candidate.findMany({
           where: { email: { in: uniqueEmails, mode: 'insensitive' } },
@@ -134,6 +159,8 @@ export async function GET(request: Request) {
             nivelEstudios: true,
             añosExperiencia: true,
             profile: true,
+            subcategory: true, // El modal de perfil la pinta
+            cartaPresentacion: true, // El modal de perfil la pinta
             seniority: true,
             linkedinUrl: true,
             portafolioUrl: true,
@@ -156,37 +183,26 @@ export async function GET(request: Request) {
         })
       : [];
 
-    // Crear mapas para acceso O(1)
-    const candidateByIdMap = new Map(
-      candidatesById.map(c => [c.id, c])
-    );
+    // Crear mapa para acceso O(1)
     const candidateByEmailMap = new Map(
       candidatesByEmail.map(c => [c.email.toLowerCase(), c])
     );
 
     // Enriquecer assignments SIN queries adicionales
     const assignmentsWithCandidates = assignments.map((assignment) => {
-      // Obtener candidatos enviados por ID
-      let candidates: typeof candidatesById = [];
-      if (assignment.candidatesSentToSpecialist) {
-        const ids = assignment.candidatesSentToSpecialist
-          .split(',')
-          .map(id => parseInt(id))
-          .filter(id => !isNaN(id));
-        candidates = ids
-          .map(id => candidateByIdMap.get(id))
-          .filter((c): c is NonNullable<typeof c> => c !== undefined);
-      }
-
       // Enriquecer applications con datos del candidato
       const enrichedApplications = assignment.job.applications.map((app) => ({
         ...app,
         candidateProfile: candidateByEmailMap.get(app.candidateEmail.toLowerCase()) || null
       }));
 
+      // job.applications (sin enriquecer) viajaba duplicado junto a
+      // `applications`: ninguna página lo lee, sólo engordaba la respuesta.
+      const { applications: _sinEnriquecer, ...jobSinApplications } = assignment.job;
+
       return {
         ...assignment,
-        candidates,
+        job: jobSinApplications,
         applications: enrichedApplications,
         recruiterNotes: assignment.recruiterNotes
       };
@@ -204,7 +220,16 @@ export async function GET(request: Request) {
           pendingCount++;
         } else if (app.status === 'evaluating') {
           evaluatingCount++;
-        } else if (app.status === 'sent_to_company') {
+        } else if (
+          // Una vez enviado a la empresa la postulación sigue contando como
+          // "enviada" aunque la empresa la haya movido: si no, el contador
+          // bajaba solo y el especialista creía haber perdido candidatos.
+          app.status === 'sent_to_company' ||
+          app.status === 'company_interested' ||
+          app.status === 'interviewed' ||
+          app.status === 'accepted' ||
+          app.status === 'rejected'
+        ) {
           sentToCompanyCount++;
         } else if (app.status === 'discarded') {
           discardedCount++;
@@ -258,12 +283,30 @@ export async function PUT(request: Request) {
 
     const { user } = auth;
     const body = await request.json();
-    const { assignmentId, status, notes, candidateIds, discardApplicationId, discardReason, updateApplicationId, newApplicationStatus } = body;
+    const { updateApplicationId, newApplicationStatus } = body;
+
+    // Validar el body ANTES de tocar la base: con un id no numérico Prisma
+    // lanzaba y el catch genérico devolvía 500 en vez de 400.
+    const applicationId = parseId(updateApplicationId);
+
+    if (applicationId === null || typeof newApplicationStatus !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Se requiere updateApplicationId (entero) y newApplicationStatus' },
+        { status: 400 }
+      );
+    }
+
+    if (!TARGET_STATUSES.has(newApplicationStatus)) {
+      return NextResponse.json(
+        { success: false, error: `Estado "${newApplicationStatus}" no válido` },
+        { status: 400 }
+      );
+    }
 
     // Acción: Actualizar status de una application individual (flujo de pestañas)
-    if (updateApplicationId && newApplicationStatus) {
+    {
       const application = await prisma.application.findUnique({
-        where: { id: updateApplicationId },
+        where: { id: applicationId },
         include: { job: true }
       });
 
@@ -274,9 +317,14 @@ export async function PUT(request: Request) {
         );
       }
 
-      // Verificar que el especialista tiene asignación a este job
+      // Verificar que el especialista tiene asignación a este job.
+      // El admin cubre a cualquier especialista, así que para él la asignación
+      // se busca sólo por jobId: buscarla por specialistId (null en su caso)
+      // dejaba hasAssignment vacío y se saltaba followUpDate y la notificación.
       const hasAssignment = await prisma.jobAssignment.findFirst({
-        where: { jobId: application.jobId, specialistId: user.id }
+        where: user.role === 'admin'
+          ? { jobId: application.jobId }
+          : { jobId: application.jobId, specialistId: user.id }
       });
 
       if (!hasAssignment && user.role !== 'admin') {
@@ -285,13 +333,6 @@ export async function PUT(request: Request) {
           { status: 403 }
         );
       }
-
-      // Validar transiciones permitidas para especialista
-      const allowedTransitions: Record<string, string[]> = {
-        'sent_to_specialist': ['evaluating', 'discarded'],
-        'evaluating': ['sent_to_company', 'discarded', 'sent_to_specialist'], // sent_to_specialist para revertir
-        'discarded': ['evaluating', 'sent_to_specialist'] // Permite reactivar a cualquier estado anterior
-      };
 
       const currentStatus = application.status;
       const allowed = allowedTransitions[currentStatus] || [];
@@ -303,38 +344,78 @@ export async function PUT(request: Request) {
         );
       }
 
-      // Preparar datos de actualización
-      const updateData: Record<string, unknown> = {
-        status: newApplicationStatus,
-        updatedAt: new Date()
-      };
-
-      // Actualizar Application
-      const updatedApp = await prisma.application.update({
-        where: { id: updateApplicationId },
-        data: updateData
-      });
-
-      // Si envía a empresa, actualizar la fecha de seguimiento en JobAssignment
-      if (newApplicationStatus === 'sent_to_company' && hasAssignment) {
-        const followUpDate = new Date();
-        followUpDate.setDate(followUpDate.getDate() + 45);
-        await prisma.jobAssignment.update({
-          where: { id: hasAssignment.id },
-          data: { followUpDate }
+      // Application y JobAssignment se mueven juntas: si la escritura de la
+      // asignación fallaba, la postulación quedaba movida y el panel del admin
+      // seguía marcando la vacante como si nadie la hubiera tocado.
+      const updatedApp = await prisma.$transaction(async (tx) => {
+        const updated = await tx.application.update({
+          where: { id: applicationId },
+          data: {
+            status: newApplicationStatus,
+            updatedAt: new Date()
+          }
         });
 
-        // Notificar a la empresa (fire-and-forget)
-        if (application.job.userId) {
+        if (!hasAssignment) return updated;
+
+        // El panel de asignaciones del admin deriva "en progreso" y
+        // "completado" de specialistStatus: el flujo por candidato nunca lo
+        // escribía, así que las tarjetas se quedaban en cero para siempre.
+        if (newApplicationStatus === 'evaluating') {
+          await tx.jobAssignment.updateMany({
+            where: { id: hasAssignment.id, specialistStatus: 'pending' },
+            data: { specialistStatus: 'evaluating' }
+          });
+        }
+
+        if (newApplicationStatus === 'sent_to_company') {
+          const followUpDate = new Date();
+          followUpDate.setDate(followUpDate.getDate() + 45);
+          await tx.jobAssignment.update({
+            where: { id: hasAssignment.id },
+            data: { specialistStatus: 'sent_to_company', followUpDate }
+          });
+        }
+
+        return updated;
+      });
+
+      // ADM-028: Candidate.status sigue a sus postulaciones.
+      await syncCandidateStatus(updatedApp.candidateEmail);
+
+      // Notificar a la empresa. runAfterResponse usa `after` (Next 15), que
+      // garantiza que el INSERT corre aunque la lambda ya haya respondido, y
+      // registra el error si falla: antes era `.catch(() => {})` sin await, que
+      // en Vercel podía perderse y se tragaba el error sin dejar rastro.
+      if (newApplicationStatus === 'sent_to_company' && application.job.userId) {
+        const companyUserId = application.job.userId;
+        await runAfterResponse('NOTIF:sent_to_company', () =>
           createNotification({
-            userId: application.job.userId,
+            userId: companyUserId,
             type: 'sent_to_company',
             title: 'Candidato disponible para revisión',
             message: `Un candidato fue enviado para tu revisión en "${application.job.title}".`,
             link: '/company/dashboard',
-            metadata: { jobId: application.jobId, applicationId: updateApplicationId },
-          }).catch(() => {});
-        }
+            metadata: { jobId: application.jobId, applicationId },
+          })
+        );
+
+        // PLAT-011: USER_GUIDE promete un correo a la empresa cuando le llega un
+        // candidato; la plantilla existía pero nadie la enviaba.
+        await runAfterResponse('EMAIL:sent_to_company', async () => {
+          const empresa = await prisma.user.findUnique({
+            where: { id: companyUserId },
+            select: { email: true, nombre: true }
+          });
+          if (!empresa?.email) return;
+          await sendCandidateSentToCompany({
+            companyEmail: empresa.email,
+            nombreEmpresa: application.job.company || empresa.nombre,
+            candidateName: application.candidateName,
+            jobTitle: application.job.title,
+            dashboardUrl: absoluteUrl('/company/dashboard')
+          });
+        });
       }
 
       return NextResponse.json({
@@ -343,200 +424,6 @@ export async function PUT(request: Request) {
         data: updatedApp
       });
     }
-
-    // Acción: Descartar candidato individual
-    if (discardApplicationId) {
-      const application = await prisma.application.findUnique({
-        where: { id: discardApplicationId },
-        include: { job: true }
-      });
-
-      if (!application) {
-        return NextResponse.json(
-          { success: false, error: 'Aplicación no encontrada' },
-          { status: 404 }
-        );
-      }
-
-      // Verificar que el especialista tiene asignación a este job
-      const hasAssignment = await prisma.jobAssignment.findFirst({
-        where: { jobId: application.jobId, specialistId: user.id }
-      });
-
-      if (!hasAssignment && user.role !== 'admin') {
-        return NextResponse.json(
-          { success: false, error: 'No tienes permiso para descartar este candidato' },
-          { status: 403 }
-        );
-      }
-
-      // Actualizar Application a discarded
-      const discardedApp = await prisma.application.update({
-        where: { id: discardApplicationId },
-        data: {
-          status: 'discarded',
-          updatedAt: new Date()
-        }
-      });
-
-      // Si hay razón, guardarla en las notas del especialista
-      if (discardReason && hasAssignment) {
-        const currentNotes = hasAssignment.specialistNotes || '';
-        const newNote = `[DESCARTADO: ${application.candidateName}] ${discardReason}`;
-        await prisma.jobAssignment.update({
-          where: { id: hasAssignment.id },
-          data: {
-            specialistNotes: currentNotes ? `${currentNotes}\n${newNote}` : newNote
-          }
-        });
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: 'Candidato descartado',
-        data: discardedApp
-      });
-    }
-
-    if (!assignmentId) {
-      return NextResponse.json(
-        { success: false, error: 'Se requiere el ID de la asignación' },
-        { status: 400 }
-      );
-    }
-
-    // Verificar que la asignación pertenece al especialista
-    const assignment = await prisma.jobAssignment.findUnique({
-      where: { id: assignmentId }
-    });
-
-    if (!assignment) {
-      return NextResponse.json(
-        { success: false, error: 'Asignación no encontrada' },
-        { status: 404 }
-      );
-    }
-
-    if (assignment.specialistId !== user.id && user.role !== 'admin') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'No tienes permiso para modificar esta asignación'
-        },
-        { status: 403 }
-      );
-    }
-
-    // Preparar datos de actualización
-    const updateData: Record<string, unknown> = {};
-
-    if (status) {
-      updateData.specialistStatus = status;
-
-      // Si envía a la empresa, calcular fecha de seguimiento (45 días)
-      if (status === 'sent_to_company') {
-        const followUpDate = new Date();
-        followUpDate.setDate(followUpDate.getDate() + 45);
-        updateData.followUpDate = followUpDate;
-      }
-    }
-
-    if (notes !== undefined) {
-      updateData.specialistNotes = notes;
-    }
-
-    if (candidateIds) {
-      updateData.candidatesSentToCompany = candidateIds.join(',');
-    }
-
-    const updated = await prisma.jobAssignment.update({
-      where: { id: assignmentId },
-      data: updateData,
-      include: {
-        job: {
-          include: {
-            user: {
-              select: {
-                nombre: true,
-                email: true,
-                companyRequest: {
-                  select: { nombreEmpresa: true }
-                }
-              }
-            }
-          }
-        },
-        recruiter: {
-          select: { id: true, nombre: true, email: true }
-        }
-      }
-    });
-
-    // Si envía candidatos a la empresa
-    if (candidateIds && candidateIds.length > 0) {
-      // Obtener emails de los candidatos seleccionados
-      const selectedCandidates = await prisma.candidate.findMany({
-        where: { id: { in: candidateIds } },
-        select: { id: true, email: true }
-      });
-
-      const candidateEmails = selectedCandidates.map((c) => c.email.toLowerCase());
-
-      if (candidateEmails.length > 0) {
-        // Actualizar Applications SOLO de los candidatos seleccionados
-        await prisma.application.updateMany({
-          where: {
-            jobId: assignment.jobId,
-            candidateEmail: { in: candidateEmails },
-            status: { in: ['sent_to_specialist', 'evaluating'] }
-          },
-          data: {
-            status: 'sent_to_company',
-            updatedAt: new Date()
-          }
-        });
-      }
-
-      // Actualizar candidatos enviados previamente para concatenar, no reemplazar
-      const previouslySent = assignment.candidatesSentToCompany || '';
-      const previousIds = previouslySent ? previouslySent.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : [];
-      const allSentIds = [...new Set([...previousIds, ...candidateIds])];
-
-      await prisma.jobAssignment.update({
-        where: { id: assignmentId },
-        data: {
-          candidatesSentToCompany: allSentIds.join(','),
-          ...(status === 'sent_to_company' ? {
-            specialistStatus: 'sent_to_company',
-            followUpDate: (() => {
-              const date = new Date();
-              date.setDate(date.getDate() + 45);
-              return date;
-            })()
-          } : {})
-        }
-      });
-
-    }
-
-    // Notificar a la empresa si se envió a empresa (fire-and-forget)
-    if (status === 'sent_to_company' && updated.job?.userId) {
-      const count = candidateIds?.length || 1;
-      createNotification({
-        userId: updated.job.userId,
-        type: 'sent_to_company',
-        title: 'Candidatos disponibles para revisión',
-        message: `${count} candidato(s) fueron enviados para tu revisión en "${updated.job.title}".`,
-        link: '/company/dashboard',
-        metadata: { jobId: updated.jobId, count },
-      }).catch(() => {});
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Asignación actualizada',
-      data: updated
-    });
   } catch (error) {
     console.error('Error updating assignment:', error);
     return NextResponse.json(

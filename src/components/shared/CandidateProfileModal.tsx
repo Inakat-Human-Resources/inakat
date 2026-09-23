@@ -2,10 +2,8 @@
 
 'use client';
 
-// FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
-const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
-
 import { useState, useRef, useEffect } from 'react';
+import { normalizeUrl } from '@/lib/utils';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 import DistanceBadge from '@/components/shared/DistanceBadge';
 import {
@@ -35,6 +33,16 @@ import {
   Star
 } from 'lucide-react';
 
+/**
+ * FIX-02: asegura que las URLs externas tengan protocolo https://.
+ *
+ * #PERF-018: la versión anterior (`startsWith('http') ? url : https://…`)
+ * convertía las rutas locales que devuelve /api/upload en desarrollo
+ * ('/uploads/cv.pdf') en 'https:///uploads/cv.pdf', un enlace roto.
+ * normalizeUrl deja intactas las rutas relativas y respeta 'Https://'.
+ */
+const ensureUrl = (url: string) => normalizeUrl(url) ?? url;
+
 // Tipos para el candidato (compatible con Application y Candidate)
 interface Experience {
   id: number;
@@ -54,6 +62,32 @@ interface CandidateDocument {
   fileType?: string;
   createdAt?: string;
 }
+
+/**
+ * Colores del badge de estatus de educación (#PERF-012).
+ *
+ * Hay DOS vocabularios en producción: el del registro
+ * (Cursando/Terminado/Trunco/Titulado) y el de /profile
+ * (Completa/En curso/Trunca). El mapa anterior sólo conocía el primero, así que
+ * todo lo guardado desde el perfil salía gris ante empresa y reclutador.
+ * Mientras no se unifiquen con una migración de datos, aquí se reconocen ambos.
+ */
+/**
+ * Límite real de /api/upload (#PERF-028): las funciones de Vercel rechazan
+ * cuerpos de más de 4.5 MB antes de llegar al handler.
+ */
+const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
+const MAX_ADJUNTO_LABEL = '4MB';
+
+const COLOR_ESTATUS_EDUCACION: Record<string, string> = {
+  Titulado: 'bg-green-100 text-green-800',
+  Completa: 'bg-green-100 text-green-800',
+  Terminado: 'bg-blue-100 text-blue-800',
+  Cursando: 'bg-yellow-100 text-yellow-800',
+  'En curso': 'bg-yellow-100 text-yellow-800',
+  Trunco: 'bg-orange-100 text-orange-800',
+  Trunca: 'bg-orange-100 text-orange-800'
+};
 
 // FEATURE: Educación múltiple
 interface Education {
@@ -78,6 +112,8 @@ interface EvaluationNote {
   isPublic?: boolean;
   createdAt: string;
   authorName?: string;
+  /** EVAL-020: la API dice si el usuario actual puede editarla o retirarla. */
+  canEdit?: boolean;
 }
 
 interface CandidateProfile {
@@ -218,6 +254,12 @@ export default function CandidateProfileModal({
   const [loadingNotes, setLoadingNotes] = useState(false);
   const noteFileRef = useRef<HTMLInputElement>(null);
 
+  // #PERF-014/#PERF-015: antes guardar nota o calificaciones sólo hacía
+  // console.error; el evaluador no sabía si se había guardado.
+  const [noteError, setNoteError] = useState('');
+  const [ratingsError, setRatingsError] = useState('');
+  const [ratingsSaved, setRatingsSaved] = useState(false);
+
   // Determinar si el usuario puede agregar notas de evaluación
   const canAddEvaluationNotes = ['recruiter', 'specialist'].includes(userRole || '');
   const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin', 'company'].includes(userRole || '');
@@ -227,21 +269,55 @@ export default function CandidateProfileModal({
   const [savedSkillRatings, setSavedSkillRatings] = useState<Array<{ skillName: string; rating: number; comment: string | null; ratedBy: { nombre: string }; updatedAt: string }>>([]);
   const [savingSkillRatings, setSavingSkillRatings] = useState(false);
   const [skillRatingsLoaded, setSkillRatingsLoaded] = useState(false);
+  // Notas INTERNAS de INAKAT (Candidate.notas y Application.notes): nunca para
+  // la empresa ni para el propio candidato.
+  const puedeVerNotasInternas = ['admin', 'recruiter', 'specialist'].includes(userRole || '');
+
   const canEditSkillRatings = ['specialist', 'admin'].includes(userRole || '');
   const canViewSkillRatings = ['specialist', 'admin', 'company'].includes(userRole || '');
 
+  /**
+   * #PERF-013: al pulsar «Siguiente» con el modal abierto sólo cambia
+   * application.id, no isOpen. El efecto anterior únicamente limpiaba al
+   * cerrar, así que el borrador de nota, el adjunto y el check «Visible para
+   * empresa» viajaban al siguiente candidato y la nota podía acabar (pública)
+   * en la aplicación equivocada.
+   *
+   * Este efecto reinicia TODO el estado por candidato en cuanto cambia el id.
+   */
+  useEffect(() => {
+    setEvaluationNotes([]);
+    setEditingNoteId(null);
+    setNoteActionError(null);
+    setNewNoteContent('');
+    setNoteDocument(null);
+    setIsNotePublic(false);
+    setNoteError('');
+    setRatingsError('');
+    setRatingsSaved(false);
+    setSkillRatings({});
+    setSavedSkillRatings([]);
+    setSkillRatingsLoaded(false);
+    // El sub-modal de documento también se cierra: si no, quedaba en true y
+    // reaparecía encima del siguiente candidato (#PERF-017).
+    setShowAddDocModal(false);
+    setNewDocName('');
+    setNewDocFile(null);
+    setDocError('');
+    if (noteFileRef.current) noteFileRef.current.value = '';
+  }, [isOpen, application?.id, candidate?.id]);
+
   // FEAT-5: Cargar notas de evaluación cuando se abre el modal
   useEffect(() => {
-    if (isOpen && application?.id && canViewEvaluationNotes) {
-      fetchEvaluationNotes(application.id);
-    }
-    // Limpiar notas cuando se cierra
-    if (!isOpen) {
-      setEvaluationNotes([]);
-      setNewNoteContent('');
-      setNoteDocument(null);
-      setIsNotePublic(false);
-    }
+    if (!isOpen || !application?.id || !canViewEvaluationNotes) return;
+
+    // #PERF-013: sin esto, una respuesta lenta del candidato anterior pisaba
+    // las notas del que se está viendo.
+    let ignorar = false;
+    fetchEvaluationNotes(application.id, () => ignorar);
+    return () => {
+      ignorar = true;
+    };
   }, [isOpen, application?.id, canViewEvaluationNotes]);
 
   // Parsear habilidades del job
@@ -257,30 +333,42 @@ export default function CandidateProfileModal({
 
   // Cargar skill ratings cuando se abre el modal
   useEffect(() => {
-    if (isOpen && application?.id && canViewSkillRatings && parsedHabilidades.length > 0) {
-      fetchSkillRatings(application.id);
-    }
-    if (!isOpen) {
-      setSkillRatings({});
-      setSavedSkillRatings([]);
-      setSkillRatingsLoaded(false);
-    }
+    if (!isOpen || !application?.id || !canViewSkillRatings || parsedHabilidades.length === 0) return;
+
+    // #PERF-013: descartar la respuesta si ya cambiamos de candidato.
+    let ignorar = false;
+    fetchSkillRatings(application.id, () => ignorar);
+    return () => {
+      ignorar = true;
+    };
   }, [isOpen, application?.id, canViewSkillRatings]);
 
   // A11y (#59): cerrar con la tecla Escape mientras el modal está abierto.
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // #PERF-035: con el sub-modal «Agregar Documento» abierto, Escape cerraba
+      // la ficha entera y dejaba showAddDocModal en true, así que reaparecía
+      // sobre el siguiente candidato. Escape cancela primero el sub-modal.
+      if (showAddDocModal) {
+        setShowAddDocModal(false);
+        setNewDocName('');
+        setNewDocFile(null);
+        setDocError('');
+        return;
+      }
+      onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, showAddDocModal]);
 
-  const fetchSkillRatings = async (applicationId: number) => {
+  const fetchSkillRatings = async (applicationId: number, cancelado: () => boolean = () => false) => {
     try {
       const res = await fetch(`/api/evaluations/skill-ratings?applicationId=${applicationId}`);
       const data = await res.json();
+      if (cancelado()) return;
       if (data.success) {
         setSavedSkillRatings(data.data);
         // Precargar ratings en el estado editable
@@ -298,54 +386,133 @@ export default function CandidateProfileModal({
 
   const handleSaveSkillRatings = async () => {
     if (!application?.id) return;
+    setRatingsError('');
+    setRatingsSaved(false);
+
+    const ratings = Object.entries(skillRatings)
+      .filter(([, v]) => v.rating > 0)
+      .map(([skillName, v]) => ({
+        skillName,
+        rating: v.rating,
+        comment: v.comment || null
+      }));
+
+    if (ratings.length === 0) {
+      setRatingsError('Califica al menos una habilidad antes de guardar');
+      return;
+    }
+
     setSavingSkillRatings(true);
     try {
-      const ratings = Object.entries(skillRatings)
-        .filter(([, v]) => v.rating > 0)
-        .map(([skillName, v]) => ({
-          skillName,
-          rating: v.rating,
-          comment: v.comment || null
-        }));
-
-      if (ratings.length === 0) return;
-
       const res = await fetch('/api/evaluations/skill-ratings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ applicationId: application.id, ratings })
       });
-      const data = await res.json();
-      if (data.success) {
-        // Recargar para obtener datos actualizados
-        await fetchSkillRatings(application.id);
+      const data = await res.json().catch(() => ({}));
+
+      // #PERF-014/#PERF-015: antes un 403/500 no producía ningún aviso y el
+      // especialista daba por guardada una evaluación que no existía.
+      if (!res.ok || !data.success) {
+        setRatingsError(data.error || 'No se pudieron guardar las calificaciones');
+        return;
       }
+
+      // Recargar para obtener datos actualizados
+      await fetchSkillRatings(application.id);
+      setRatingsSaved(true);
     } catch (error) {
       console.error('Error guardando skill ratings:', error);
+      setRatingsError(error instanceof Error ? error.message : 'Error de conexión');
     } finally {
       setSavingSkillRatings(false);
     }
   };
 
   // FEAT-5: Función para cargar notas de evaluación
-  const fetchEvaluationNotes = async (applicationId: number) => {
+  const fetchEvaluationNotes = async (applicationId: number, cancelado: () => boolean = () => false) => {
     setLoadingNotes(true);
     try {
       const res = await fetch(`/api/evaluations/notes?applicationId=${applicationId}`);
       const data = await res.json();
+      if (cancelado()) return;
       if (data.success) {
         setEvaluationNotes(data.data);
       }
     } catch (error) {
       console.error('Error cargando notas:', error);
     } finally {
-      setLoadingNotes(false);
+      if (!cancelado()) setLoadingNotes(false);
+    }
+  };
+
+  // EVAL-020: editar, cambiar la visibilidad o borrar una nota propia (o
+  // cualquiera, si es admin). Antes la API existía pero sin UI, así que una
+  // nota publicada por error seguía visible para la empresa.
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [noteActionId, setNoteActionId] = useState<number | null>(null);
+  const [noteActionError, setNoteActionError] = useState<string | null>(null);
+
+  const actualizarNota = async (
+    note: EvaluationNote,
+    cambios: { content?: string; isPublic?: boolean }
+  ) => {
+    setNoteActionId(note.id);
+    setNoteActionError(null);
+    try {
+      const res = await fetch(`/api/evaluations/notes/${note.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cambios),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setNoteActionError(data.error || 'No se pudo actualizar la nota');
+        return;
+      }
+      setEvaluationNotes(prev =>
+        prev.map(n => (n.id === note.id ? { ...n, ...cambios } : n))
+      );
+      setEditingNoteId(null);
+    } catch {
+      setNoteActionError('Error de conexión');
+    } finally {
+      setNoteActionId(null);
+    }
+  };
+
+  const borrarNota = async (note: EvaluationNote) => {
+    if (!confirm('¿Borrar esta nota? No se puede deshacer.')) return;
+    setNoteActionId(note.id);
+    setNoteActionError(null);
+    try {
+      const res = await fetch(`/api/evaluations/notes/${note.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setNoteActionError(data.error || 'No se pudo borrar la nota');
+        return;
+      }
+      setEvaluationNotes(prev => prev.filter(n => n.id !== note.id));
+    } catch {
+      setNoteActionError('Error de conexión');
+    } finally {
+      setNoteActionId(null);
     }
   };
 
   // FEAT-5: Función para guardar nota de evaluación
   const handleSaveNote = async () => {
     if (!newNoteContent.trim() || !application?.id) return;
+    setNoteError('');
+
+    // #PERF-014: el selector de archivo no validaba tamaño en cliente, así que
+    // el adjunto grande sólo fallaba (en silencio) al llegar a /api/upload.
+    if (noteDocument && noteDocument.size > MAX_ADJUNTO_BYTES) {
+      setNoteError(`El adjunto supera el máximo de ${MAX_ADJUNTO_LABEL}`);
+      return;
+    }
+
     setSavingNote(true);
 
     try {
@@ -357,15 +524,22 @@ export default function CandidateProfileModal({
         const formData = new FormData();
         formData.append('file', noteDocument);
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!uploadRes.ok) {
-          const errorData = await uploadRes.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Error al subir documento');
+        const uploadData = await uploadRes.json().catch(() => ({}));
+
+        if (!uploadRes.ok || !uploadData.success) {
+          setNoteError(uploadData.error || 'Error al subir el documento adjunto');
+          return;
         }
-        const uploadData = await uploadRes.json();
-        if (uploadData.url) {
-          documentUrl = uploadData.url;
-          documentName = noteDocument.name;
+
+        // #PERF-015: si la subida responde 200 sin url, antes la nota se
+        // guardaba SIN adjunto y nadie se enteraba.
+        if (!uploadData.url) {
+          setNoteError('El documento no se pudo subir. Inténtalo de nuevo.');
+          return;
         }
+
+        documentUrl = uploadData.url;
+        documentName = noteDocument.name;
       }
 
       const res = await fetch('/api/evaluations/notes', {
@@ -380,16 +554,22 @@ export default function CandidateProfileModal({
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
-        setEvaluationNotes(prev => [data.data, ...prev]);
-        setNewNoteContent('');
-        setNoteDocument(null);
-        setIsNotePublic(false);
-        if (noteFileRef.current) noteFileRef.current.value = '';
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        setNoteError(data.error || 'No se pudo guardar la nota');
+        return;
       }
+
+      // Quien la acaba de escribir es su autor: puede editarla o retirarla.
+      setEvaluationNotes(prev => [{ ...data.data, canEdit: true }, ...prev]);
+      setNewNoteContent('');
+      setNoteDocument(null);
+      setIsNotePublic(false);
+      if (noteFileRef.current) noteFileRef.current.value = '';
     } catch (error) {
       console.error('Error guardando nota:', error);
+      setNoteError(error instanceof Error ? error.message : 'Error de conexión');
     } finally {
       setSavingNote(false);
     }
@@ -471,6 +651,15 @@ export default function CandidateProfileModal({
         documents: candidate!.documents || []
       };
 
+  // #PERF-011: la API guarda `new Date('2020-03-01')` = 2020-03-01T00:00:00Z.
+  // Sin `timeZone: 'UTC'`, en México (UTC-6) eso es el 29-feb a las 18:00 y la
+  // ficha mostraba «febrero de 2020» mientras el formulario de edición decía
+  // 2020-03-01. Afectaba a toda experiencia que empezara o terminara el día 1.
+  //
+  // OJO: formatDate se usa para la fecha de postulación, que es un instante
+  // real (createdAt), no una fecha guardada a medianoche UTC: ésa se muestra en
+  // hora local. Con UTC, una postulación hecha a las 19:00 en México salía con
+  // la fecha del día siguiente. Sólo formatExperienceDate va en UTC.
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-MX', {
       year: 'numeric',
@@ -482,7 +671,8 @@ export default function CandidateProfileModal({
   const formatExperienceDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-MX', {
       year: 'numeric',
-      month: 'short'
+      month: 'short',
+      timeZone: 'UTC'
     });
   };
 
@@ -520,13 +710,44 @@ export default function CandidateProfileModal({
     );
   };
 
+  /**
+   * Normaliza una entrada de educación venida de la BD (#PERF-006).
+   *
+   * El JSON se guardaba tal cual: un `null` dentro del array hacía que
+   * `edu.id` lanzara un TypeError y, como sólo admin tiene error boundary, la
+   * página entera de reclutador/especialista/empresa se caía. Un campo que no
+   * fuera string daba «Objects are not valid as a React child».
+   */
+  const normalizarEducacion = (entrada: unknown, index: number): Education | null => {
+    if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return null;
+
+    const e = entrada as Record<string, unknown>;
+    const texto = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : '');
+    const anio = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+    return {
+      id: typeof e.id === 'number' ? e.id : index + 1,
+      nivel: texto(e.nivel),
+      institucion: texto(e.institucion),
+      carrera: texto(e.carrera),
+      añoInicio: anio(e.añoInicio),
+      añoFin: anio(e.añoFin),
+      estatus: texto(e.estatus)
+    };
+  };
+
   // FEATURE: Parsear educación múltiple
   const parseEducacion = (): Education[] => {
     if (data.educacion) {
       try {
         const parsed = JSON.parse(data.educacion);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          const normalizadas = parsed
+            .map(normalizarEducacion)
+            .filter((e): e is Education => e !== null);
+          // #PERF-007: si se guardó un array (aunque esté vacío) manda ese
+          // array; el fallback legacy sólo aplica cuando nunca se guardó nada.
+          return normalizadas;
         }
       } catch {
         // Si falla el parse, continuamos con fallback
@@ -580,13 +801,16 @@ export default function CandidateProfileModal({
     return labels[sexo || ''] || sexo || 'No especificado';
   };
 
+  // #PERF-011: la fecha de nacimiento se guarda a medianoche UTC; comparándola
+  // con los getters locales la edad cambiaba un día antes de tiempo.
   const calculateAge = (fechaNacimiento?: string | null) => {
     if (!fechaNacimiento) return null;
     const birthDate = new Date(fechaNacimiento);
+    if (Number.isNaN(birthDate.getTime())) return null;
     const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+    const monthDiff = today.getUTCMonth() - birthDate.getUTCMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birthDate.getUTCDate())) {
       age--;
     }
     return age;
@@ -623,6 +847,10 @@ export default function CandidateProfileModal({
       setDocError('Selecciona un archivo');
       return;
     }
+    if (newDocFile.size > MAX_ADJUNTO_BYTES) {
+      setDocError(`El archivo supera el máximo de ${MAX_ADJUNTO_LABEL}`);
+      return;
+    }
 
     try {
       setSavingDoc(true);
@@ -650,13 +878,20 @@ export default function CandidateProfileModal({
       }
 
       // 2. Crear documento en el candidato
-      const docResponse = await fetch(`/api/admin/candidates/${candidateId}/documents`, {
+      //
+      // #PERF-016: antes se llamaba a /api/admin/candidates/[id]/documents,
+      // reservada a admin: para reclutador y especialista fallaba siempre y el
+      // archivo ya subido quedaba huérfano. Esta ruta comprueba la asignación.
+      const docResponse = await fetch(`/api/evaluations/candidates/${candidateId}/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newDocName.trim(),
           fileUrl: uploadData.url,
-          fileType: newDocFile.type.split('/')[1] || 'file'
+          // #PERF-032: con el subtipo MIME, un .docx guardaba
+          // 'vnd.openxmlformats-officedocument.wordprocessingml.document' y la
+          // tarjeta lo pintaba entero en mayúsculas.
+          fileType: newDocFile.name.split('.').pop()?.toLowerCase() || 'file'
         })
       });
       if (!docResponse.ok) {
@@ -686,13 +921,23 @@ export default function CandidateProfileModal({
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 fade-in-fast"
-      onClick={onClose}
+      // #PERF-037: con onClick, arrastrar una selección de texto desde dentro
+      // del diálogo y soltar fuera despachaba `click` sobre el overlay (ancestro
+      // común) y cerraba el modal, borrando el borrador de nota. onMouseDown +
+      // `e.target === e.currentTarget` sólo cierra al pulsar el fondo.
+      //
+      // #PERF-017: además ya no hace falta stopPropagation en el diálogo, que
+      // era lo que dejaba desprotegido al sub-modal «Agregar Documento» (hijo
+      // del overlay pero hermano del diálogo): cualquier clic dentro de él
+      // burbujeaba hasta aquí y cerraba toda la ficha.
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Perfil de ${data.name}`}
-        onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
@@ -824,12 +1069,7 @@ export default function CandidateProfileModal({
                         <p className="text-sm text-gray-600">{edu.institucion || 'Sin institución'}</p>
                       </div>
                       {edu.estatus && (
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          edu.estatus === 'Titulado' ? 'bg-green-100 text-green-800' :
-                          edu.estatus === 'Terminado' ? 'bg-blue-100 text-blue-800' :
-                          edu.estatus === 'Cursando' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${COLOR_ESTATUS_EDUCACION[edu.estatus] || 'bg-gray-100 text-gray-800'}`}>
                           {edu.estatus}
                         </span>
                       )}
@@ -1049,7 +1289,7 @@ export default function CandidateProfileModal({
                 })}
 
                 {canEditSkillRatings && (
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
                     <button
                       type="button"
                       onClick={handleSaveSkillRatings}
@@ -1068,6 +1308,13 @@ export default function CandidateProfileModal({
                         </>
                       )}
                     </button>
+                    {/* #PERF-014/#PERF-015: confirmación y error visibles */}
+                    {ratingsError && (
+                      <p role="alert" className="text-sm text-red-600">{ratingsError}</p>
+                    )}
+                    {ratingsSaved && !ratingsError && (
+                      <p role="status" className="text-sm text-green-600">Calificaciones guardadas</p>
+                    )}
                   </div>
                 )}
 
@@ -1161,7 +1408,7 @@ export default function CandidateProfileModal({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
                         {doc.fileType && (
-                          <p className="text-xs text-gray-500 uppercase">{doc.fileType}</p>
+                          <p className="text-xs text-gray-500 uppercase truncate">{doc.fileType}</p>
                         )}
                       </div>
                       <Download className="w-4 h-4 text-gray-400 group-hover:text-[#2b5d62] flex-shrink-0" />
@@ -1238,7 +1485,68 @@ export default function CandidateProfileModal({
                           })}
                         </span>
                       </div>
-                      <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingNoteContent}
+                            onChange={(e) => setEditingNoteContent(e.target.value)}
+                            rows={3}
+                            maxLength={5000}
+                            aria-label="Editar nota"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => actualizarNota(note, { content: editingNoteContent.trim() })}
+                              disabled={noteActionId === note.id || !editingNoteContent.trim()}
+                              className="text-xs px-3 py-1 rounded bg-[#2b5d62] text-white disabled:opacity-50"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoteId(null)}
+                              className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-600"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
+                      )}
+                      {note.canEdit && userRole !== 'company' && editingNoteId !== note.id && (
+                        <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => actualizarNota(note, { isPublic: !note.isPublic })}
+                            disabled={noteActionId === note.id}
+                            className="text-[#2b5d62] hover:underline disabled:opacity-50"
+                          >
+                            {note.isPublic ? 'Ocultar a la empresa' : 'Hacer visible a la empresa'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingNoteId(note.id);
+                              setEditingNoteContent(note.content);
+                            }}
+                            disabled={noteActionId === note.id}
+                            className="text-gray-600 hover:underline disabled:opacity-50"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => borrarNota(note)}
+                            disabled={noteActionId === note.id}
+                            className="text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            Borrar
+                          </button>
+                        </div>
+                      )}
                       {note.documentUrl && (
                         <a
                           href={note.documentUrl}
@@ -1256,10 +1564,20 @@ export default function CandidateProfileModal({
               ) : (
                 <p className="text-gray-500 text-sm mb-4">No hay notas de evaluación aún.</p>
               )}
+              {noteActionError && (
+                <p role="alert" className="text-sm text-red-600 mb-3">{noteActionError}</p>
+              )}
 
               {/* Formulario para nueva nota (solo recruiter/specialist) */}
               {canAddEvaluationNotes && (
                 <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  {/* #PERF-014/#PERF-015: antes cualquier fallo sólo iba a la
+                      consola y el spinner desaparecía sin decir nada. */}
+                  {noteError && (
+                    <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                      {noteError}
+                    </p>
+                  )}
                   <textarea
                     value={newNoteContent}
                     onChange={(e) => setNewNoteContent(e.target.value)}
@@ -1283,7 +1601,7 @@ export default function CandidateProfileModal({
                     <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-700 flex-1">
                       <Upload className="w-4 h-4" />
                       <span className="truncate">
-                        {noteDocument ? noteDocument.name : 'Adjuntar documento (opcional)'}
+                        {noteDocument ? noteDocument.name : `Adjuntar documento (opcional, máx. ${MAX_ADJUNTO_LABEL})`}
                       </span>
                       <input
                         type="file"
@@ -1328,8 +1646,13 @@ export default function CandidateProfileModal({
             </div>
           )}
 
-          {/* Admin Notes */}
-          {data.adminNotas && (
+          {/* Admin Notes.
+              PRIVACIDAD (#50/#51), defensa en profundidad: `adminNotas`
+              (Candidate.notas) y `notes` (Application.notes) son material
+              interno de INAKAT. Las rutas de empresa ya no los envían, pero
+              este modal los pintaba sin mirar el rol, así que bastaba con que
+              una ruta volviera a incluirlos para reabrir la fuga. */}
+          {puedeVerNotasInternas && data.adminNotas && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-gray-500" />
@@ -1342,7 +1665,7 @@ export default function CandidateProfileModal({
           )}
 
           {/* Application Notes */}
-          {data.notes && (
+          {puedeVerNotasInternas && data.notes && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-blue-500" />
@@ -1396,8 +1719,14 @@ export default function CandidateProfileModal({
 
       {/* Modal de Agregar Documento */}
       {showAddDocModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg w-full max-w-md">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+          // #PERF-017: este sub-modal es HIJO del overlay externo; sin esto,
+          // cualquier interacción dentro (nombre, selector de archivo, Guardar)
+          // llegaba al overlay y cerraba toda la ficha.
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div role="dialog" aria-modal="true" aria-label="Agregar documento" className="bg-white rounded-lg w-full max-w-md">
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-lg font-bold">Agregar Documento</h3>
               <button
@@ -1445,7 +1774,7 @@ export default function CandidateProfileModal({
                   className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#2b5d62] file:text-white hover:file:bg-[#1e4347]"
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 />
-                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. 5MB)</p>
+                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. {MAX_ADJUNTO_LABEL})</p>
               </div>
 
               {newDocFile && (

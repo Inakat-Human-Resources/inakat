@@ -73,10 +73,14 @@ interface SentApplication {
   id: number;
   candidateName: string;
   candidateEmail: string;
+  candidatePhone?: string | null;
+  cvUrl?: string | null;
+  coverLetter?: string | null;
   status: string;
   jobId: number;
   jobTitle: string;
   company: string;
+  createdAt?: string;
   updatedAt: string;
   candidateProfile?: any;
   jobLatitude?: number | null;
@@ -88,6 +92,8 @@ interface Stats {
   sentToSpecialist: number;
   evaluating: number;
   sentToCompany: number;
+  companyInterested: number;
+  interviewed: number;
   hired: number;
   rejected: number;
 }
@@ -110,6 +116,13 @@ export default function RecruiterDashboard() {
       id: app.id,
       candidateName: app.candidateName,
       candidateEmail: app.candidateEmail,
+      // El CV, el teléfono y la carta que el candidato subió AL POSTULARSE:
+      // sin ellos el modal no mostraba "Ver CV" para quien aplicó con CV
+      // propio pero no lo tiene en su perfil del banco.
+      candidatePhone: app.candidatePhone ?? null,
+      cvUrl: app.cvUrl ?? null,
+      coverLetter: app.coverLetter ?? null,
+      createdAt: app.createdAt,
       status: app.status,
       candidateProfile: app.candidateProfile || null,
     });
@@ -235,10 +248,12 @@ export default function RecruiterDashboard() {
       sent_to_specialist: { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: <Clock size={14} />, label: 'Enviado a Especialista' },
       evaluating: { bg: 'bg-blue-100', text: 'text-blue-800', icon: <Users size={14} />, label: 'En Evaluación' },
       sent_to_company: { bg: 'bg-purple-100', text: 'text-purple-800', icon: <Send size={14} />, label: 'Enviado a Empresa' },
-      hired: { bg: 'bg-green-100', text: 'text-green-800', icon: <UserCheck size={14} />, label: 'Contratado' },
+      // Estados que escribe la EMPRESA: sin ellos el candidato salía de la
+      // pestaña "Enviados" justo cuando más interesa seguirlo.
+      company_interested: { bg: 'bg-indigo-100', text: 'text-indigo-800', icon: <UserCheck size={14} />, label: 'Le interesa a la Empresa' },
+      interviewed: { bg: 'bg-cyan-100', text: 'text-cyan-800', icon: <Users size={14} />, label: 'Entrevistado' },
       accepted: { bg: 'bg-green-100', text: 'text-green-800', icon: <UserCheck size={14} />, label: 'Contratado' },
-      rejected: { bg: 'bg-red-100', text: 'text-red-800', icon: <XCircle size={14} />, label: 'Rechazado' },
-      company_rejected: { bg: 'bg-red-100', text: 'text-red-800', icon: <XCircle size={14} />, label: 'Rechazado' }
+      rejected: { bg: 'bg-red-100', text: 'text-red-800', icon: <XCircle size={14} />, label: 'Rechazado' }
     };
     const config = configs[status] || { bg: 'bg-gray-100', text: 'text-gray-800', icon: null, label: status };
 
@@ -418,6 +433,14 @@ export default function RecruiterDashboard() {
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-purple-700">{stats.sentToCompany}</p>
                   <p className="text-xs text-purple-600">En Empresa</p>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-indigo-700">{stats.companyInterested}</p>
+                  <p className="text-xs text-indigo-600">Le Interesan</p>
+                </div>
+                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-cyan-700">{stats.interviewed}</p>
+                  <p className="text-xs text-cyan-600">Entrevistados</p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-green-700">{stats.hired}</p>

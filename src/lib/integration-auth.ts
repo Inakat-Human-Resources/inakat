@@ -80,7 +80,14 @@ export async function requireCompanyUser(
 
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, nombre: true, role: true, isActive: true }
+    select: {
+      id: true,
+      email: true,
+      nombre: true,
+      role: true,
+      isActive: true,
+      companyRequest: { select: { status: true } }
+    }
   });
 
   if (!user || !user.isActive) {
@@ -90,6 +97,18 @@ export async function requireCompanyUser(
   if (user.role !== 'company') {
     return {
       error: 'Acceso denegado. Solo empresas pueden gestionar integraciones.',
+      status: 403
+    };
+  }
+
+  // El registro de empresa es PÚBLICO y crea el usuario 'company' activo antes
+  // de que un admin lo revise. Dar de alta API keys o webhooks salientes desde
+  // una cuenta sin aprobar convertía el registro anónimo en un emisor de
+  // tráfico saliente de INAKAT. Si la cuenta la creó un admin directamente no
+  // hay CompanyRequest asociada y no se exige nada.
+  if (user.companyRequest && user.companyRequest.status !== 'approved') {
+    return {
+      error: 'Tu empresa aún no está aprobada. Las integraciones se habilitan tras la aprobación.',
       status: 403
     };
   }
@@ -133,6 +152,13 @@ function extractToken(request: Request): string | null {
 /**
  * Autentica un request externo por header X-Api-Key: hashea la key recibida,
  * la busca en IntegrationApiKey (activa) y actualiza lastUsedAt.
+ *
+ * AUTORIZACIÓN: además de `apiKey.isActive` se comprueba el estado del USUARIO
+ * dueño. El admin "elimina" empresas con soft delete (isActive=false), lo que
+ * corta la sesión web pero dejaba viva la API key —que no caduca— devolviendo
+ * nombre, email, teléfono, CV y evaluaciones de todos los candidatos aceptados.
+ * Como la empresa desactivada ya no puede entrar a revocar su propia key, el
+ * acceso quedaba abierto indefinidamente.
  */
 export async function requireApiKey(
   request: Request
@@ -152,10 +178,22 @@ export async function requireApiKey(
 
   const apiKey = await prisma.integrationApiKey.findUnique({
     where: { keyHash },
-    select: { id: true, userId: true, name: true, isActive: true }
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      isActive: true,
+      user: { select: { isActive: true, role: true } }
+    }
   });
 
   if (!apiKey || !apiKey.isActive) {
+    return { error: 'API key inválida', status: 401 };
+  }
+
+  // La key hereda el estado de su dueño: empresa desactivada o que dejó de ser
+  // 'company' ⇒ la key deja de servir, aunque siga marcada como activa.
+  if (!apiKey.user || !apiKey.user.isActive || apiKey.user.role !== 'company') {
     return { error: 'API key inválida', status: 401 };
   }
 

@@ -39,7 +39,12 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400'
+          // El catálogo lo edita el admin desde /admin/specialties y esa
+          // mutación no invalida nada. Con 10 min de caché y 1 día de SWR, el
+          // admin veía su propio cambio con horas de retraso y las empresas
+          // podían elegir una especialidad ya desactivada, que POST /api/jobs
+          // rechaza contra BD con un 400 desconcertante.
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60'
         }
       }
     );

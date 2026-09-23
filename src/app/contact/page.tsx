@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, FormEvent } from 'react';
+import Link from 'next/link';
 import { useInView } from '@/hooks/useInView';
 import { Mail, Phone, MessageCircle, Instagram } from 'lucide-react';
 import Footer from '@/components/commons/Footer';
@@ -60,7 +61,17 @@ export default function ContactPage() {
         });
         setFormData({ nombre: '', email: '', telefono: '', mensaje: '' });
       } else {
-        throw new Error(data.error || 'Error al enviar el mensaje');
+        // La API devuelve `errors: [{field, message}]` con el detalle. Mostrar
+        // sólo `data.error` dejaba al visitante con un «Datos inválidos» que no
+        // decía qué campo fallaba: el caso típico era el teléfono escrito tal
+        // como lo sugería el placeholder.
+        const detalle = Array.isArray(data.errors)
+          ? data.errors
+              .map((e: { message?: string }) => e?.message)
+              .filter(Boolean)
+              .join(' ')
+          : '';
+        throw new Error(detalle || data.error || 'Error al enviar el mensaje');
       }
     } catch (error) {
       setSubmitStatus({
@@ -272,7 +283,8 @@ export default function ContactPage() {
                     name="telefono"
                     value={formData.telefono}
                     onChange={handleChange}
-                    placeholder="+52 000 000 0000"
+                    placeholder="10 dígitos, ej. 8112345678"
+                    maxLength={20}
                     className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
                   />
                 </div>
@@ -296,9 +308,24 @@ export default function ContactPage() {
                   />
                 </div>
 
+                {/* El aviso declaraba una aceptación sin poner los documentos
+                    a disposición: ahora son enlaces reales. */}
                 <p className="text-xs text-text-black/50">
-                  *Al dar click en el botón, aceptas nuestros términos y
-                  condiciones y política de privacidad.
+                  *Al dar click en el botón, aceptas nuestros{' '}
+                  <Link
+                    href="/terms"
+                    className="underline hover:text-button-dark-green"
+                  >
+                    términos y condiciones
+                  </Link>{' '}
+                  y{' '}
+                  <Link
+                    href="/privacy"
+                    className="underline hover:text-button-dark-green"
+                  >
+                    política de privacidad
+                  </Link>
+                  .
                 </p>
 
                 <button

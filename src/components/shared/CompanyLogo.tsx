@@ -2,6 +2,7 @@
 
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import { Building2 } from 'lucide-react';
 
@@ -27,9 +28,16 @@ export default function CompanyLogo({
   className = '',
 }: CompanyLogoProps) {
   const { container, icon } = sizeMap[size];
+  // `logoUrl` se persiste tal cual llega del cliente y next.config.ts sólo
+  // autoriza *.public.blob.vercel-storage.com en images.remotePatterns: con
+  // cualquier otro host (o un blob ya borrado) el optimizador responde 400 y
+  // sin `onError` se quedaba el icono de imagen rota del navegador en vez del
+  // fallback de edificio que el componente promete.
+  // Se guarda la URL que falló, no un booleano: si el componente recibe después
+  // otro logo (misma instancia, otra empresa) hay que volver a intentarlo.
+  const [urlFallida, setUrlFallida] = useState<string | null>(null);
 
-  // Si hay logo válido, mostrar imagen
-  if (logoUrl) {
+  if (logoUrl && urlFallida !== logoUrl) {
     return (
       <div
         className={`${container} relative rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 ${className}`}
@@ -40,6 +48,7 @@ export default function CompanyLogo({
           fill
           className="object-cover"
           sizes={`(max-width: 768px) ${icon * 2}px, ${icon * 2}px`}
+          onError={() => setUrlFallida(logoUrl)}
         />
       </div>
     );

@@ -7,16 +7,38 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireCompanyUser } from '@/lib/integration-auth';
+import {
+  motivoUrlWebhookInvalida,
+  motivoUrlWebhookInvalidaConDns
+} from '@/lib/worky2-webhook';
+import { applyRateLimit, type RateLimitConfig } from '@/lib/rate-limit';
+
+/** Alta/baja de integraciones: 20 por hora por IP. No es un endpoint de uso continuo. */
+const INTEGRATION_MANAGE_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 20,
+  windowSeconds: 60 * 60
+};
+
+/**
+ * Tope de webhooks activos por empresa.
+ *
+ * Cada aceptación de candidato dispara un POST por webhook activo EN PARALELO:
+ * sin tope, una cuenta podía registrar miles de URLs de una víctima y convertir
+ * a INAKAT en el amplificador que le manda el tráfico.
+ */
+const MAX_WEBHOOKS_ACTIVOS = 5;
 
 const createWebhookSchema = z.object({
   url: z
     .string()
     .trim()
-    .url('URL inválida')
-    .refine(
-      (value) => value.startsWith('https://') || value.startsWith('http://'),
-      'La URL debe ser http(s)'
-    ),
+    .max(2048, 'La URL no puede exceder 2048 caracteres')
+    // Las reglas anti-SSRF viven en worky2-webhook.ts porque el despacho las
+    // vuelve a aplicar justo antes de enviar.
+    .superRefine((value, ctx) => {
+      const motivo = motivoUrlWebhookInvalida(value);
+      if (motivo) ctx.addIssue({ code: 'custom', message: motivo });
+    }),
   secret: z
     .string()
     .trim()
@@ -28,8 +50,15 @@ const deleteWebhookSchema = z.object({
   id: z.coerce.number().int().positive('id inválido')
 });
 
-function maskSecret(secret: string): string {
-  return `${secret.slice(0, 4)}${'*'.repeat(Math.max(secret.length - 4, 4))}`;
+/**
+ * Máscara del secreto compartido.
+ *
+ * Constante a propósito: la versión anterior devolvía los 4 primeros caracteres
+ * REALES y tantos asteriscos como caracteres quedaban, es decir, regalaba
+ * prefijo y longitud exacta del secreto HMAC a cualquiera con la sesión.
+ */
+function maskSecret(): string {
+  return '••••••••';
 }
 
 /**
@@ -39,6 +68,9 @@ function maskSecret(secret: string): string {
  */
 export async function POST(request: Request) {
   try {
+    const blocked = applyRateLimit(request, 'integration-manage', INTEGRATION_MANAGE_RATE_LIMIT);
+    if (blocked) return blocked;
+
     const auth = await requireCompanyUser(request);
     if ('error' in auth) {
       return NextResponse.json(
@@ -53,6 +85,27 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: parsed.error.issues[0]?.message || 'Datos inválidos' },
         { status: 400 }
+      );
+    }
+
+    // Resolución DNS: un nombre público puede apuntar a 127.0.0.1 o a la red
+    // interna. Se hace aquí (con red) y no en el schema, que es síncrono.
+    const motivoDns = await motivoUrlWebhookInvalidaConDns(parsed.data.url);
+    if (motivoDns) {
+      return NextResponse.json({ success: false, error: motivoDns }, { status: 400 });
+    }
+
+    const activos = await prisma.integrationWebhook.count({
+      where: { userId: auth.user.id, isActive: true }
+    });
+
+    if (activos >= MAX_WEBHOOKS_ACTIVOS) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Has alcanzado el máximo de ${MAX_WEBHOOKS_ACTIVOS} webhooks activos. Desactiva alguno antes de crear otro.`
+        },
+        { status: 409 }
       );
     }
 
@@ -86,6 +139,14 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
+    // DB-022: el índice único parcial IntegrationWebhook_userId_url_active_key
+    // convierte la carrera findFirst + create en un P2002: es un duplicado, no un 500.
+    if ((error as { code?: string })?.code === 'P2002') {
+      return NextResponse.json(
+        { success: false, error: 'Ya existe un webhook activo con esa URL' },
+        { status: 409 }
+      );
+    }
     console.error('[Integration] Error registrando webhook:', error);
     return NextResponse.json(
       { success: false, error: 'Error al registrar el webhook' },
@@ -111,10 +172,11 @@ export async function GET(request: Request) {
     const webhooks = await prisma.integrationWebhook.findMany({
       where: { userId: auth.user.id },
       orderBy: { createdAt: 'desc' },
+      // El secreto NO se selecciona: no hay motivo para sacarlo de la base en
+      // un listado, y la máscara ya no depende de su contenido.
       select: {
         id: true,
         url: true,
-        secret: true,
         isActive: true,
         createdAt: true
       }
@@ -125,7 +187,7 @@ export async function GET(request: Request) {
       data: webhooks.map((webhook) => ({
         id: webhook.id,
         url: webhook.url,
-        maskedSecret: maskSecret(webhook.secret),
+        maskedSecret: maskSecret(),
         isActive: webhook.isActive,
         createdAt: webhook.createdAt
       }))
@@ -145,6 +207,9 @@ export async function GET(request: Request) {
  */
 export async function DELETE(request: Request) {
   try {
+    const blocked = applyRateLimit(request, 'integration-manage', INTEGRATION_MANAGE_RATE_LIMIT);
+    if (blocked) return blocked;
+
     const auth = await requireCompanyUser(request);
     if ('error' in auth) {
       return NextResponse.json(

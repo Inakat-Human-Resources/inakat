@@ -77,6 +77,63 @@ type ApplicationWithRelations = NonNullable<
   >
 >;
 
+/** Campos del perfil Candidate que enriquecen el contrato. */
+const candidateSelect = {
+  email: true,
+  nombre: true,
+  apellidoPaterno: true,
+  apellidoMaterno: true,
+  telefono: true,
+  cvUrl: true,
+  universidad: true,
+  carrera: true,
+  añosExperiencia: true
+} as const;
+
+type PerfilCandidato = {
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+  telefono: string | null;
+  cvUrl: string | null;
+  universidad: string | null;
+  carrera: string | null;
+  añosExperiencia: number | null;
+};
+
+/**
+ * Resuelve los perfiles Candidate de un lote de aplicaciones en UNA consulta y
+ * los devuelve indexados por email en minúsculas.
+ *
+ * Antes se hacía un `findFirst` con `mode: 'insensitive'` (ILIKE, que no usa el
+ * índice de email) por cada aplicación dentro de un `Promise.all`: con 300
+ * contrataciones eran 300 consultas simultáneas contra un pool que en
+ * serverless es de 1-5 conexiones (P2024, «Timed out fetching a new connection
+ * from the connection pool»). El dashboard de empresa ya resolvía esto con una
+ * sola consulta batch; aquí se reutiliza el mismo patrón.
+ */
+async function cargarPerfilesPorEmail(
+  emails: string[]
+): Promise<Map<string, PerfilCandidato>> {
+  const unicos = [...new Set(emails.map((e) => e.toLowerCase()))];
+  const mapa = new Map<string, PerfilCandidato>();
+  if (unicos.length === 0) return mapa;
+
+  const candidates = await prisma.candidate.findMany({
+    where: { email: { in: unicos, mode: 'insensitive' } },
+    select: candidateSelect
+  });
+
+  for (const candidate of candidates) {
+    const clave = candidate.email.toLowerCase();
+    // Si hubiera duplicados por caja, gana el primero (mismo criterio que el
+    // findFirst anterior).
+    if (!mapa.has(clave)) mapa.set(clave, candidate);
+  }
+
+  return mapa;
+}
+
 /**
  * Carga una Application por id y la mapea al contrato. Devuelve null si no
  * existe. No filtra por status: el caller decide (el webhook dispara justo
@@ -92,52 +149,79 @@ export async function loadCandidatoInakat(
 
   if (!application) return null;
 
-  const candidato = await buildCandidato(application);
+  const perfiles = await cargarPerfilesPorEmail([application.candidateEmail]);
+  const candidato = buildCandidato(
+    application,
+    perfiles.get(application.candidateEmail.toLowerCase()) ?? null
+  );
   return { candidato, companyUserId: application.job.userId };
+}
+
+export interface OpcionesCandidatosAceptados {
+  /** Página 1-based. */
+  page?: number;
+  /** Tamaño de página (el caller ya lo capa). */
+  limit?: number;
+  /** Sólo los revisados a partir de esta fecha. */
+  since?: Date | null;
+}
+
+export interface CandidatosAceptadosPage {
+  candidatos: CandidatoInakat[];
+  total: number;
 }
 
 /**
  * Lista los candidatos aceptados/contratados de TODAS las vacantes de la
  * empresa dueña de la API key, mapeados al contrato.
+ *
+ * Pagina siempre: la versión anterior traía el histórico completo sin `take`,
+ * así que la respuesta crecía sin límite con cada contratación.
  */
 export async function loadCandidatosAceptados(
-  companyUserId: number
-): Promise<CandidatoInakat[]> {
-  const applications = await prisma.application.findMany({
-    where: {
-      status: { in: ACCEPTED_APPLICATION_STATUSES },
-      job: { userId: companyUserId }
-    },
-    include: applicationInclude,
-    orderBy: { reviewedAt: 'desc' }
-  });
+  companyUserId: number,
+  opciones: OpcionesCandidatosAceptados = {}
+): Promise<CandidatosAceptadosPage> {
+  const page = Math.max(1, Math.trunc(opciones.page ?? 1));
+  const limit = Math.min(Math.max(1, Math.trunc(opciones.limit ?? 50)), 100);
 
-  return Promise.all(applications.map((app) => buildCandidato(app)));
+  const where = {
+    status: { in: ACCEPTED_APPLICATION_STATUSES },
+    job: { userId: companyUserId },
+    ...(opciones.since ? { reviewedAt: { gte: opciones.since } } : {})
+  };
+
+  const [applications, total] = await Promise.all([
+    prisma.application.findMany({
+      where,
+      include: applicationInclude,
+      orderBy: { reviewedAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit
+    }),
+    prisma.application.count({ where })
+  ]);
+
+  const perfiles = await cargarPerfilesPorEmail(
+    applications.map((app) => app.candidateEmail)
+  );
+
+  return {
+    candidatos: applications.map((app) =>
+      buildCandidato(app, perfiles.get(app.candidateEmail.toLowerCase()) ?? null)
+    ),
+    total
+  };
 }
 
 // =============================================
 // INTERNOS
 // =============================================
 
-async function buildCandidato(
-  application: ApplicationWithRelations
-): Promise<CandidatoInakat> {
-  // Perfil enriquecido del candidato (mismo patrón que
-  // GET /api/company/applications/[id]: match por email insensitive)
-  const candidate = await prisma.candidate.findFirst({
-    where: { email: { equals: application.candidateEmail, mode: 'insensitive' } },
-    select: {
-      nombre: true,
-      apellidoPaterno: true,
-      apellidoMaterno: true,
-      telefono: true,
-      cvUrl: true,
-      universidad: true,
-      carrera: true,
-      añosExperiencia: true
-    }
-  });
-
+function buildCandidato(
+  application: ApplicationWithRelations,
+  candidate: PerfilCandidato | null
+): CandidatoInakat {
   // Nombre: preferir el perfil Candidate (ya separado); si no existe,
   // separar candidateName de la Application (best effort).
   let nombre: string;

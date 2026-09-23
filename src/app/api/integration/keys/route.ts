@@ -11,6 +11,16 @@ import {
   maskApiKey,
   requireCompanyUser
 } from '@/lib/integration-auth';
+import { applyRateLimit, type RateLimitConfig } from '@/lib/rate-limit';
+
+/** Alta/baja de integraciones: 20 por hora por IP. */
+const INTEGRATION_MANAGE_RATE_LIMIT: RateLimitConfig = {
+  maxRequests: 20,
+  windowSeconds: 60 * 60
+};
+
+/** Tope de API keys activas por empresa (rotación normal: 2-3 a la vez). */
+const MAX_KEYS_ACTIVAS = 10;
 
 const createKeySchema = z.object({
   name: z
@@ -31,6 +41,9 @@ const deleteKeySchema = z.object({
  */
 export async function POST(request: Request) {
   try {
+    const blocked = applyRateLimit(request, 'integration-manage', INTEGRATION_MANAGE_RATE_LIMIT);
+    if (blocked) return blocked;
+
     const auth = await requireCompanyUser(request);
     if ('error' in auth) {
       return NextResponse.json(
@@ -45,6 +58,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: parsed.error.issues[0]?.message || 'Datos inválidos' },
         { status: 400 }
+      );
+    }
+
+    const activas = await prisma.integrationApiKey.count({
+      where: { userId: auth.user.id, isActive: true }
+    });
+
+    if (activas >= MAX_KEYS_ACTIVAS) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Has alcanzado el máximo de ${MAX_KEYS_ACTIVAS} API keys activas. Revoca alguna antes de crear otra.`
+        },
+        { status: 409 }
       );
     }
 
@@ -127,6 +154,9 @@ export async function GET(request: Request) {
  */
 export async function DELETE(request: Request) {
   try {
+    const blocked = applyRateLimit(request, 'integration-manage', INTEGRATION_MANAGE_RATE_LIMIT);
+    if (blocked) return blocked;
+
     const auth = await requireCompanyUser(request);
     if ('error' in auth) {
       return NextResponse.json(

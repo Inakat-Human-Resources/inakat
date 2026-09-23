@@ -39,6 +39,42 @@ import DistanceBadge from '@/components/shared/DistanceBadge';
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_specialist';
 
+/**
+ * Transiciones que la API acepta desde cada estado (espejo de
+ * allowedTransitions en src/app/api/specialist/dashboard/route.ts).
+ * La pestaña "Descartados" ofrecía un botón "Enviar a empresa" que la API
+ * rechazaba siempre con un 400: desde 'discarded' sólo se puede reactivar.
+ */
+const SPECIALIST_TRANSITIONS: Record<string, string[]> = {
+  sent_to_specialist: ['evaluating', 'discarded'],
+  evaluating: ['sent_to_company', 'discarded', 'sent_to_specialist'],
+  discarded: ['evaluating', 'sent_to_specialist']
+};
+
+const canMove = (from: string, to: string): boolean =>
+  (SPECIALIST_TRANSITIONS[from] || []).includes(to);
+
+/**
+ * Estados en los que la postulación ya salió hacia la empresa. El especialista
+ * los ve todos en "Enviadas" (sólo lectura): antes desaparecían de su panel en
+ * cuanto la empresa actuaba y nunca conocía el resultado de su evaluación.
+ */
+const SENT_STATUSES = [
+  'sent_to_company',
+  'company_interested',
+  'interviewed',
+  'accepted',
+  'rejected'
+];
+
+const SENT_STATUS_LABELS: Record<string, string> = {
+  sent_to_company: 'Enviado',
+  company_interested: 'Le interesa a la empresa',
+  interviewed: 'Entrevistado',
+  accepted: 'Contratado',
+  rejected: 'Rechazado'
+};
+
 type TabType = 'pending' | 'evaluating' | 'sent' | 'discarded';
 
 interface CandidateProfile {
@@ -123,7 +159,12 @@ export default function SpecialistJobCandidates() {
   const [assignment, setAssignment] = useState<AssignmentData | null>(null);
   const [specialist, setSpecialist] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Dos errores distintos: el de CARGA sustituye la página y el de una ACCIÓN
+  // se muestra como alerta descartable sin tirar cabecera, pestañas ni scroll.
+  // Antes compartían estado, así que cualquier 400 de un botón borraba la
+  // página entera y la alerta inline con su '×' era código inalcanzable.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Pestaña activa
@@ -180,12 +221,17 @@ export default function SpecialistJobCandidates() {
     }
   };
 
-  const fetchJobData = async () => {
+  // `silencioso`: recarga sin pasar por el spinner de página completa (que
+  // desmontaría el modal abierto), p. ej. tras agregar un documento.
+  const fetchJobData = async (silencioso = false) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      if (!silencioso) setIsLoading(true);
+      setLoadError(null);
 
-      const response = await fetch('/api/specialist/dashboard');
+      // ?jobId= para traer SOLO esta vacante: sin el filtro el endpoint
+      // devolvía todas las asignaciones del especialista con todas sus
+      // postulaciones y el perfil completo de cada candidato.
+      const response = await fetch(`/api/specialist/dashboard?jobId=${encodeURIComponent(jobId)}`);
 
       if (response.status === 401) {
         router.push('/login?redirect=/specialist/dashboard');
@@ -193,7 +239,7 @@ export default function SpecialistJobCandidates() {
       }
 
       if (response.status === 403) {
-        setError('No tienes permisos de especialista');
+        setLoadError('No tienes permisos de especialista');
         return;
       }
 
@@ -209,14 +255,20 @@ export default function SpecialistJobCandidates() {
 
         if (foundAssignment) {
           setAssignment(foundAssignment);
+          // PERF-016: refrescar también el candidato abierto en el modal.
+          setSelectedApplication((prev) =>
+            prev
+              ? (foundAssignment as AssignmentData).applications.find((a) => a.id === prev.id) ?? prev
+              : prev
+          );
         } else {
-          setError('No tienes acceso a esta vacante o no existe');
+          setLoadError('No tienes acceso a esta vacante o no existe');
         }
       } else {
-        setError(data.error);
+        setLoadError(data.error);
       }
     } catch (err) {
-      setError('Error de conexión');
+      setLoadError('Error de conexión');
     } finally {
       setIsLoading(false);
     }
@@ -230,7 +282,7 @@ export default function SpecialistJobCandidates() {
       case 'evaluating':
         return applications.filter(app => app.status === 'evaluating');
       case 'sent':
-        return applications.filter(app => app.status === 'sent_to_company');
+        return applications.filter(app => SENT_STATUSES.includes(app.status));
       case 'discarded':
         return applications.filter(app => app.status === 'discarded');
       default:
@@ -248,7 +300,7 @@ export default function SpecialistJobCandidates() {
       case 'evaluating':
         return apps.filter(app => app.status === 'evaluating').length;
       case 'sent':
-        return apps.filter(app => app.status === 'sent_to_company').length;
+        return apps.filter(app => SENT_STATUSES.includes(app.status)).length;
       case 'discarded':
         return apps.filter(app => app.status === 'discarded').length;
       default:
@@ -258,9 +310,18 @@ export default function SpecialistJobCandidates() {
 
   // Mover candidato a otro estado
   const handleMoveApplication = async (applicationId: number, newStatus: string) => {
+    // Guardia local con la misma tabla que usa la API: si un botón pidiera una
+    // transición imposible, se avisa en la alerta inline en vez de gastar un
+    // round-trip que siempre acabaría en 400.
+    const current = assignment?.applications.find((app) => app.id === applicationId);
+    if (current && !canMove(current.status, newStatus)) {
+      setActionError(`No se puede mover de "${current.status}" a "${newStatus}"`);
+      return;
+    }
+
     try {
       setActionLoading(applicationId);
-      setError(null);
+      setActionError(null);
 
       const response = await fetch('/api/specialist/dashboard', {
         method: 'PUT',
@@ -275,13 +336,25 @@ export default function SpecialistJobCandidates() {
 
       if (data.success) {
         setSuccess(data.message);
-        fetchJobData();
+        // Actualización local en vez de volver a descargar la vacante entera
+        // tras cada click (antes: spinner de pantalla completa y scroll perdido
+        // en cada movimiento de candidato).
+        setAssignment((prev) =>
+          prev
+            ? {
+                ...prev,
+                applications: prev.applications.map((app) =>
+                  app.id === applicationId ? { ...app, status: newStatus } : app
+                )
+              }
+            : prev
+        );
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError(data.error);
+        setActionError(data.error);
       }
     } catch (err) {
-      setError('Error al actualizar');
+      setActionError('Error al actualizar');
     } finally {
       setActionLoading(null);
     }
@@ -340,12 +413,12 @@ export default function SpecialistJobCandidates() {
     );
   }
 
-  if (error || !assignment) {
+  if (loadError || !assignment) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <p className="text-gray-600">{error || 'Vacante no encontrada'}</p>
+          <p className="text-gray-600">{loadError || 'Vacante no encontrada'}</p>
           <button
             onClick={() => router.push('/specialist/dashboard')}
             className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
@@ -442,11 +515,11 @@ export default function SpecialistJobCandidates() {
         </div>
 
         {/* Alerts */}
-        {error && (
+        {actionError && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto text-xl">×</button>
+            {actionError}
+            <button onClick={() => setActionError(null)} className="ml-auto text-xl">×</button>
           </div>
         )}
 
@@ -731,9 +804,11 @@ export default function SpecialistJobCandidates() {
                         )}
 
                         {activeTab === 'sent' && (
+                          /* Badge de sólo lectura con el estado REAL: a partir
+                             de 'sent_to_company' manda la empresa. */
                           <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm flex items-center gap-1">
                             <CheckCircle size={14} />
-                            Enviado
+                            {SENT_STATUS_LABELS[app.status] || 'Enviado'}
                           </span>
                         )}
 
@@ -765,19 +840,9 @@ export default function SpecialistJobCandidates() {
                               )}
                               <span className="hidden sm:inline">En proceso</span>
                             </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_company')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Enviar a empresa"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
+                            {/* Sin botón "Enviar a empresa": desde 'discarded'
+                                la API sólo deja reactivar a 'sent_to_specialist'
+                                o 'evaluating'. */}
                           </>
                         )}
                       </div>
@@ -802,8 +867,11 @@ export default function SpecialistJobCandidates() {
         onPrev={currentCandidatesList.length > 1 ? goToPrevCandidate : undefined}
         currentIndex={currentCandidateIndex}
         totalCount={currentCandidatesList.length}
+        /* PERF-016: el modal hace POST a /api/evaluations/candidates/[id]/documents,
+           que comprueba que el especialista tenga asignada una vacante con este
+           candidato (antes iba a /api/admin/... y siempre daba 403). */
         canAddDocuments={true}
-        onDocumentsUpdated={fetchJobData}
+        onDocumentsUpdated={() => fetchJobData(true)}
         userRole="specialist"
         jobHabilidades={assignment.job.habilidades}
         jobLatitude={assignment.job.latitude}

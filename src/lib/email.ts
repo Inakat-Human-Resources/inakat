@@ -35,10 +35,26 @@ function getTransporter(): Transporter | null {
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
+      // FIABILIDAD: los valores por defecto de nodemailer son 2 min de conexión,
+      // 30 s de saludo y 10 min de socket. Un SMTP que acepta el TCP pero no
+      // responde al saludo dejaba colgada la función serverless hasta que la
+      // plataforma la mataba (el webhook de MercadoPago declara maxDuration=10
+      // y espera el envío dentro de un Promise.allSettled).
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
     });
   }
 
   return transporter;
+}
+
+/**
+ * Buzón interno de INAKAT al que van los avisos operativos (mensajes de
+ * contacto, alertas). Si no hay ADMIN_EMAIL se cae al remitente configurado.
+ */
+export function getAdminInbox(): string | null {
+  return process.env.ADMIN_EMAIL || process.env.SMTP_FROM || null;
 }
 
 // =============================================
@@ -166,30 +182,97 @@ function baseTemplate(content: string): string {
 // NOTA: todos los valores controlados por el usuario se pasan por escapeHtml()
 // antes de interpolarse en el HTML (#67/#12).
 
-/** 1. Empresa: Su solicitud de registro fue aprobada */
+/**
+ * 1. Empresa: Su solicitud de registro fue aprobada.
+ *
+ * `password` es OPCIONAL y está en desuso: en el flujo actual la empresa elige
+ * su contraseña al registrarse, así que INAKAT no la conoce y jamás debería
+ * mandarla por correo. Se conserva el parámetro para no romper a los llamadores
+ * antiguos, pero sin él sólo se envía el enlace de acceso.
+ */
 export async function sendCompanyApproved(params: {
   email: string;
   nombreEmpresa: string;
-  password: string;
+  password?: string;
   loginUrl: string;
 }): Promise<boolean> {
-  const html = baseTemplate(`
-    <h2>Bienvenido a INAKAT!</h2>
-    <p>Nos complace informarte que la solicitud de registro de <strong>${escapeHtml(params.nombreEmpresa)}</strong> ha sido aprobada.</p>
-    <div class="info-box">
+  const credenciales = params.password
+    ? `<div class="info-box">
       <p><strong>Tus credenciales de acceso:</strong></p>
       <p>Email: ${escapeHtml(params.email)}</p>
       <p>Contrasena: ${escapeHtml(params.password)}</p>
-    </div>
+    </div>`
+    : `<div class="info-box">
+      <p><strong>Accede con el correo de tu solicitud:</strong></p>
+      <p>Email: ${escapeHtml(params.email)}</p>
+      <p>Usa la contrasena que elegiste al registrarte.</p>
+    </div>`;
+
+  const html = baseTemplate(`
+    <h2>Bienvenido a INAKAT!</h2>
+    <p>Nos complace informarte que la solicitud de registro de <strong>${escapeHtml(params.nombreEmpresa)}</strong> ha sido aprobada.</p>
+    ${credenciales}
     <p>Ya puedes acceder a la plataforma para publicar vacantes y encontrar el mejor talento.</p>
     <a href="${escapeHtml(params.loginUrl)}" class="btn">Ir a la Plataforma</a>
-    <p style="font-size: 13px; color: #666;">Te recomendamos cambiar tu contrasena despues de iniciar sesion.</p>
   `);
 
   return sendEmail({
     to: params.email,
     subject: 'Tu empresa ha sido aprobada — INAKAT',
     html,
+  });
+}
+
+/** 1b. Empresa: su solicitud de registro fue rechazada (con el motivo). */
+export async function sendCompanyRejected(params: {
+  email: string;
+  nombreEmpresa: string;
+  motivo?: string | null;
+}): Promise<boolean> {
+  const html = baseTemplate(`
+    <h2>Sobre tu solicitud de registro</h2>
+    <p>Revisamos la solicitud de <strong>${escapeHtml(params.nombreEmpresa)}</strong> y por ahora no podemos aprobarla.</p>
+    <div class="info-box">
+      <p><strong>Motivo:</strong> ${escapeHtml(params.motivo || 'No especificado')}</p>
+    </div>
+    <p>Si crees que se trata de un error o quieres enviar documentacion adicional, responde a este correo o escribenos desde la pagina de contacto.</p>
+  `);
+
+  return sendEmail({
+    to: params.email,
+    subject: 'Sobre tu solicitud de registro — INAKAT',
+    html,
+  });
+}
+
+/**
+ * 5. Admin: alguien escribió desde el formulario público de contacto.
+ *
+ * Sin esto el lead se quedaba sólo en la tabla ContactMessage y nadie se
+ * enteraba. `replyTo` apunta al visitante para poder contestarle directamente.
+ */
+export async function sendContactMessageToAdmin(params: {
+  adminEmail: string;
+  nombre: string;
+  email: string;
+  telefono?: string | null;
+  mensaje: string;
+}): Promise<boolean> {
+  const html = baseTemplate(`
+    <h2>Nuevo mensaje de contacto</h2>
+    <div class="info-box">
+      <p>Nombre: <strong>${escapeHtml(params.nombre)}</strong></p>
+      <p>Email: <strong>${escapeHtml(params.email)}</strong></p>
+      <p>Telefono: <strong>${escapeHtml(params.telefono || 'No proporcionado')}</strong></p>
+    </div>
+    <p style="white-space: pre-wrap;">${escapeHtml(params.mensaje)}</p>
+  `);
+
+  return sendEmail({
+    to: params.adminEmail,
+    subject: `Nuevo mensaje de contacto de ${sanitizeEmailHeader(params.nombre)} — INAKAT`,
+    html,
+    replyTo: params.email,
   });
 }
 
@@ -244,6 +327,80 @@ export async function sendInterviewRequestToAdmin(params: {
   return sendEmail({
     to: params.adminEmail,
     subject: `Solicitud de entrevista: ${params.candidateName} — ${params.companyName}`,
+    html,
+  });
+}
+
+/**
+ * Entrevista agendada, reprogramada o cancelada (ADM-041/ADM-042).
+ *
+ * Una sola plantilla para la empresa, el candidato y los participantes que la
+ * empresa añadió: cambia el saludo y el texto, no la forma. Todo lo que viene
+ * del usuario pasa por escapeHtml; la liga sólo se pinta si es http(s).
+ */
+export async function sendInterviewUpdate(params: {
+  to: string;
+  nombreDestinatario?: string | null;
+  titulo: string;
+  mensaje: string;
+  fecha?: string | null;
+  lugar?: string | null;
+  liga?: string | null;
+  panelUrl?: string | null;
+}): Promise<boolean> {
+  const ligaSegura =
+    params.liga && /^https?:\/\//i.test(params.liga) ? params.liga : null;
+
+  const detalles = [
+    params.fecha ? `<p>Fecha: <strong>${escapeHtml(params.fecha)}</strong></p>` : '',
+    params.lugar ? `<p>Lugar: <strong>${escapeHtml(params.lugar)}</strong></p>` : '',
+    ligaSegura
+      ? `<p>Liga: <a href="${escapeHtml(ligaSegura)}">${escapeHtml(ligaSegura)}</a></p>`
+      : '',
+  ].join('');
+
+  const html = baseTemplate(`
+    <h2>${escapeHtml(params.titulo)}</h2>
+    ${params.nombreDestinatario ? `<p>Hola ${escapeHtml(params.nombreDestinatario)},</p>` : ''}
+    <p>${escapeHtml(params.mensaje)}</p>
+    ${detalles ? `<div class="info-box">${detalles}</div>` : ''}
+    ${params.panelUrl ? `<a href="${escapeHtml(params.panelUrl)}" class="btn">Ver en INAKAT</a>` : ''}
+  `);
+
+  return sendEmail({
+    to: params.to,
+    subject: `${params.titulo} — INAKAT`,
+    html,
+  });
+}
+
+/**
+ * Recuperación de contraseña.
+ *
+ * SEGURIDAD (AUTH-006): esta plantilla vivía escrita a mano dentro de
+ * /api/auth/forgot-password e interpolaba `user.nombre` CRUDO. El nombre lo
+ * elige quien se registra (y registrarse no exige verificar el correo), así que
+ * bastaba llamarse `</strong><a href="https://evil.tld">...</a>` para que la
+ * víctima recibiera un enlace de phishing dentro de un correo legítimo de
+ * INAKAT, firmado con su SPF/DKIM. Aquí pasa por baseTemplate y escapeHtml.
+ */
+export async function sendPasswordResetEmail(params: {
+  email: string;
+  nombre: string;
+  resetUrl: string;
+}): Promise<boolean> {
+  const html = baseTemplate(`
+    <h2>Recuperacion de contrasena</h2>
+    <p>Hola <strong>${escapeHtml(params.nombre)}</strong>,</p>
+    <p>Recibimos una solicitud para restablecer tu contrasena.</p>
+    <a href="${escapeHtml(params.resetUrl)}" class="btn">Restablecer contrasena</a>
+    <p style="color: #666; font-size: 14px;">Este enlace expira en <strong>1 hora</strong>.</p>
+    <p style="color: #999; font-size: 12px;">Si no solicitaste este cambio, ignora este correo.</p>
+  `);
+
+  return sendEmail({
+    to: params.email,
+    subject: 'Recuperación de contraseña - INAKAT',
     html,
   });
 }

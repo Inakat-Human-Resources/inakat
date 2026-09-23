@@ -1,20 +1,39 @@
 // RUTA: src/lib/sanitize.ts
 
 /**
- * Sanitización de texto para prevenir XSS almacenado.
- * No usamos DOMPurify — regex suficiente para texto plano.
+ * Normalización de texto plano que se guarda en la base de datos.
+ *
+ * OJO con lo que este módulo NO es: no es una defensa anti-XSS. El texto se
+ * renderiza con React (que escapa por defecto; no hay un solo
+ * `dangerouslySetInnerHTML` en `src/`) y en los correos con `escapeHtml`. Esa
+ * es la defensa real.
+ *
+ * La versión anterior borraba por regex «javascript:» y TODO lo que hubiera
+ * entre un '<' y el siguiente '>'. En una bolsa de trabajo tecnológica eso
+ * corrompía datos en silencio: la nota «JavaScript: avanzado. React < 2 años,
+ * Node > 3 años» se guardaba como « avanzado. React 3 años», es decir, con el
+ * lenguaje evaluado y la experiencia cambiados. Y ni siquiera servía de escudo:
+ * `<img src=x onerror=alert(1)` (sin '>' de cierre) pasaba intacto.
+ *
+ * Ahora sólo se quitan tags HTML REALES (`<b>`, `</script>`, `<div …>`), que
+ * nadie escribe a mano en una nota, y caracteres de control. Las comparaciones
+ * («< 2 años»), los dos puntos y el resto del texto se conservan.
  */
+
+/** Tag HTML real: '<' + nombre de etiqueta + … + '>'. */
+const TAG_HTML = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi;
+
+/** Caracteres de control (menos \t \n \r) que no deben acabar en la DB. */
+const CARACTERES_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 export function sanitizeText(input: string): string {
   if (!input) return input;
 
   return input
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/javascript\s*:/gi, '')
-    .replace(/data\s*:\s*text\/html/gi, '')
-    .replace(/\s{3,}/g, '  ')
+    .replace(TAG_HTML, '')
+    .replace(CARACTERES_CONTROL, '')
+    .replace(/[^\S\n]{3,}/g, '  ')
     .trim();
 }
 

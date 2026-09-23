@@ -34,6 +34,10 @@ const TYPE_ICONS: Record<string, string> = {
   sent_to_company: '📤',
   application_status: '📊',
   interview_requested: '📅',
+  interview_confirmed: '📅',
+  interview_rescheduled: '🔁',
+  interview_cancelled: '🚫',
+  contact_message: '✉️',
 };
 
 export default function NotificationsPage() {
@@ -42,23 +46,33 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [page, setPage] = useState(1);
+  // Un fallo de carga dejaba `notifications` en [] y se pintaba «No hay
+  // notificaciones», indistinguible de no tener ninguna: el reclutador creía
+  // que no le habían asignado candidatos.
+  const [error, setError] = useState<string | null>(null);
+  // Total real de no leídas (lo devuelve el servidor): contarlas sobre los 20
+  // elementos de la página visible escondía el botón "Marcar todas leídas"
+  // cuando las no leídas estaban en las páginas 2 y 3.
+  const [unreadTotal, setUnreadTotal] = useState(0);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (filter !== 'all') params.set('filter', filter);
 
       const res = await fetch(`/api/notifications?${params}`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setNotifications(data.data);
-          setPagination(data.pagination);
-        }
-      }
+      if (!res.ok) throw new Error('respuesta no ok');
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'respuesta no ok');
+
+      setNotifications(data.data);
+      setPagination(data.pagination);
+      setUnreadTotal(typeof data.unreadTotal === 'number' ? data.unreadTotal : 0);
     } catch {
-      // silencioso
+      setError('No pudimos cargar tus notificaciones.');
     } finally {
       setLoading(false);
     }
@@ -68,33 +82,47 @@ export default function NotificationsPage() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  /** Avisa a la campanita del Navbar para que refresque su contador ya. */
+  const avisarCambio = () => {
+    window.dispatchEvent(new Event('notifications:changed'));
+  };
+
+  const marcarLeidas = async (cuerpo: { all: true } | { ids: number[] }) => {
+    // `fetch` no lanza con 4xx/5xx: sin mirar el status, la UI se pintaba como
+    // "leído" y 30 s después el badge volvía a aparecer.
+    const res = await fetch('/api/notifications', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    });
+    if (!res.ok) throw new Error('no se pudo marcar como leída');
+  };
+
   const markAllRead = async () => {
     try {
-      await fetch('/api/notifications', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
+      await marcarLeidas({ all: true });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadTotal(0);
+      avisarCambio();
+      // Con un filtro distinto de "todas" la lista y la paginación quedan
+      // desfasadas (las que ya no cumplen el filtro siguen listadas).
+      if (filter !== 'all') fetchNotifications();
     } catch {
-      // silencioso
+      setError('No pudimos marcar las notificaciones como leídas.');
     }
   };
 
   const markOneRead = async (id: number) => {
     try {
-      await fetch('/api/notifications', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [id] }),
-      });
+      await marcarLeidas({ ids: [id] });
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
+      setUnreadTotal((prev) => Math.max(0, prev - 1));
+      avisarCambio();
     } catch {
-      // silencioso
+      setError('No pudimos marcar la notificación como leída.');
     }
   };
 
@@ -118,8 +146,6 @@ export default function NotificationsPage() {
     });
   };
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
   return (
     <div className="min-h-screen bg-gray-50 pt-24 pb-12">
       <div className="container mx-auto max-w-2xl px-4">
@@ -129,7 +155,7 @@ export default function NotificationsPage() {
             <Bell className="w-6 h-6 text-title-dark" />
             <h1 className="text-2xl font-bold text-title-dark">Notificaciones</h1>
           </div>
-          {unreadCount > 0 && (
+          {unreadTotal > 0 && (
             <button
               onClick={markAllRead}
               className="flex items-center gap-1.5 text-sm text-button-green hover:underline"
@@ -139,6 +165,21 @@ export default function NotificationsPage() {
             </button>
           )}
         </div>
+
+        {error && (
+          <div
+            role="alert"
+            className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          >
+            <span>{error}</span>
+            <button
+              onClick={fetchNotifications}
+              className="font-semibold underline whitespace-nowrap"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="flex items-center gap-2 mb-4">
@@ -168,9 +209,13 @@ export default function NotificationsPage() {
           ) : notifications.length === 0 ? (
             <div className="py-16 text-center text-gray-400">
               <Bell className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-lg">No hay notificaciones</p>
+              <p className="text-lg">
+                {error ? 'No pudimos cargar tus notificaciones' : 'No hay notificaciones'}
+              </p>
               <p className="text-sm mt-1">
-                {filter === 'unread'
+                {error
+                  ? 'Vuelve a intentarlo en unos segundos.'
+                  : filter === 'unread'
                   ? 'No tienes notificaciones sin leer'
                   : filter === 'read'
                   ? 'No tienes notificaciones leídas'
@@ -221,7 +266,15 @@ export default function NotificationsPage() {
                 ) : (
                   <div
                     key={notif.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => !notif.read && markOneRead(notif.id)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ' ') && !notif.read) {
+                        e.preventDefault();
+                        markOneRead(notif.id);
+                      }
+                    }}
                     className="cursor-pointer"
                   >
                     {inner}
