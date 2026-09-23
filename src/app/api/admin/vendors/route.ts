@@ -1,17 +1,59 @@
 // RUTA: src/app/api/admin/vendors/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { getPaginationParams } from '@/lib/pagination';
+import { passwordRegistroSchema } from '@/lib/validations';
 import bcrypt from 'bcryptjs';
 
-// Helper para obtener info de usuario de los headers (agregados por middleware)
-function getAuthFromHeaders(request: NextRequest): { userId: number; role: string } | null {
-  const userId = request.headers.get('x-user-id');
-  const role = request.headers.get('x-user-role');
-  if (!userId || !role) return null;
-  return { userId: parseInt(userId), role };
-}
+// DEAD-CODE (#PAGO): aquí había un `getAuthFromHeaders` que leía x-user-id /
+// x-user-role y respondía 401 si faltaban. Corría DESPUÉS de `requireRole`, que
+// ya valida cookie + rol contra la base de datos, y su `userId` no se usaba para
+// nada: sólo añadía un segundo camino de fallo que rechazaba llamadas legítimas
+// cuando no pasaban por el middleware. El actor sale de `roleCheck.user`.
+
+/**
+ * Porcentaje de descuento/comisión.
+ *
+ * VALIDACIÓN (#PAGO): la ruta RECORTABA en silencio a [0,100] y convertía
+ * cualquier cosa no numérica en 10. Teclear 150 guardaba 100 sin avisar (precio
+ * final 0, que MercadoPago no puede cobrar) y un campo vacío guardaba 0% de
+ * comisión sin que el admin se enterara. Ahora se responde 400 con el motivo.
+ * El tope es 99: un 100% de descuento deja el cobro en 0 y no hay pago posible.
+ */
+const porcentajeSchema = z
+  .number({ message: 'El porcentaje debe ser un número' })
+  .min(0, 'El porcentaje no puede ser negativo')
+  .max(99, 'El porcentaje debe ser menor que 100');
+
+/**
+ * Alta de vendedor.
+ *
+ * Antes sólo se comprobaba que los campos fueran truthy: entraban contraseñas
+ * de un carácter (cuando el registro y el reset exigen 8 + mayúscula + número),
+ * emails como "juan@" a los que nunca llegaría la recuperación de contraseña, y
+ * códigos que el propio endpoint del vendedor rechazaría. Un email no-string
+ * reventaba en `.toLowerCase()` y devolvía 500 en vez de 400.
+ */
+const esquemaAltaVendedor = z.object({
+  nombre: z.string().trim().min(1, 'El nombre es requerido').max(100),
+  apellidoPaterno: z.string().trim().min(1, 'El apellido paterno es requerido').max(100),
+  apellidoMaterno: z.string().trim().max(100).optional().nullable(),
+  email: z.string().trim().email('Email inválido').max(200),
+  password: passwordRegistroSchema,
+  // Mismo formato que exige /api/vendor/my-code: 4-20 alfanuméricos.
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-zA-Z0-9]{4,20}$/, 'El código debe tener entre 4 y 20 letras o números'),
+  discountPercent: porcentajeSchema.default(10),
+  commissionPercent: porcentajeSchema.default(10)
+  // PAGO-014: el modal ya no pide teléfono (User no tiene esa columna y se
+  // perdía en silencio). Si un cliente antiguo lo manda, zod lo descarta.
+});
 
 // GET - Listar todos los vendedores con sus códigos
 export async function GET(request: NextRequest) {
@@ -25,20 +67,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const auth = getAuthFromHeaders(request);
-    if (!auth || auth.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
-    // Obtener parámetros
+    // VALIDACIÓN (#PAGO): `parseInt` directo dejaba pasar limit=abc (NaN ->
+    // PrismaClientValidationError -> 500), page=0 (skip negativo -> 500) y
+    // limit=100000000 (paginación anulada). El helper acota a [1, 100].
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const { page, limit, skip } = getPaginationParams(searchParams, 20);
     const search = searchParams.get('search') || '';
-    const skip = (page - 1) * limit;
 
     // Construir filtros
     const whereClause: Record<string, unknown> = {};
@@ -136,12 +170,19 @@ export async function GET(request: NextRequest) {
       _sum: { commissionAmount: true }
     });
 
+    // CORRECCIÓN (#PAGO): `totalVendors` reutilizaba `totalCount`, que lleva el
+    // filtro de búsqueda. Al buscar "maria" la tarjeta "Vendedores" bajaba a 1
+    // mientras Ventas e Ingresos seguían siendo los de los 40 vendedores. La
+    // estadística global se cuenta sin filtro; `totalCount` queda para la
+    // paginación de los resultados.
+    const totalVendors = await prisma.discountCode.count();
+
     return NextResponse.json({
       success: true,
       data: {
         vendors,
         globalStats: {
-          totalVendors: totalCount,
+          totalVendors,
           totalSales: globalStats._count,
           totalRevenue: globalStats._sum.finalPrice || 0,
           totalCommissions: globalStats._sum.commissionAmount || 0,
@@ -176,38 +217,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const auth = getAuthFromHeaders(request);
-    if (!auth || auth.role !== 'admin') {
+    const parsed = esquemaAltaVendedor.safeParse(await request.json());
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
+        {
+          success: false,
+          error: parsed.error.issues[0]?.message || 'Datos inválidos',
+          detalle: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+        },
+        { status: 400 }
       );
     }
 
-    const body = await request.json();
     const {
       nombre,
       apellidoPaterno,
       apellidoMaterno,
       email,
-      telefono,
       password,
       code,
-      discountPercent = 10,
-      commissionPercent = 10
-    } = body;
+      discountPercent,
+      commissionPercent
+    } = parsed.data;
 
-    // Validar campos requeridos
-    if (!nombre || !apellidoPaterno || !email || !password || !code) {
-      return NextResponse.json(
-        { success: false, error: 'Nombre, apellido paterno, email, contraseña y código son requeridos' },
-        { status: 400 }
-      );
-    }
+    const emailNormalizado = email.toLowerCase().trim();
+    const codigoNormalizado = code.toUpperCase().trim();
 
     // Verificar que no exista un User con ese email
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
+      where: { email: emailNormalizado }
     });
 
     if (existingUser) {
@@ -219,7 +257,7 @@ export async function POST(request: NextRequest) {
 
     // Verificar que no exista un DiscountCode con ese code
     const existingCode = await prisma.discountCode.findUnique({
-      where: { code: code.toUpperCase().trim() }
+      where: { code: codigoNormalizado }
     });
 
     if (existingCode) {
@@ -232,40 +270,56 @@ export async function POST(request: NextRequest) {
     // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear User con role 'vendor'
-    const newUser = await prisma.user.create({
-      data: {
-        nombre: nombre.trim(),
-        apellidoPaterno: apellidoPaterno.trim(),
-        apellidoMaterno: apellidoMaterno?.trim() || null,
-        email: email.toLowerCase().trim(),
-        password: hashedPassword,
-        role: 'vendor',
-        isActive: true,
-      }
-    });
+    // INTEGRIDAD (#PAGO): el usuario y su código se crean en UNA transacción.
+    //
+    // Antes eran dos inserts sueltos y la unicidad del código se comprobaba con
+    // un findUnique previo (check-then-act). Si el segundo insert fallaba —una
+    // carrera con otro alta, un corte de conexión— quedaba un User con rol
+    // 'vendor' SIN código: no aparecía en /admin/vendors (que lista códigos), no
+    // se podía corregir, y el reintento chocaba con 409 "ya existe ese email".
+    let creado;
+    try {
+      creado = await prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            nombre: nombre.trim(),
+            apellidoPaterno: apellidoPaterno.trim(),
+            apellidoMaterno: apellidoMaterno?.trim() || null,
+            email: emailNormalizado,
+            password: hashedPassword,
+            role: 'vendor',
+            isActive: true,
+          }
+        });
 
-    // #8/#29: validar cotas [0,100]. Antes `parseFloat(...) || 10` convertía un
-    // 0% legítimo en 10% y no acotaba por arriba (>100% => precio negativo).
-    const parsedDiscount = parseFloat(String(discountPercent));
-    const parsedCommission = parseFloat(String(commissionPercent));
-    const finalDiscount = Number.isNaN(parsedDiscount)
-      ? 10
-      : Math.min(100, Math.max(0, parsedDiscount));
-    const finalCommission = Number.isNaN(parsedCommission)
-      ? 10
-      : Math.min(100, Math.max(0, parsedCommission));
+        const newCode = await tx.discountCode.create({
+          data: {
+            code: codigoNormalizado,
+            userId: newUser.id,
+            discountPercent,
+            commissionPercent,
+            isActive: true,
+          }
+        });
 
-    // Crear DiscountCode vinculado al User
-    const newCode = await prisma.discountCode.create({
-      data: {
-        code: code.toUpperCase().trim(),
-        userId: newUser.id,
-        discountPercent: finalDiscount,
-        commissionPercent: finalCommission,
-        isActive: true,
+        return { newUser, newCode };
+      });
+    } catch (error) {
+      // La carrera que el findUnique no puede cerrar: el índice único sí.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const objetivo = String(error.meta?.target ?? '');
+        const mensaje = objetivo.includes('email')
+          ? 'Ya existe un usuario con ese email'
+          : 'Ya existe un código de descuento con ese nombre';
+        return NextResponse.json({ success: false, error: mensaje }, { status: 409 });
       }
-    });
+      throw error;
+    }
+
+    const { newUser, newCode } = creado;
 
     return NextResponse.json(
       {

@@ -4,31 +4,28 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 
+// Longitud máxima del nombre visible del paquete.
+const MAX_NOMBRE = 60;
+
 /**
  * GET /api/admin/credit-packages
- * Lista todos los paquetes de créditos (ordenados por sortOrder)
- * Query params: ?activeOnly=true (opcional, para página de compra)
+ * Lista todos los paquetes de créditos (ordenados por sortOrder).
+ *
+ * La rama `?activeOnly=true` "sin auth" se eliminó: era código muerto porque el
+ * middleware protege todo /api/admin/* por rol admin y devolvía 403 antes de
+ * entrar aquí. La página de compra usa GET /api/credit-packages.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const activeOnly = searchParams.get('activeOnly') === 'true';
-
-    // Si es activeOnly, no requiere auth (para página pública de compra)
-    if (!activeOnly) {
-      const auth = await requireRole('admin');
-      if ('error' in auth) {
-        return NextResponse.json(
-          { success: false, error: auth.error },
-          { status: auth.status }
-        );
-      }
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
     }
 
-    const where = activeOnly ? { isActive: true } : {};
-
     const packages = await prisma.creditPackage.findMany({
-      where,
       orderBy: { sortOrder: 'asc' }
     });
 
@@ -70,22 +67,37 @@ export async function POST(request: Request) {
       );
     }
 
-    if (credits <= 0) {
+    // Se valida el TIPO antes de comparar: 'abc' <= 0 es false, así que un
+    // string pasaba los filtros y `parseInt('abc')` daba NaN -> Prisma lanzaba
+    // y el admin recibía un 500.
+    const nombreLimpio = typeof name === 'string' ? name.trim() : '';
+    if (!nombreLimpio || nombreLimpio.length > MAX_NOMBRE) {
       return NextResponse.json(
-        { success: false, error: 'La cantidad de créditos debe ser mayor a 0' },
+        { success: false, error: `El nombre debe tener entre 1 y ${MAX_NOMBRE} caracteres` },
         { status: 400 }
       );
     }
 
-    if (price <= 0) {
+    if (!Number.isInteger(credits) || credits <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'La cantidad de créditos debe ser un entero mayor a 0' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
       return NextResponse.json(
         { success: false, error: 'El precio debe ser mayor a 0' },
         { status: 400 }
       );
     }
 
-    // Calcular precio por crédito automáticamente
-    const pricePerCredit = price / credits;
+    if (sortOrder !== undefined && sortOrder !== null && (!Number.isInteger(sortOrder) || sortOrder < 0)) {
+      return NextResponse.json(
+        { success: false, error: 'sortOrder debe ser un entero mayor o igual a 0' },
+        { status: 400 }
+      );
+    }
 
     // Validar badge
     const validBadges = ['MÁS POPULAR', 'PROMOCIÓN', null, ''];
@@ -96,14 +108,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // Dos paquetes activos con los MISMOS créditos hacen ambigua la compra
+    // (/api/credits/purchases resuelve el paquete por cantidad de créditos).
+    const duplicado = await prisma.creditPackage.findFirst({
+      where: { credits, isActive: true }
+    });
+
+    if (duplicado) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Ya existe un paquete activo de ${credits} crédito(s) ("${duplicado.name}"). Desactívalo o edítalo en lugar de duplicarlo.`
+        },
+        { status: 409 }
+      );
+    }
+
+    // Calcular precio por crédito con los valores ya normalizados
+    const pricePerCredit = price / credits;
+
     const newPackage = await prisma.creditPackage.create({
       data: {
-        name,
-        credits: parseInt(credits),
-        price: parseFloat(price),
+        name: nombreLimpio,
+        credits,
+        price,
         pricePerCredit: parseFloat(pricePerCredit.toFixed(2)),
         badge: badge || null,
-        sortOrder: sortOrder || 0,
+        sortOrder: sortOrder ?? 0,
         isActive: true
       }
     });

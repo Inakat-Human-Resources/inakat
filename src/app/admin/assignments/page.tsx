@@ -2,23 +2,18 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Briefcase,
   UserCheck,
   UserCog,
-  ChevronDown,
   Save,
   Loader2,
   AlertCircle,
   CheckCircle,
   Clock,
-  Send,
-  Building2,
-  Eye,
-  ExternalLink
+  Building2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -76,13 +71,32 @@ interface Person {
 interface Stats {
   total: number;
   unassigned: number;
+  // ADM-029: vacantes con sólo reclutador o sólo especialista. No caían ni en
+  // "Sin Asignar" ni en "Asignadas".
+  partial?: number;
   assigned: number;
   inProgress: number;
   completed: number;
 }
 
+type Seleccion = { recruiterId?: number; specialistId?: number };
+type Selecciones = { [jobId: number]: Seleccion };
+
+/** Lo que el servidor tiene guardado para cada vacante. */
+const seleccionesDelServidor = (lista: Job[]): Selecciones => {
+  const resultado: Selecciones = {};
+  lista.forEach((job) => {
+    if (job.assignment) {
+      resultado[job.id] = {
+        recruiterId: job.assignment.recruiterId || undefined,
+        specialistId: job.assignment.specialistId || undefined
+      };
+    }
+  });
+  return resultado;
+};
+
 export default function AssignmentsPage() {
-  const router = useRouter();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [recruiters, setRecruiters] = useState<Person[]>([]);
   const [specialists, setSpecialists] = useState<Person[]>([]);
@@ -96,18 +110,31 @@ export default function AssignmentsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Selecciones temporales para asignar
-  const [selections, setSelections] = useState<{
-    [jobId: number]: { recruiterId?: number; specialistId?: number };
-  }>({});
+  const [selections, setSelections] = useState<Selecciones>({});
   const [savingJobId, setSavingJobId] = useState<number | null>(null);
+
+  // Última foto de lo que hay guardado, para saber qué filas tienen cambios
+  // sin guardar.
+  const guardadoEnServidor = useRef<Selecciones>({});
 
   useEffect(() => {
     fetchAssignments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
-  const fetchAssignments = async () => {
+  /**
+   * ADM-014: cada fila tiene su propio botón Guardar, pero tras guardar se
+   * recargaba todo con el spinner de página completa y las selecciones se
+   * reconstruían desde el servidor: los cambios pendientes de las OTRAS filas
+   * se perdían y el admin tenía que rehacerlos. Ahora la recarga posterior a
+   * guardar no bloquea la pantalla y las filas con cambios sin guardar
+   * conservan lo que el admin eligió.
+   */
+  const fetchAssignments = async (
+    opciones: { silencioso?: boolean; recienGuardada?: number } = {}
+  ) => {
     try {
-      setIsLoading(true);
+      if (!opciones.silencioso) setIsLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
@@ -124,17 +151,23 @@ export default function AssignmentsPage() {
         setSpecialists(data.specialists);
         setStats(data.stats);
 
-        // Inicializar selecciones con valores actuales
-        const initialSelections: any = {};
-        data.data.forEach((job: Job) => {
-          if (job.assignment) {
-            initialSelections[job.id] = {
-              recruiterId: job.assignment.recruiterId || undefined,
-              specialistId: job.assignment.specialistId || undefined
-            };
+        const anterior = guardadoEnServidor.current;
+        const nuevas = seleccionesDelServidor(data.data);
+        guardadoEnServidor.current = nuevas;
+
+        setSelections((previas) => {
+          const resultado: Selecciones = { ...nuevas };
+          for (const [clave, seleccion] of Object.entries(previas)) {
+            const jobId = Number(clave);
+            if (jobId === opciones.recienGuardada) continue;
+            const base = anterior[jobId] || {};
+            const tieneCambios =
+              seleccion.recruiterId !== base.recruiterId ||
+              seleccion.specialistId !== base.specialistId;
+            if (tieneCambios) resultado[jobId] = seleccion;
           }
+          return resultado;
         });
-        setSelections(initialSelections);
       } else {
         setError(data.error || 'Error al cargar');
       }
@@ -145,11 +178,43 @@ export default function AssignmentsPage() {
     }
   };
 
+  /**
+   * ADM-015: si el reclutador/especialista guardado ya no está entre los
+   * activos, el select mostraba "Sin asignar" pero el estado conservaba su id y
+   * se reenviaba al guardar. Se pinta como opción propia, marcada, para que el
+   * admin vea que hay que sustituirlo.
+   */
+  const opcionFuera = (
+    persona: { id: number; nombre: string; apellidoPaterno?: string } | undefined,
+    idSeleccionado: number | undefined,
+    lista: Person[]
+  ) => {
+    if (!idSeleccionado || lista.some((p) => p.id === idSeleccionado)) return null;
+    const nombre = persona && persona.id === idSeleccionado
+      ? `${persona.nombre} ${persona.apellidoPaterno || ''}`.trim()
+      : `Usuario #${idSeleccionado}`;
+    return (
+      <option value={idSeleccionado}>
+        {nombre} (desactivado: reasignar)
+      </option>
+    );
+  };
+
   const handleSaveAssignment = async (jobId: number) => {
-    const selection = selections[jobId];
-    if (!selection?.recruiterId && !selection?.specialistId) {
-      setError('Selecciona al menos un reclutador o especialista');
-      return;
+    const selection = selections[jobId] || {};
+    if (!selection.recruiterId && !selection.specialistId) {
+      // ADM-058: con ambos en "Sin asignar" no se podía guardar nunca, así que
+      // una asignación hecha por error sólo podía sustituirse, no retirarse. Si
+      // la vacante ya tiene equipo guardado, se permite quitarlo (la API acepta
+      // ambos en null), previa confirmación.
+      const guardado = guardadoEnServidor.current[jobId];
+      if (!guardado?.recruiterId && !guardado?.specialistId) {
+        setError('Selecciona al menos un reclutador o especialista');
+        return;
+      }
+      if (!window.confirm('¿Quitar el reclutador y el especialista asignados a esta vacante?')) {
+        return;
+      }
     }
 
     try {
@@ -169,9 +234,9 @@ export default function AssignmentsPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.success) {
         setSuccess('Asignación guardada');
-        fetchAssignments();
+        fetchAssignments({ silencioso: true, recienGuardada: jobId });
         setTimeout(() => setSuccess(null), 3000);
 
         // Mostrar warning si existe (especialidad no coincide)
@@ -180,7 +245,7 @@ export default function AssignmentsPage() {
           setTimeout(() => setWarning(null), 8000);
         }
       } else {
-        setError(data.error);
+        setError(data.error || 'Error al guardar la asignación');
       }
     } catch (err) {
       setError('Error al guardar');
@@ -205,7 +270,9 @@ export default function AssignmentsPage() {
   };
 
   const getAssignmentStatusBadge = (job: Job) => {
-    if (!job.assignment) {
+    // ADM-029: mismo criterio que el filtro y las tarjetas de la API. Una fila
+    // de asignación con ambos ids en null es "Sin asignar", no "Asignado".
+    if (!job.assignment || (!job.assignment.recruiterId && !job.assignment.specialistId)) {
       return (
         <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full font-medium">
           Sin asignar
@@ -241,6 +308,15 @@ export default function AssignmentsPage() {
         <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
           <UserCheck size={12} />
           Con Reclutador
+        </span>
+      );
+    }
+
+    if (!job.assignment.recruiterId || !job.assignment.specialistId) {
+      return (
+        <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full flex items-center gap-1">
+          <Clock size={12} />
+          Incompleta
         </span>
       );
     }
@@ -308,7 +384,7 @@ export default function AssignmentsPage() {
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <p className="text-sm text-gray-500">Total Vacantes</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -317,6 +393,12 @@ export default function AssignmentsPage() {
               <p className="text-sm text-gray-500">Sin Asignar</p>
               <p className="text-2xl font-bold text-red-600">
                 {stats.unassigned}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <p className="text-sm text-gray-500">Incompletas</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {stats.partial ?? 0}
               </p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm border">
@@ -384,6 +466,7 @@ export default function AssignmentsPage() {
             {[
               { value: 'all', label: 'Todas' },
               { value: 'unassigned', label: 'Sin Asignar' },
+              { value: 'partial', label: 'Incompletas' },
               { value: 'assigned', label: 'Asignadas' },
               { value: 'in_progress', label: 'En Proceso' },
               { value: 'completed', label: 'Completadas' }
@@ -463,6 +546,7 @@ export default function AssignmentsPage() {
                         className="w-full p-2 border rounded-lg text-sm"
                       >
                         <option value="">Sin asignar</option>
+                        {opcionFuera(job.assignment?.recruiter, selections[job.id]?.recruiterId, recruiters)}
                         {recruiters.map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.nombre} {r.apellidoPaterno || ''}
@@ -489,6 +573,7 @@ export default function AssignmentsPage() {
                         className="w-full p-2 border rounded-lg text-sm"
                       >
                         <option value="">Sin asignar</option>
+                        {opcionFuera(job.assignment?.specialist, selections[job.id]?.specialistId, specialists)}
                         {specialists.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}
@@ -598,6 +683,7 @@ export default function AssignmentsPage() {
                             className="w-full p-2 border rounded-lg text-sm"
                           >
                             <option value="">Sin asignar</option>
+                            {opcionFuera(job.assignment?.recruiter, selections[job.id]?.recruiterId, recruiters)}
                             {recruiters.map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.nombre} {r.apellidoPaterno || ''}
@@ -620,6 +706,7 @@ export default function AssignmentsPage() {
                             className="w-full p-2 border rounded-lg text-sm"
                           >
                             <option value="">Sin asignar</option>
+                            {opcionFuera(job.assignment?.specialist, selections[job.id]?.specialistId, specialists)}
                             {specialists.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}

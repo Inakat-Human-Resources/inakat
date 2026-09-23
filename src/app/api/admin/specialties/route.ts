@@ -3,6 +3,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import {
+  claveCombinacion,
+  generarPreciosPorDefecto
+} from '@/app/api/admin/pricing/precios-por-defecto';
 
 // Función para generar slug
 function generateSlug(name: string): string {
@@ -20,6 +24,16 @@ function generateSlug(name: string): string {
  */
 export async function GET(request: Request) {
   try {
+    // Defensa en profundidad como el resto del módulo: el middleware sólo valida
+    // la firma del JWT, no si el admin sigue activo ni su rol actual en BD.
+    const auth = await requireRole('admin');
+    if ('error' in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get('active') === 'true';
     const includeSubcategories = searchParams.get('subcategories') !== 'false';
@@ -84,9 +98,47 @@ export async function POST(request: Request) {
     } = body;
 
     // Validaciones
-    if (!name || name.trim() === '') {
+    if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json(
         { success: false, error: 'El nombre es requerido' },
+        { status: 400 }
+      );
+    }
+
+    if (subcategories !== undefined && !Array.isArray(subcategories)) {
+      return NextResponse.json(
+        { success: false, error: 'subcategories debe ser un array de textos' },
+        { status: 400 }
+      );
+    }
+
+    if (
+      Array.isArray(subcategories) &&
+      subcategories.some((s: unknown) => typeof s !== 'string')
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'subcategories debe ser un array de textos' },
+        { status: 400 }
+      );
+    }
+
+    if (sortOrder !== undefined && sortOrder !== null && !Number.isInteger(sortOrder)) {
+      return NextResponse.json(
+        { success: false, error: 'sortOrder debe ser un entero' },
+        { status: 400 }
+      );
+    }
+
+    if (isActive !== undefined && typeof isActive !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'isActive debe ser booleano' },
+        { status: 400 }
+      );
+    }
+
+    if (color !== undefined && color !== null && !/^#[0-9a-f]{6}$/i.test(String(color))) {
+      return NextResponse.json(
+        { success: false, error: 'color debe ser un hexadecimal tipo #2b5d62' },
         { status: 400 }
       );
     }
@@ -105,6 +157,15 @@ export async function POST(request: Request) {
 
     // Generar slug
     const slug = generateSlug(name);
+
+    // generateSlug devuelve '' para nombres sin caracteres alfanuméricos
+    // ("###"): la primera se creaba con slug vacío y la siguiente chocaba.
+    if (!slug) {
+      return NextResponse.json(
+        { success: false, error: 'El nombre debe contener letras o números' },
+        { status: 400 }
+      );
+    }
 
     // Verificar slug único
     const existingSlug = await prisma.specialty.findUnique({
@@ -127,71 +188,68 @@ export async function POST(request: Request) {
       finalSortOrder = (lastSpecialty?.sortOrder || 0) + 1;
     }
 
-    // Crear especialidad
-    const specialty = await prisma.specialty.create({
-      data: {
-        name: name.trim(),
-        slug,
-        description: description?.trim() || null,
-        icon: icon || null,
-        color: color || '#2b5d62',
-        subcategories: subcategories || [],
-        sortOrder: finalSortOrder,
-        isActive: isActive !== false
+    const nombreLimpio = name.trim();
+
+    // Auto-generar 15 combinaciones en PricingMatrix (5 seniorities × 3
+    // workModes) con la misma tabla que usa /api/admin/pricing/sync.
+    const pricingData = generarPreciosPorDefecto(nombreLimpio);
+
+    // Especialidad + matriz de precios en UNA transacción: sueltas, si el
+    // createMany fallaba la especialidad quedaba creada SIN precios (el admin
+    // veía un 500, reintentaba y recibía 409) y todas sus vacantes pasaban a
+    // costar el DEFAULT de 5 créditos.
+    // skipDuplicates no protege aquí (location es NULL y en PostgreSQL los NULL
+    // no colisionan), así que se comprueba antes si ese profile ya tiene filas.
+    const specialty = await prisma.$transaction(async (tx) => {
+      const creada = await tx.specialty.create({
+        data: {
+          name: nombreLimpio,
+          slug,
+          description: description?.trim() || null,
+          icon: icon || null,
+          color: color || '#2b5d62',
+          subcategories: subcategories || [],
+          sortOrder: finalSortOrder,
+          isActive: isActive !== false
+        }
+      });
+
+      const yaExistentes = await tx.pricingMatrix.findMany({
+        where: { profile: nombreLimpio },
+        select: { seniority: true, workMode: true }
+      });
+      const combinacionesExistentes = new Set(
+        yaExistentes.map((p) => claveCombinacion(p.seniority, p.workMode))
+      );
+
+      const porCrear = pricingData.filter(
+        (p) => !combinacionesExistentes.has(claveCombinacion(p.seniority, p.workMode))
+      );
+
+      if (porCrear.length > 0) {
+        await tx.pricingMatrix.createMany({ data: porCrear });
       }
-    });
 
-    // Auto-generar 15 combinaciones en PricingMatrix (5 seniorities × 3 workModes)
-    const workModes = ['presential', 'hybrid', 'remote'];
-    const seniorityLevels = ['Director', 'Sr', 'Middle', 'Jr', 'Practicante'];
-
-    // Créditos base por seniority
-    const baseCredits: Record<string, number> = {
-      'Director': 10,
-      'Sr': 8,
-      'Middle': 6,
-      'Jr': 4,
-      'Practicante': 2
-    };
-
-    // Ajuste por modalidad
-    const workModeBonus: Record<string, number> = {
-      'presential': 0,
-      'hybrid': 1,
-      'remote': 2
-    };
-
-    const pricingData = [];
-    for (const workMode of workModes) {
-      for (const seniority of seniorityLevels) {
-        const credits = baseCredits[seniority] + workModeBonus[workMode];
-        pricingData.push({
-          profile: specialty.name,
-          seniority,
-          workMode,
-          location: null,
-          credits,
-          isActive: true
-        });
-      }
-    }
-
-    await prisma.pricingMatrix.createMany({
-      data: pricingData,
-      skipDuplicates: true
+      return { creada, generados: porCrear.length };
     });
 
     return NextResponse.json(
       {
         success: true,
-        message: `Especialidad creada exitosamente con ${pricingData.length} precios generados`,
-        data: specialty,
-        pricingGenerated: pricingData.length
+        message: `Especialidad creada exitosamente con ${specialty.generados} precios generados`,
+        data: specialty.creada,
+        pricingGenerated: specialty.generados
       },
       { status: 201 }
     );
   } catch (error) {
     console.error('Error creating specialty:', error);
+    if ((error as { code?: string })?.code === 'P2002') {
+      return NextResponse.json(
+        { success: false, error: 'Ya existe una especialidad equivalente (nombre o slug)' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: 'Error al crear especialidad' },
       { status: 500 }

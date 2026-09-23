@@ -6,6 +6,52 @@ import { requireRole } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
 
 /**
+ * Estado derivado de una vacante respecto a su equipo. Excluyentes y
+ * exhaustivos: antes una asignación parcial (sólo reclutador, que la propia UI
+ * permite) no caía ni en "Sin Asignar" ni en "Asignadas" y sólo aparecía
+ * revisando "Todas" fila por fila.
+ */
+type EstadoAsignacion = 'unassigned' | 'partial' | 'assigned' | 'in_progress' | 'completed';
+
+interface AsignacionParaEstado {
+  recruiterId: number | null;
+  specialistId: number | null;
+  recruiterStatus: string;
+  specialistStatus: string;
+}
+
+function estadoDeAsignacion(assignment: AsignacionParaEstado | null | undefined): EstadoAsignacion {
+  if (!assignment || (!assignment.recruiterId && !assignment.specialistId)) {
+    return 'unassigned';
+  }
+  if (assignment.specialistStatus === 'sent_to_company') {
+    return 'completed';
+  }
+  // 'sent_to_specialist' (badge "Con Especialista") también es trabajo en curso
+  if (
+    assignment.recruiterStatus === 'reviewing' ||
+    assignment.recruiterStatus === 'sent_to_specialist' ||
+    assignment.specialistStatus === 'evaluating'
+  ) {
+    return 'in_progress';
+  }
+  if (assignment.recruiterId && assignment.specialistId) {
+    return 'assigned';
+  }
+  return 'partial';
+}
+
+/**
+ * Entero positivo o null (un string llegaba tal cual a Prisma y respondía 500).
+ */
+function idValido(value: unknown): number | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+/**
  * GET /api/admin/assignments
  * Listar todas las asignaciones con filtros
  */
@@ -24,7 +70,10 @@ export async function GET(request: Request) {
     const recruiterId = searchParams.get('recruiterId');
     const specialistId = searchParams.get('specialistId');
 
-    // Obtener vacantes con sus asignaciones
+    // Obtener vacantes con sus asignaciones.
+    // Se incluye isActive del equipo asignado: el select de la UI sólo ofrece
+    // usuarios activos, así que un reclutador desactivado aparecía como
+    // "Sin asignar" aunque la vacante siguiera a su cargo.
     const jobs = await prisma.job.findMany({
       where: {
         status: 'active'
@@ -37,7 +86,8 @@ export async function GET(request: Request) {
                 id: true,
                 nombre: true,
                 apellidoPaterno: true,
-                email: true
+                email: true,
+                isActive: true
               }
             },
             specialist: {
@@ -46,7 +96,8 @@ export async function GET(request: Request) {
                 nombre: true,
                 apellidoPaterno: true,
                 email: true,
-                specialty: true
+                specialty: true,
+                isActive: true
               }
             }
           }
@@ -71,39 +122,33 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Filtrar según status
+    // Filtrar según status, usando el mismo helper que las estadísticas para
+    // que filtro, tarjetas y badges no puedan discrepar.
     let filteredJobs = jobs;
 
-    if (status === 'unassigned') {
-      filteredJobs = jobs.filter((j) => !j.assignment);
-    } else if (status === 'assigned') {
-      filteredJobs = jobs.filter(
-        (j) =>
-          j.assignment && j.assignment.recruiterId && j.assignment.specialistId
-      );
-    } else if (status === 'in_progress') {
-      filteredJobs = jobs.filter(
-        (j) =>
-          j.assignment &&
-          (j.assignment.recruiterStatus === 'reviewing' ||
-            j.assignment.specialistStatus === 'evaluating')
-      );
-    } else if (status === 'completed') {
-      filteredJobs = jobs.filter(
-        (j) =>
-          j.assignment && j.assignment.specialistStatus === 'sent_to_company'
+    const ESTADOS_FILTRABLES: EstadoAsignacion[] = [
+      'unassigned',
+      'partial',
+      'assigned',
+      'in_progress',
+      'completed'
+    ];
+
+    if (status && ESTADOS_FILTRABLES.includes(status as EstadoAsignacion)) {
+      filteredJobs = jobs.filter((j) => estadoDeAsignacion(j.assignment) === status);
+    }
+
+    const recruiterIdNum = idValido(recruiterId);
+    if (recruiterIdNum) {
+      filteredJobs = filteredJobs.filter(
+        (j) => j.assignment?.recruiterId === recruiterIdNum
       );
     }
 
-    if (recruiterId) {
+    const specialistIdNum = idValido(specialistId);
+    if (specialistIdNum) {
       filteredJobs = filteredJobs.filter(
-        (j) => j.assignment?.recruiterId === parseInt(recruiterId)
-      );
-    }
-
-    if (specialistId) {
-      filteredJobs = filteredJobs.filter(
-        (j) => j.assignment?.specialistId === parseInt(specialistId)
+        (j) => j.assignment?.specialistId === specialistIdNum
       );
     }
 
@@ -124,22 +169,15 @@ export async function GET(request: Request) {
       }
     });
 
-    // Estadísticas
+    // Estadísticas: estados excluyentes, así que las cifras SÍ suman el total.
+    const estados = jobs.map((j) => estadoDeAsignacion(j.assignment));
     const stats = {
       total: jobs.length,
-      unassigned: jobs.filter((j) => !j.assignment).length,
-      assigned: jobs.filter(
-        (j) => j.assignment?.recruiterId && j.assignment?.specialistId
-      ).length,
-      inProgress: jobs.filter(
-        (j) =>
-          j.assignment &&
-          (j.assignment.recruiterStatus === 'reviewing' ||
-            j.assignment.specialistStatus === 'evaluating')
-      ).length,
-      completed: jobs.filter(
-        (j) => j.assignment?.specialistStatus === 'sent_to_company'
-      ).length
+      unassigned: estados.filter((e) => e === 'unassigned').length,
+      partial: estados.filter((e) => e === 'partial').length,
+      assigned: estados.filter((e) => e === 'assigned').length,
+      inProgress: estados.filter((e) => e === 'in_progress').length,
+      completed: estados.filter((e) => e === 'completed').length
     };
 
     return NextResponse.json({
@@ -175,16 +213,34 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { jobId, recruiterId, specialistId } = body;
 
-    if (!jobId) {
+    const jobIdNum = idValido(jobId);
+    if (!jobIdNum) {
       return NextResponse.json(
-        { success: false, error: 'Se requiere el ID de la vacante' },
+        { success: false, error: 'Se requiere el ID de la vacante (entero positivo)' },
+        { status: 400 }
+      );
+    }
+
+    // recruiterId / specialistId: null o vacío significa "sin asignar"
+    const recruiterIdNum = recruiterId ? idValido(recruiterId) : null;
+    if (recruiterId && !recruiterIdNum) {
+      return NextResponse.json(
+        { success: false, error: 'El ID del reclutador debe ser un entero positivo' },
+        { status: 400 }
+      );
+    }
+
+    const specialistIdNum = specialistId ? idValido(specialistId) : null;
+    if (specialistId && !specialistIdNum) {
+      return NextResponse.json(
+        { success: false, error: 'El ID del especialista debe ser un entero positivo' },
         { status: 400 }
       );
     }
 
     // Verificar que la vacante existe
     const job = await prisma.job.findUnique({
-      where: { id: jobId }
+      where: { id: jobIdNum }
     });
 
     if (!job) {
@@ -194,15 +250,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verificar que el reclutador existe y tiene el rol correcto
-    if (recruiterId) {
+    // Ni cerradas ni borradores (un borrador aún no se publica ni se paga).
+    if (job.status === 'closed' || job.status === 'draft') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: job.status === 'closed'
+            ? 'No se puede asignar equipo a una vacante cerrada'
+            : 'No se puede asignar equipo a una vacante en borrador'
+        },
+        { status: 409 }
+      );
+    }
+
+    // Verificar que el reclutador existe, tiene el rol correcto y sigue ACTIVO:
+    // el select de la UI sólo ofrece activos, pero un id desactivado reenviado
+    // desde el estado del formulario dejaba la vacante a cargo de alguien que ya
+    // no puede iniciar sesión.
+    if (recruiterIdNum) {
       const recruiter = await prisma.user.findUnique({
-        where: { id: recruiterId }
+        where: { id: recruiterIdNum }
       });
 
       if (!recruiter || recruiter.role !== 'recruiter') {
         return NextResponse.json(
           { success: false, error: 'Reclutador no válido' },
+          { status: 400 }
+        );
+      }
+
+      if (!recruiter.isActive) {
+        return NextResponse.json(
+          { success: false, error: 'El reclutador seleccionado está desactivado' },
           { status: 400 }
         );
       }
@@ -212,14 +291,21 @@ export async function POST(request: Request) {
     // También verificar si su especialidad coincide con el perfil de la vacante
     let specialtyWarning: string | null = null;
 
-    if (specialistId) {
+    if (specialistIdNum) {
       const specialist = await prisma.user.findUnique({
-        where: { id: specialistId }
+        where: { id: specialistIdNum }
       });
 
       if (!specialist || specialist.role !== 'specialist') {
         return NextResponse.json(
           { success: false, error: 'Especialista no válido' },
+          { status: 400 }
+        );
+      }
+
+      if (!specialist.isActive) {
+        return NextResponse.json(
+          { success: false, error: 'El especialista seleccionado está desactivado' },
           { status: 400 }
         );
       }
@@ -232,18 +318,24 @@ export async function POST(request: Request) {
       }
     }
 
+    // Asignación previa: hace falta para no re-notificar a quien no cambió.
+    const asignacionPrevia = await prisma.jobAssignment.findUnique({
+      where: { jobId: jobIdNum },
+      select: { recruiterId: true, specialistId: true }
+    });
+
     // Crear o actualizar asignación
     const assignment = await prisma.jobAssignment.upsert({
-      where: { jobId },
+      where: { jobId: jobIdNum },
       update: {
-        recruiterId: recruiterId || null,
-        specialistId: specialistId || null
+        recruiterId: recruiterIdNum,
+        specialistId: specialistIdNum
       },
       create: {
-        jobId,
-        recruiterId: recruiterId || null,
-        specialistId: specialistId || null,
-        recruiterStatus: recruiterId ? 'pending' : 'pending',
+        jobId: jobIdNum,
+        recruiterId: recruiterIdNum,
+        specialistId: specialistIdNum,
+        recruiterStatus: 'pending',
         specialistStatus: 'pending'
       },
       include: {
@@ -263,26 +355,44 @@ export async function POST(request: Request) {
       }
     });
 
-    // Notificar al reclutador y especialista asignados (fire-and-forget)
-    if (recruiterId && assignment.job) {
-      createNotification({
-        userId: recruiterId,
-        type: 'assignment',
-        title: 'Nueva vacante asignada',
-        message: `Se te asignó la vacante "${assignment.job.title}".`,
-        link: '/recruiter/dashboard',
-        metadata: { jobId: jobId, jobTitle: assignment.job.title },
-      }).catch(() => {});
+    // Notificar SÓLO a quien cambió: la UI reenvía siempre ambos ids, así que
+    // añadir al especialista volvía a avisar al reclutador de una vacante que ya
+    // tenía desde hacía días.
+    // Se esperan las promesas antes de responder: en serverless la función puede
+    // congelarse al devolver la respuesta y el insert no llegaba a ejecutarse;
+    // además el `.catch(() => {})` vacío se tragaba cualquier error.
+    const notificaciones: Array<Promise<unknown>> = [];
+
+    if (recruiterIdNum && recruiterIdNum !== asignacionPrevia?.recruiterId && assignment.job) {
+      notificaciones.push(
+        createNotification({
+          userId: recruiterIdNum,
+          type: 'assignment',
+          title: 'Nueva vacante asignada',
+          message: `Se te asignó la vacante "${assignment.job.title}".`,
+          link: '/recruiter/dashboard',
+          metadata: { jobId: jobIdNum, jobTitle: assignment.job.title },
+        })
+      );
     }
-    if (specialistId && assignment.job) {
-      createNotification({
-        userId: specialistId,
-        type: 'assignment',
-        title: 'Nueva vacante asignada',
-        message: `Se te asignó la vacante "${assignment.job.title}".`,
-        link: '/specialist/dashboard',
-        metadata: { jobId: jobId, jobTitle: assignment.job.title },
-      }).catch(() => {});
+    if (specialistIdNum && specialistIdNum !== asignacionPrevia?.specialistId && assignment.job) {
+      notificaciones.push(
+        createNotification({
+          userId: specialistIdNum,
+          type: 'assignment',
+          title: 'Nueva vacante asignada',
+          message: `Se te asignó la vacante "${assignment.job.title}". La verás en tu panel cuando el reclutador te envíe candidatos.`,
+          link: '/specialist/dashboard',
+          metadata: { jobId: jobIdNum, jobTitle: assignment.job.title },
+        })
+      );
+    }
+
+    if (notificaciones.length > 0) {
+      const resultados = await Promise.allSettled(notificaciones);
+      resultados
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .forEach((r) => console.error('[assignments] notificación fallida:', r.reason));
     }
 
     return NextResponse.json({

@@ -328,6 +328,9 @@ export default function AdminRequestsPage() {
           onClose={() => setSelectedRequest(null)}
           onApprove={handleApprove}
           onReject={handleRejectClick}
+          // ADM-023: tras editar en el modal, la tabla seguía con los datos
+          // viejos (RFC, correo…) y el admin creía que no se había guardado.
+          onUpdate={fetchRequests}
         />
       )}
 

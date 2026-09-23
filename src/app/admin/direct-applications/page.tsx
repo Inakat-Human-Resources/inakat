@@ -18,6 +18,19 @@ import {
   AlertCircle,
   ExternalLink
 } from 'lucide-react';
+import { isSafeHttpUrl } from '@/lib/sanitize';
+
+/**
+ * `cvUrl` llega de POST /api/applications, que es público y no valida el
+ * esquema, así que no puede ir crudo a un href: `javascript:` o `data:` se
+ * convierten en un enlace ejecutable al pulsar "Ver CV". Sólo se deja pasar
+ * http(s) absoluto; lo que parece un dominio suelto se fuerza a https y lo que
+ * no es URL se anula.
+ */
+const ensureUrl = (url: string): string | undefined => {
+  const candidata = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  return isSafeHttpUrl(candidata) ? candidata : undefined;
+};
 
 interface Application {
   id: number;
@@ -38,15 +51,25 @@ interface Application {
       id: number;
       recruiter: { id: number; nombre: string; apellidoPaterno: string } | null;
     } | null;
+    // Job.userId es opcional (onDelete: SetNull) y hay vacantes heredadas sin
+    // dueño: la API devuelve `user: null` y hay que tipárselo así.
     user: {
       nombre: string;
       email: string;
       companyRequest: {
         nombreEmpresa: string;
       } | null;
-    };
+    } | null;
   };
 }
+
+/**
+ * ADM-018: se leía `app.job.user.companyRequest` sin comprobar `user`. Bastaba
+ * UNA postulación pendiente sobre una vacante sin dueño para que el render
+ * lanzara y la página entera cayera, sin poder procesar ninguna otra.
+ */
+const nombreEmpresa =(app: Pick<Application, 'job'>): string =>
+  app.job.user?.companyRequest?.nombreEmpresa || app.job.company;
 
 export default function DirectApplicationsPage() {
   const router = useRouter();
@@ -123,6 +146,13 @@ export default function DirectApplicationsPage() {
           type: result.needsAssignment ? 'error' : 'success',
           message: result.message
         });
+      } else if (response.status === 409) {
+        // ADM-039: otra persona (el reclutador desde su dashboard) ya movió esta
+        // postulación; la API no la pisa. La fila está desactualizada: se quita
+        // y se recarga la bandeja para no seguir ofreciendo acciones sobre ella.
+        setApplications((prev) => prev.filter((app) => app.id !== applicationId));
+        setNotification({ type: 'error', message: result.error || 'Esta postulación ya fue procesada por otra persona.' });
+        fetchApplications();
       } else {
         setNotification({ type: 'error', message: result.error || 'Error al actualizar' });
       }
@@ -277,9 +307,9 @@ export default function DirectApplicationsPage() {
                     </div>
 
                     {/* CV Link */}
-                    {app.cvUrl && (
+                    {app.cvUrl && ensureUrl(app.cvUrl) && (
                       <a
-                        href={app.cvUrl}
+                        href={ensureUrl(app.cvUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
@@ -301,8 +331,7 @@ export default function DirectApplicationsPage() {
                       {app.job.title}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {app.job.user.companyRequest?.nombreEmpresa ||
-                        app.job.company}{' '}
+                      {nombreEmpresa(app)}{' '}
                       • {app.job.location}
                     </p>
                   </div>

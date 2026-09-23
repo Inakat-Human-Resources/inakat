@@ -2,18 +2,16 @@
 
 // RUTA: src/app/admin/vendors/page.tsx
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   DollarSign,
   Clock,
   CheckCircle,
   Search,
-  Filter,
-  ExternalLink,
   Loader2,
   X,
-  Upload,
   AlertCircle,
   TrendingUp,
   Eye,
@@ -83,7 +81,122 @@ interface GlobalStats {
   pendingCommissions: number;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+// Cuántas filas pide la página por tanda (es también el valor por omisión de las APIs)
+const FILAS_POR_PAGINA = 20;
+
+const PAGINACION_VACIA: Pagination = {
+  page: 1,
+  limit: FILAS_POR_PAGINA,
+  totalCount: 0,
+  totalPages: 1
+};
+
+// PAGO-036: el modal no es un <form>, así que el navegador no valida nada de
+// lo que escribe el admin. Estas son las mismas reglas que aplica el servidor.
+const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const FORMATO_CODIGO = /^[A-Z0-9]{4,20}$/;
+
+/**
+ * PAGO-013: el comprobante se guarda tal cual y luego se pinta como enlace en
+ * el panel del vendedor. Sin esquema, 'drive.google.com/x' se convierte en una
+ * ruta relativa que lleva a un 404.
+ */
+function esEnlaceValido(valor: string): boolean {
+  try {
+    const url = new URL(valor);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * PAGO-011: los porcentajes se guardan como texto mientras se escriben (para
+ * que borrar el campo no se convierta en un 0 silencioso) y se validan al
+ * enviar. El servidor recortaba a [0,100] sin avisar: 100% de descuento deja el
+ * precio en 0 y Mercado Pago no puede cobrar eso.
+ */
+function leerPorcentaje(valor: string): number | null {
+  const texto = valor.trim();
+  if (texto === '') return null;
+  const numero = Number(texto);
+  if (!Number.isFinite(numero) || numero < 0 || numero >= 100) return null;
+  return numero;
+}
+
+/**
+ * PAGO-007: las APIs devuelven 20 filas por tanda y la página no tenía forma de
+ * pedir la siguiente. Los contadores decían "27 pendientes" y la tabla enseñaba
+ * 20; como se ordenan por fecha descendente, las que quedaban escondidas eran
+ * justo las más antiguas, las más cercanas a su fecha límite de pago.
+ */
+function ControlesPaginacion({
+  pagination,
+  page,
+  onChange,
+  etiqueta
+}: {
+  pagination: Pagination;
+  page: number;
+  onChange: (nuevaPagina: number) => void;
+  etiqueta: string;
+}) {
+  if (pagination.totalPages <= 1) return null;
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t">
+      <p className="text-sm text-gray-600">
+        Página {page} de {pagination.totalPages} · {pagination.totalCount} {etiqueta}
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onChange(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Anterior
+        </button>
+        <button
+          onClick={() => onChange(page + 1)}
+          disabled={page >= pagination.totalPages}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PAGO-008: un 401 o un 500 no pueden pintarse como "no hay comisiones
+ * pendientes / todas han sido pagadas". El admin concluía que no debía nada.
+ */
+function AvisoDeError({ mensaje, onReintentar }: { mensaje: string; onReintentar: () => void }) {
+  return (
+    <div className="text-center py-12 px-4">
+      <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+      <h3 className="text-lg font-medium text-gray-900 mb-2">No se pudieron cargar los datos</h3>
+      <p className="text-gray-500 text-sm mb-4">{mensaje}</p>
+      <button
+        onClick={onReintentar}
+        className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+      >
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
 export default function AdminVendorsPage() {
+  const router = useRouter();
   // Estado para vendedores
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loadingVendors, setLoadingVendors] = useState(true);
@@ -95,15 +208,29 @@ export default function AdminVendorsPage() {
     pendingCommissions: 0
   });
   const [vendorSearch, setVendorSearch] = useState('');
+  // PAGO-007: la API pagina de 20 en 20; la página tiene que llevar la cuenta.
+  const [vendorPage, setVendorPage] = useState(1);
+  const [vendorPagination, setVendorPagination] = useState<Pagination>(PAGINACION_VACIA);
+  // PAGO-008: un 401/500 no puede confundirse con "no hay nada".
+  const [vendorsError, setVendorsError] = useState<string | null>(null);
 
   // Estado para comisiones
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [loadingCommissions, setLoadingCommissions] = useState(true);
   const [commissionFilter, setCommissionFilter] = useState<'all' | 'pending' | 'paid'>('pending');
+  const [commissionPage, setCommissionPage] = useState(1);
+  const [commissionPagination, setCommissionPagination] = useState<Pagination>(PAGINACION_VACIA);
+  const [commissionsError, setCommissionsError] = useState<string | null>(null);
   const [commissionSummary, setCommissionSummary] = useState({
     pending: { count: 0, total: 0 },
     paid: { count: 0, total: 0 }
   });
+
+  // PAGO-028: cada cambio de pestaña lanza una petición; si llegan desordenadas
+  // ganaba la última EN LLEGAR, no la última pedida (y "Pendientes" acababa
+  // mostrando comisiones ya pagadas, con su botón de "Marcar Pagada").
+  const peticionComisiones = useRef(0);
+  const peticionVendedores = useRef(0);
 
   // Modal de pago
   const [paymentModal, setPaymentModal] = useState<{
@@ -111,6 +238,7 @@ export default function AdminVendorsPage() {
     commission: Commission | null;
   }>({ isOpen: false, commission: null });
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
+  const [proofError, setProofError] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
 
   // Tab activa
@@ -129,76 +257,200 @@ export default function AdminVendorsPage() {
     apellidoPaterno: '',
     apellidoMaterno: '',
     email: '',
-    telefono: '',
     password: '',
     code: '',
-    discountPercent: 10,
-    commissionPercent: 10
+    // PAGO-011: texto mientras se escribe, número al enviar.
+    discountPercent: '10',
+    commissionPercent: '10'
   });
 
-  // Cargar datos al montar
+  // Cargar vendedores al montar y cuando cambia la página
   useEffect(() => {
     fetchVendors();
-    fetchCommissions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorPage]);
 
-  // Recargar comisiones cuando cambia el filtro
+  // PAGO-028: un solo efecto para las comisiones. Antes había dos (montaje y
+  // filtro) y al abrir la página se pedían las comisiones dos veces.
   useEffect(() => {
     fetchCommissions();
-  }, [commissionFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commissionFilter, commissionPage]);
+
+  /** Sesión caducada: al login, sin dejar la pantalla mintiendo con ceros. */
+  const manejarNoAutorizado = () => {
+    router.push('/login');
+  };
 
   const fetchVendors = async () => {
+    const idPeticion = ++peticionVendedores.current;
     try {
       setLoadingVendors(true);
-      const res = await fetch(`/api/admin/vendors?search=${vendorSearch}`);
-      const data = await res.json();
+      const params = new URLSearchParams({
+        page: String(vendorPage),
+        limit: String(FILAS_POR_PAGINA)
+      });
+      if (vendorSearch.trim()) params.set('search', vendorSearch.trim());
 
-      if (data.success) {
-        setVendors(data.data.vendors || []);
-        setGlobalStats(data.data.globalStats || {
-          totalVendors: 0,
-          totalSales: 0,
-          totalRevenue: 0,
-          totalCommissions: 0,
-          pendingCommissions: 0
-        });
+      const res = await fetch(`/api/admin/vendors?${params.toString()}`);
+      const data = await res.json().catch(() => null);
+
+      if (idPeticion !== peticionVendedores.current) return;
+
+      if (res.status === 401) {
+        manejarNoAutorizado();
+        return;
       }
+
+      if (!res.ok || !data?.success) {
+        setVendors([]);
+        setVendorsError(data?.error || 'No se pudieron cargar los vendedores.');
+        return;
+      }
+
+      setVendorsError(null);
+      setVendors(data.data.vendors || []);
+      setGlobalStats(data.data.globalStats || {
+        totalVendors: 0,
+        totalSales: 0,
+        totalRevenue: 0,
+        totalCommissions: 0,
+        pendingCommissions: 0
+      });
+      setVendorPagination(data.data.pagination || PAGINACION_VACIA);
     } catch (error) {
       console.error('Error fetching vendors:', error);
-      setNotification({ type: 'error', message: 'Error al cargar los vendedores. Intenta recargar la página.' });
+      if (idPeticion !== peticionVendedores.current) return;
+      setVendors([]);
+      setVendorsError('Error de conexión al cargar los vendedores. Intenta recargar la página.');
     } finally {
-      setLoadingVendors(false);
+      if (idPeticion === peticionVendedores.current) setLoadingVendors(false);
+    }
+  };
+
+  // PAGO-009/PAGO-020: activar o desactivar el código de un vendedor desde el
+  // panel (PATCH /api/admin/vendors/[id]). Antes el estado era de sólo lectura.
+  const [togglingVendorId, setTogglingVendorId] = useState<number | null>(null);
+
+  const handleToggleVendor = async (vendor: Vendor) => {
+    const activar = !vendor.isActive;
+    const pregunta = activar
+      ? `¿Reactivar el código ${vendor.code}? Volverá a dar descuento y a generar comisiones.`
+      : `¿Desactivar el código ${vendor.code}? Dejará de dar descuento y de generar comisiones. El vendedor no podrá reactivarlo por su cuenta.`;
+    if (!confirm(pregunta)) return;
+
+    setTogglingVendorId(vendor.id);
+    try {
+      const res = await fetch(`/api/admin/vendors/${vendor.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: activar })
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.status === 401) {
+        manejarNoAutorizado();
+        return;
+      }
+
+      if (!res.ok || !data?.success) {
+        setNotification({ type: 'error', message: data?.error || 'No se pudo actualizar el código' });
+        return;
+      }
+
+      setVendors((prev) => prev.map((v) => (v.id === vendor.id ? { ...v, isActive: activar } : v)));
+      setNotification({
+        type: 'success',
+        message: activar ? `Código ${vendor.code} reactivado` : `Código ${vendor.code} desactivado`
+      });
+    } catch {
+      setNotification({ type: 'error', message: 'Error de conexión' });
+    } finally {
+      setTogglingVendorId(null);
     }
   };
 
   const fetchCommissions = async () => {
+    const idPeticion = ++peticionComisiones.current;
     try {
       setLoadingCommissions(true);
-      const statusParam = commissionFilter !== 'all' ? `?status=${commissionFilter}` : '';
-      const res = await fetch(`/api/admin/vendors/commissions${statusParam}`);
-      const data = await res.json();
+      const params = new URLSearchParams({
+        page: String(commissionPage),
+        limit: String(FILAS_POR_PAGINA)
+      });
+      if (commissionFilter !== 'all') params.set('status', commissionFilter);
 
-      if (data.success) {
-        setCommissions(data.data.commissions || []);
-        setCommissionSummary(data.data.summary || {
-          pending: { count: 0, total: 0 },
-          paid: { count: 0, total: 0 }
-        });
+      const res = await fetch(`/api/admin/vendors/commissions?${params.toString()}`);
+      const data = await res.json().catch(() => null);
+
+      // PAGO-028: si mientras tanto se pidió otra cosa, esta respuesta se tira.
+      if (idPeticion !== peticionComisiones.current) return;
+
+      if (res.status === 401) {
+        manejarNoAutorizado();
+        return;
       }
+
+      if (!res.ok || !data?.success) {
+        setCommissions([]);
+        setCommissionsError(data?.error || 'No se pudieron cargar las comisiones.');
+        return;
+      }
+
+      setCommissionsError(null);
+      setCommissions(data.data.commissions || []);
+      setCommissionSummary(data.data.summary || {
+        pending: { count: 0, total: 0 },
+        paid: { count: 0, total: 0 }
+      });
+      setCommissionPagination(data.data.pagination || PAGINACION_VACIA);
     } catch (error) {
       console.error('Error fetching commissions:', error);
-      setNotification({ type: 'error', message: 'Error al cargar las comisiones. Intenta recargar la página.' });
+      if (idPeticion !== peticionComisiones.current) return;
+      setCommissions([]);
+      setCommissionsError('Error de conexión al cargar las comisiones. Intenta recargar la página.');
     } finally {
-      setLoadingCommissions(false);
+      if (idPeticion === peticionComisiones.current) setLoadingCommissions(false);
     }
   };
 
-  const handleSearchVendors = useCallback(() => {
-    fetchVendors();
-  }, [vendorSearch]);
+  const handleSearchVendors = () => {
+    // Una búsqueda nueva siempre empieza en la primera página.
+    if (vendorPage !== 1) {
+      setVendorPage(1);
+    } else {
+      fetchVendors();
+    }
+  };
+
+  /**
+   * PAGO-010: el comprobante vivía en un estado que sólo se limpiaba al
+   * terminar bien. Al cancelar y abrir otra comisión, el campo venía relleno
+   * con la URL de la anterior y se guardaba en la comisión equivocada.
+   */
+  const abrirModalPago = (commission: Commission) => {
+    setPaymentProofUrl('');
+    setProofError('');
+    setPaymentModal({ isOpen: true, commission });
+  };
+
+  const cerrarModalPago = () => {
+    setPaymentModal({ isOpen: false, commission: null });
+    setPaymentProofUrl('');
+    setProofError('');
+  };
 
   const handleMarkAsPaid = async () => {
     if (!paymentModal.commission) return;
+
+    // PAGO-013: el comprobante es opcional, pero si se escribe tiene que ser un
+    // enlace de verdad (http/https), no un texto suelto.
+    const comprobante = paymentProofUrl.trim();
+    if (comprobante && !esEnlaceValido(comprobante)) {
+      setProofError('El comprobante debe ser un enlace completo que empiece por http:// o https://');
+      return;
+    }
+    setProofError('');
 
     setProcessingPayment(true);
     try {
@@ -207,20 +459,19 @@ export default function AdminVendorsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'paid',
-          paymentProofUrl: paymentProofUrl || null
+          paymentProofUrl: comprobante || null
         })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (data.success) {
-        setPaymentModal({ isOpen: false, commission: null });
-        setPaymentProofUrl('');
+      if (res.ok && data?.success) {
+        cerrarModalPago();
         fetchCommissions();
         fetchVendors(); // Actualizar stats
         setNotification({ type: 'success', message: 'Pago registrado exitosamente' });
       } else {
-        setNotification({ type: 'error', message: data.error || 'Error al procesar pago' });
+        setNotification({ type: 'error', message: data?.error || 'Error al procesar pago' });
       }
     } catch (error) {
       console.error('Error marking as paid:', error);
@@ -236,6 +487,39 @@ export default function AdminVendorsPage() {
       return;
     }
 
+    // PAGO-036: sin <form> el navegador no comprueba el type="email".
+    if (!FORMATO_EMAIL.test(createForm.email.trim())) {
+      setCreateError('El email no tiene un formato válido');
+      return;
+    }
+
+    // PAGO-015: misma política de contraseña que el registro y el reseteo.
+    const password = createForm.password;
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setCreateError('La contraseña debe tener al menos 8 caracteres, una mayúscula y un número');
+      return;
+    }
+
+    // PAGO-036: la misma regla que aplica el endpoint del propio vendedor.
+    if (!FORMATO_CODIGO.test(createForm.code.trim().toUpperCase())) {
+      setCreateError('El código debe tener entre 4 y 20 caracteres, sólo letras y números');
+      return;
+    }
+
+    // PAGO-011: un campo vacío ya no se convierte en 0 sin avisar, y un 150 ya
+    // no se recorta a 100 en silencio (100% de descuento deja el precio en 0).
+    const discountPercent = leerPorcentaje(createForm.discountPercent);
+    if (discountPercent === null) {
+      setCreateError('El % de descuento debe ser un número entre 0 y 99');
+      return;
+    }
+
+    const commissionPercent = leerPorcentaje(createForm.commissionPercent);
+    if (commissionPercent === null) {
+      setCreateError('El % de comisión debe ser un número entre 0 y 99');
+      return;
+    }
+
     setCreatingVendor(true);
     setCreateError('');
 
@@ -243,7 +527,13 @@ export default function AdminVendorsPage() {
       const res = await fetch('/api/admin/vendors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm)
+        body: JSON.stringify({
+          ...createForm,
+          email: createForm.email.trim(),
+          code: createForm.code.trim().toUpperCase(),
+          discountPercent,
+          commissionPercent
+        })
       });
 
       const data = await res.json();
@@ -255,11 +545,10 @@ export default function AdminVendorsPage() {
           apellidoPaterno: '',
           apellidoMaterno: '',
           email: '',
-          telefono: '',
           password: '',
           code: '',
-          discountPercent: 10,
-          commissionPercent: 10
+          discountPercent: '10',
+          commissionPercent: '10'
         });
         setCreateError('');
         setShowPassword(false);
@@ -438,6 +727,7 @@ export default function AdminVendorsPage() {
                 onClick={() => {
                   setActiveTab('pending');
                   setCommissionFilter('pending');
+                  setCommissionPage(1);
                 }}
                 className={`px-6 py-4 text-sm font-medium border-b-2 ${
                   activeTab === 'pending'
@@ -452,6 +742,7 @@ export default function AdminVendorsPage() {
                 onClick={() => {
                   setActiveTab('history');
                   setCommissionFilter('paid');
+                  setCommissionPage(1);
                 }}
                 className={`px-6 py-4 text-sm font-medium border-b-2 ${
                   activeTab === 'history'
@@ -497,6 +788,8 @@ export default function AdminVendorsPage() {
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
                   </div>
+                ) : vendorsError ? (
+                  <AvisoDeError mensaje={vendorsError} onReintentar={fetchVendors} />
                 ) : vendors.length === 0 ? (
                   <div className="text-center py-12">
                     <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -555,6 +848,12 @@ export default function AdminVendorsPage() {
                             <span className="font-mono font-bold text-button-green">
                               {vendor.code}
                             </span>
+                            {/* PAGO-009: la API ya devolvía los porcentajes, pero
+                                no se enseñaban en ninguna parte; un 100% tecleado
+                                por error era invisible desde el panel. */}
+                            <p className="text-xs text-gray-500 mt-1">
+                              {vendor.discountPercent}% desc. · {vendor.commissionPercent}% com.
+                            </p>
                           </td>
                           <td className="px-6 py-4 text-right font-medium">
                             {vendor.stats.totalSales}
@@ -575,13 +874,27 @@ export default function AdminVendorsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              vendor.isActive
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {vendor.isActive ? 'Activo' : 'Inactivo'}
-                            </span>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                vendor.isActive
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {vendor.isActive ? 'Activo' : 'Inactivo'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleVendor(vendor)}
+                                disabled={togglingVendorId === vendor.id}
+                                className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                              >
+                                {togglingVendorId === vendor.id
+                                  ? 'Guardando…'
+                                  : vendor.isActive
+                                    ? 'Desactivar'
+                                    : 'Reactivar'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -589,6 +902,15 @@ export default function AdminVendorsPage() {
                   </table>
                 )}
               </div>
+
+              {!loadingVendors && !vendorsError && vendors.length > 0 && (
+                <ControlesPaginacion
+                  pagination={vendorPagination}
+                  page={vendorPage}
+                  onChange={setVendorPage}
+                  etiqueta="vendedores"
+                />
+              )}
             </div>
           )}
 
@@ -610,6 +932,8 @@ export default function AdminVendorsPage() {
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
                   </div>
+                ) : commissionsError ? (
+                  <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
                 ) : commissions.length === 0 ? (
                   <div className="text-center py-12">
                     <CheckCircle className="w-16 h-16 text-green-300 mx-auto mb-4" />
@@ -686,7 +1010,7 @@ export default function AdminVendorsPage() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             <button
-                              onClick={() => setPaymentModal({ isOpen: true, commission: comm })}
+                              onClick={() => abrirModalPago(comm)}
                               className="px-4 py-2 bg-button-green text-white text-sm rounded-lg hover:bg-green-700"
                             >
                               Marcar Pagada
@@ -698,6 +1022,15 @@ export default function AdminVendorsPage() {
                   </table>
                 )}
               </div>
+
+              {!loadingCommissions && !commissionsError && commissions.length > 0 && (
+                <ControlesPaginacion
+                  pagination={commissionPagination}
+                  page={commissionPage}
+                  onChange={setCommissionPage}
+                  etiqueta="comisiones pendientes"
+                />
+              )}
             </div>
           )}
 
@@ -719,6 +1052,8 @@ export default function AdminVendorsPage() {
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
                   </div>
+                ) : commissionsError ? (
+                  <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
                 ) : commissions.length === 0 ? (
                   <div className="text-center py-12">
                     <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -800,6 +1135,15 @@ export default function AdminVendorsPage() {
                   </table>
                 )}
               </div>
+
+              {!loadingCommissions && !commissionsError && commissions.length > 0 && (
+                <ControlesPaginacion
+                  pagination={commissionPagination}
+                  page={commissionPage}
+                  onChange={setCommissionPage}
+                  etiqueta="comisiones pagadas"
+                />
+              )}
             </div>
           )}
         </div>
@@ -812,7 +1156,7 @@ export default function AdminVendorsPage() {
             <div className="p-6 border-b flex justify-between items-center">
               <h3 className="text-lg font-semibold">Marcar Comisión como Pagada</h3>
               <button
-                onClick={() => setPaymentModal({ isOpen: false, commission: null })}
+                onClick={cerrarModalPago}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-5 h-5" />
@@ -852,18 +1196,25 @@ export default function AdminVendorsPage() {
                 <input
                   type="url"
                   value={paymentProofUrl}
-                  onChange={(e) => setPaymentProofUrl(e.target.value)}
+                  onChange={(e) => { setPaymentProofUrl(e.target.value); setProofError(''); }}
                   placeholder="https://..."
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className={`w-full px-4 py-2 border rounded-lg ${proofError ? 'border-red-500' : ''}`}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Puedes subir el comprobante a un servicio externo y pegar la URL
-                </p>
+                {proofError ? (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    {proofError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Puedes subir el comprobante a un servicio externo y pegar la URL
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setPaymentModal({ isOpen: false, commission: null })}
+                  onClick={cerrarModalPago}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   Cancelar
@@ -946,16 +1297,6 @@ export default function AdminVendorsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={createForm.telefono}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, telefono: e.target.value }))}
-                    placeholder="10 dígitos"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
               </div>
 
               {/* Email */}
@@ -978,7 +1319,7 @@ export default function AdminVendorsPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={createForm.password}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres, una mayúscula y un número"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                   <button
@@ -1013,7 +1354,7 @@ export default function AdminVendorsPage() {
                     min={0}
                     max={100}
                     value={createForm.discountPercent}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, discountPercent: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, discountPercent: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>
@@ -1024,7 +1365,7 @@ export default function AdminVendorsPage() {
                     min={0}
                     max={100}
                     value={createForm.commissionPercent}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, commissionPercent: parseInt(e.target.value) || 0 }))}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, commissionPercent: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
                 </div>

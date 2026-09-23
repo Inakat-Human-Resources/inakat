@@ -4,9 +4,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 
-// Opciones válidas
-const VALID_SENIORITIES = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
-const VALID_WORK_MODES = ['remote', 'hybrid', 'presential'];
+// DEAD-CODE (#PAGO): aquí vivían VALID_SENIORITIES / VALID_WORK_MODES, sin uso
+// desde que se deshabilitó el POST. Las combinaciones válidas salen de la propia
+// matriz (GET /api/pricing/calculate).
 
 /**
  * GET /api/admin/pricing
@@ -114,9 +114,18 @@ export async function PUT(request: Request) {
       );
     }
 
+    // `parseInt('x')` daba NaN y Prisma respondía 500 en vez de 400.
+    const pricingId = Number(id);
+    if (!Number.isInteger(pricingId) || pricingId <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'ID inválido' },
+        { status: 400 }
+      );
+    }
+
     // Verificar que existe
     const existing = await prisma.pricingMatrix.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: pricingId }
     });
 
     if (!existing) {
@@ -126,18 +135,31 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Validar créditos
-    if (credits !== undefined && (typeof credits !== 'number' || credits < 0)) {
+    // Validar créditos: entero >= 1.
+    // Antes 0 pasaba (el mensaje ya decía "positivo") y esa combinación se
+    // publicaba GRATIS; 2.5 también pasaba y reventaba en Prisma (campo Int).
+    if (credits !== undefined && (!Number.isInteger(credits) || credits < 1)) {
       return NextResponse.json(
-        { success: false, error: 'Credits debe ser un número positivo' },
+        { success: false, error: 'Credits debe ser un número entero mayor o igual a 1' },
         { status: 400 }
       );
     }
 
     // Validar minSalary
-    if (minSalary !== undefined && minSalary !== null && (typeof minSalary !== 'number' || minSalary < 0)) {
+    if (
+      minSalary !== undefined &&
+      minSalary !== null &&
+      (!Number.isInteger(minSalary) || minSalary < 0)
+    ) {
       return NextResponse.json(
-        { success: false, error: 'minSalary debe ser un número positivo o null' },
+        { success: false, error: 'minSalary debe ser un número entero positivo o null' },
+        { status: 400 }
+      );
+    }
+
+    if (isActive !== undefined && typeof isActive !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'isActive debe ser booleano' },
         { status: 400 }
       );
     }
@@ -155,15 +177,33 @@ export async function PUT(request: Request) {
       );
     }
 
+    // Desactivar deja la combinación sin precio: calculateJobCreditCost sólo
+    // mira filas activas y devuelve found:false. POST /api/jobs, PUT
+    // /api/jobs/publish y el PATCH de /api/jobs/[id] ya rechazan publicar sin
+    // precio (ADM-020/ADM-044) en vez de cobrar DEFAULT_CREDITS. Se informa de
+    // cuántas vacantes usan la combinación para que la UI pueda avisar.
+    let vacantesAfectadas = 0;
+    if (isActive === false && existing.isActive) {
+      vacantesAfectadas = await prisma.job.count({
+        where: {
+          profile: existing.profile,
+          seniority: existing.seniority,
+          workMode: existing.workMode,
+          status: { in: ['active', 'paused', 'draft'] }
+        }
+      });
+    }
+
     const updated = await prisma.pricingMatrix.update({
-      where: { id: parseInt(id) },
+      where: { id: pricingId },
       data: updateData
     });
 
     return NextResponse.json({
       success: true,
       message: 'Entrada actualizada exitosamente',
-      data: updated
+      data: updated,
+      affectedJobs: vacantesAfectadas
     });
 
   } catch (error) {

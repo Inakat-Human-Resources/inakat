@@ -3,14 +3,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Plus,
   Edit2,
   Trash2,
   Save,
   X,
-  GripVertical,
   ChevronDown,
   ChevronUp,
   Tag,
@@ -57,7 +55,6 @@ const initialFormData: FormData = {
 };
 
 export default function SpecialtiesPage() {
-  const router = useRouter();
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +66,9 @@ export default function SpecialtiesPage() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newSubcategory, setNewSubcategory] = useState('');
+  // ADM-069: el error de guardado se pinta DENTRO del modal. El banner de la
+  // página queda debajo del overlay y el admin no veía por qué no se guardaba.
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -107,6 +107,7 @@ export default function SpecialtiesPage() {
       sortOrder: specialties.length + 1
     });
     setEditingId(null);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -121,6 +122,7 @@ export default function SpecialtiesPage() {
       isActive: specialty.isActive
     });
     setEditingId(specialty.id);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -129,12 +131,14 @@ export default function SpecialtiesPage() {
     setEditingId(null);
     setFormData(initialFormData);
     setNewSubcategory('');
+    setModalError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setModalError(null);
 
     try {
       const url = editingId
@@ -159,10 +163,10 @@ export default function SpecialtiesPage() {
         fetchSpecialties();
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError(data.error || 'Error al guardar');
+        setModalError(data.error || 'Error al guardar');
       }
-    } catch (err) {
-      setError('Error de conexión');
+    } catch {
+      setModalError('Error de conexión');
     } finally {
       setIsSubmitting(false);
     }
@@ -458,7 +462,6 @@ export default function SpecialtiesPage() {
                     <tr className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 text-gray-400">
-                          <GripVertical size={16} />
                           <span className="font-mono text-sm">
                             {specialty.sortOrder}
                           </span>
@@ -587,6 +590,13 @@ export default function SpecialtiesPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {modalError && (
+                  <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2">
+                    <AlertCircle size={16} className="flex-shrink-0" />
+                    {modalError}
+                  </div>
+                )}
+
                 {/* Nombre */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

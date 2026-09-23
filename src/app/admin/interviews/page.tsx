@@ -3,7 +3,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
@@ -20,10 +19,13 @@ import {
   XCircle,
   Building,
   Briefcase,
-  MessageSquare,
-  Link as LinkIcon,
-  ExternalLink
+  MessageSquare
 } from 'lucide-react';
+
+// Tope de tandas que se piden al servidor (100 filas cada una). Es una red de
+// seguridad: sin él una base con muchas solicitudes dispararía peticiones sin
+// fin desde el navegador.
+const MAX_TANDAS = 20;
 
 type TabType = 'pending' | 'confirmed' | 'expired' | 'cancelled';
 
@@ -67,7 +69,6 @@ interface InterviewRequest {
 }
 
 export default function AdminInterviewsPage() {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('pending');
   const [interviews, setInterviews] = useState<InterviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,16 +95,54 @@ export default function AdminInterviewsPage() {
     fetchInterviews();
   }, []);
 
+  /**
+   * ADM-002/043: la API devuelve tandas (100 como máximo) y esta pantalla
+   * reparte las solicitudes en cuatro pestañas y calcula los contadores en el
+   * cliente. Pidiendo sólo la primera tanda, con 120 solicitudes las más
+   * antiguas —justo las que llevan más tiempo pendientes— no aparecían en
+   * ninguna pestaña y el contador "Pendientes" mentía. Se piden todas las
+   * tandas antes de pintar: la primera dice cuántas hay y el resto va en
+   * paralelo.
+   */
   const fetchInterviews = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/interviews?limit=100');
-      const data = await res.json();
-      if (data.success) {
-        setInterviews(data.data);
-      } else {
-        setError(data.error || 'Error al cargar entrevistas');
+      const primera = await fetch('/api/admin/interviews?limit=100').then(r => r.json());
+      if (!primera.success) {
+        setError(primera.error || 'Error al cargar entrevistas');
+        return;
       }
+
+      const totalPaginas: number = primera.pagination?.totalPages ?? 1;
+      const paginasRestantes: number[] = [];
+      for (let p = 2; p <= Math.min(totalPaginas, MAX_TANDAS); p++) {
+        paginasRestantes.push(p);
+      }
+
+      const resto = await Promise.all(
+        paginasRestantes.map(p =>
+          fetch(`/api/admin/interviews?limit=100&page=${p}`).then(r => r.json())
+        )
+      );
+
+      const fallida = resto.find(tanda => !tanda.success);
+      if (fallida) {
+        setError(fallida.error || 'Error al cargar entrevistas');
+        return;
+      }
+
+      const acumuladas: InterviewRequest[] = [
+        ...(primera.data || []),
+        ...resto.flatMap(tanda => tanda.data || [])
+      ];
+
+      setError('');
+      if (totalPaginas > MAX_TANDAS) {
+        setError(
+          `Hay más solicitudes de las que caben en pantalla; se muestran las ${acumuladas.length} más recientes.`
+        );
+      }
+      setInterviews(acumuladas);
     } catch {
       setError('Error de conexión');
     } finally {
@@ -163,6 +202,24 @@ export default function AdminInterviewsPage() {
     setModalOpen(true);
   };
 
+  /**
+   * ¿Es una URL http(s) absoluta? Misma regla que isSafeHttpUrl de
+   * src/lib/sanitize.ts, que no se puede importar aquí sin arrastrar código de
+   * servidor al bundle del cliente.
+   */
+  const esEnlaceHttp = (valor: string): boolean => {
+    try {
+      const url = new URL(valor);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  /** Fecha/hora local de un horario propuesto por la empresa (ADM-064). */
+  const fechaDeSlot = (slot: { date: string; time: string }) =>
+    new Date(`${slot.date}T${slot.time}`);
+
   const toLocalDatetime = (iso: string) => {
     const d = new Date(iso);
     const offset = d.getTimezoneOffset();
@@ -210,23 +267,58 @@ export default function AdminInterviewsPage() {
       return;
     }
 
+    /**
+     * ADM-065: el input es `type="url"` pero no vive dentro de un <form> que se
+     * envíe, así que el navegador nunca lo valida. "meet.google.com/abc" se
+     * guardaba tal cual y en /company/interviews el botón de unirse resolvía la
+     * ruta como relativa (/company/meet.google.com/abc → 404) a la hora de la
+     * entrevista. Sólo http(s), como en el resto de enlaces de la app.
+     */
+    if (newStatus !== 'cancelled' && formMeetingUrl.trim() && !esEnlaceHttp(formMeetingUrl.trim())) {
+      setModalError('La liga de videoconferencia debe empezar por https:// (o http://).');
+      return;
+    }
+
+    if (statusToSet === 'confirmed') {
+      if (selectedInterview.type === 'videocall' && !formMeetingUrl.trim()) {
+        setModalError('Para confirmar una videollamada hace falta la liga de videoconferencia.');
+        return;
+      }
+      if (selectedInterview.type === 'presential' && !formLocation.trim()) {
+        setModalError('Para confirmar una entrevista presencial hace falta el lugar.');
+        return;
+      }
+      // ADM-064: los horarios propuestos caducan. Confirmar uno ya pasado deja
+      // la entrevista directamente en "Pasadas" y la empresa la ve como
+      // realizada aunque nunca ocurrió.
+      if (new Date(formScheduledStart) < new Date()) {
+        setModalError('La fecha de inicio ya pasó: elige un horario futuro.');
+        return;
+      }
+    }
+
     setSaving(true);
     setModalError('');
 
     try {
-      const body: Record<string, unknown> = {
-        topic: formTopic || null,
-        scheduledStart: formScheduledStart ? new Date(formScheduledStart).toISOString() : null,
-        scheduledEnd: formScheduledEnd ? new Date(formScheduledEnd).toISOString() : null,
-        location: formLocation || null,
-        meetingUrl: formMeetingUrl || null,
-        adminNotes: formAdminNotes || null,
-        participants: JSON.stringify(formParticipants),
-      };
-
-      if (newStatus) {
-        body.status = newStatus;
-      }
+      // ADM-007: cancelar no reprograma nada. Antes se mandaba también
+      // scheduledStart/End en null; la API los parseaba como 1970-01-01 y la
+      // solicitud pendiente (sin fechas, el caso normal) no se podía cancelar
+      // o quedaba con fechas de epoch. Al cancelar sólo viajan el estado y las
+      // notas.
+      const body: Record<string, unknown> =
+        newStatus === 'cancelled'
+          ? { status: 'cancelled', adminNotes: formAdminNotes || null }
+          : {
+              topic: formTopic || null,
+              scheduledStart: formScheduledStart ? new Date(formScheduledStart).toISOString() : null,
+              scheduledEnd: formScheduledEnd ? new Date(formScheduledEnd).toISOString() : null,
+              location: formLocation || null,
+              meetingUrl: formMeetingUrl.trim() || null,
+              adminNotes: formAdminNotes || null,
+              participants: JSON.stringify(formParticipants),
+              ...(newStatus ? { status: newStatus } : {})
+            };
 
       const res = await fetch(`/api/admin/interviews/${selectedInterview.id}`, {
         method: 'PATCH',
@@ -235,7 +327,10 @@ export default function AdminInterviewsPage() {
       });
 
       const data = await res.json();
-      if (data.success) {
+      // ADM-008: el éxito lo decide el código HTTP y `success`, no la mera
+      // presencia de un campo. Antes la ruta [id] respondía `{ interview }` sin
+      // `success` y cada guardado correcto se pintaba como "Error al guardar".
+      if (res.ok && data.success) {
         setModalOpen(false);
         setSelectedInterview(null);
         fetchInterviews();
@@ -367,7 +462,10 @@ export default function AdminInterviewsPage() {
                             <MapPin className="w-3.5 h-3.5" /> {interview.location}
                           </span>
                         )}
-                        {interview.meetingUrl && (
+                        {/* ADM-065: las filas guardadas antes de validar la liga
+                            pueden traer cualquier cosa; si no es http(s) se
+                            enseña como texto, nunca como enlace. */}
+                        {interview.meetingUrl && esEnlaceHttp(interview.meetingUrl) && (
                           <a
                             href={interview.meetingUrl}
                             target="_blank"
@@ -376,6 +474,11 @@ export default function AdminInterviewsPage() {
                           >
                             <Video className="w-3.5 h-3.5" /> Liga VC
                           </a>
+                        )}
+                        {interview.meetingUrl && !esEnlaceHttp(interview.meetingUrl) && (
+                          <span className="ml-2 text-gray-500 font-normal break-all">
+                            {interview.meetingUrl}
+                          </span>
                         )}
                       </div>
                     )}
@@ -462,16 +565,27 @@ export default function AdminInterviewsPage() {
                     {(() => {
                       try {
                         const slots = JSON.parse(selectedInterview.availableSlots);
-                        return slots.map((slot: { date: string; time: string }, i: number) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => selectSlot(slot)}
-                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors"
-                          >
-                            {new Date(slot.date + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} — {slot.time}
-                          </button>
-                        ));
+                        return slots.map((slot: { date: string; time: string }, i: number) => {
+                          // ADM-064: un horario vencido no se puede elegir.
+                          const vencido = fechaDeSlot(slot) < new Date();
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              disabled={vencido}
+                              title={vencido ? 'Este horario ya pasó' : undefined}
+                              onClick={() => selectSlot(slot)}
+                              className={`px-3 py-1.5 text-xs border rounded-lg transition-colors ${
+                                vencido
+                                  ? 'border-gray-200 text-gray-400 line-through cursor-not-allowed'
+                                  : 'border-gray-300 hover:bg-green-50 hover:border-green-400'
+                              }`}
+                            >
+                              {new Date(slot.date + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} — {slot.time}
+                              {vencido && ' (vencido)'}
+                            </button>
+                          );
+                        });
                       } catch {
                         return <span className="text-xs text-gray-400">Sin horarios</span>;
                       }
@@ -613,17 +727,26 @@ export default function AdminInterviewsPage() {
 
             {/* Footer */}
             <div className="sticky bottom-0 bg-gray-50 border-t p-4 flex flex-col sm:flex-row justify-between items-center gap-3 rounded-b-xl">
-              {selectedInterview.status === 'pending' && (
+              {/* ADM-066: una entrevista ya confirmada no se podía cancelar desde
+                  la interfaz (la API sí lo admite) y acababa en "Pasadas" como
+                  si se hubiera realizado. Cancelar pide confirmación: es un
+                  clic que no se puede deshacer desde aquí. */}
+              {(selectedInterview.status === 'pending' || selectedInterview.status === 'confirmed') && (
                 <button
                   type="button"
-                  onClick={() => handleSave('cancelled')}
+                  onClick={() => {
+                    const pregunta = selectedInterview.status === 'pending'
+                      ? '¿Cancelar esta solicitud de entrevista?'
+                      : '¿Cancelar esta entrevista ya agendada?';
+                    if (confirm(pregunta)) handleSave('cancelled');
+                  }}
                   disabled={saving}
                   className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
                 >
-                  Cancelar solicitud
+                  {selectedInterview.status === 'pending' ? 'Cancelar solicitud' : 'Cancelar entrevista'}
                 </button>
               )}
-              {selectedInterview.status !== 'pending' && <div />}
+              {selectedInterview.status !== 'pending' && selectedInterview.status !== 'confirmed' && <div />}
 
               <div className="flex gap-2">
                 <button

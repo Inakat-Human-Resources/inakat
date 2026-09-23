@@ -3,6 +3,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
+
+// Tope alto para no romper la pantalla actual (que aún no pagina) pero evitar
+// que una avalancha de postulaciones tumbe la función serverless.
+const LIMITE_POR_DEFECTO = 200;
+const LIMITE_MAXIMO = 200;
 
 /**
  * GET /api/admin/direct-applications
@@ -20,57 +26,66 @@ export async function GET(request: Request) {
       );
     }
 
-    // Verificar que es admin (el middleware ya valida esto)
-    const userRole = request.headers.get('x-user-role');
+    // (Se eliminó la segunda comprobación por header x-user-role: requireRole
+    // ya consulta la BD y era una rama inalcanzable que además devolvía 403 a
+    // un admin legítimo cuando el handler se invoca sin el middleware.)
 
-    if (userRole !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Acceso denegado - Solo administradores' },
-        { status: 403 }
-      );
-    }
+    // Paginación: POST /api/applications es público, así que el volumen de
+    // 'pending' lo controla cualquiera. Sin tope, la respuesta con todos los
+    // includes puede superar el límite de la función serverless y la pantalla
+    // deja de funcionar por completo.
+    const { searchParams } = new URL(request.url);
+    const pagination = getPaginationParams(searchParams, LIMITE_POR_DEFECTO, LIMITE_MAXIMO);
 
-    // Obtener aplicaciones pendientes (aplicaciones directas sin revisar)
-    const applications = await prisma.application.findMany({
-      where: {
-        status: 'pending'
-      },
-      include: {
-        job: {
-          select: {
-            id: true,
-            title: true,
-            company: true,
-            location: true,
-            status: true,
-            assignment: {
-              select: {
-                id: true,
-                recruiter: {
-                  select: { id: true, nombre: true, apellidoPaterno: true }
+    const [applications, total] = await Promise.all([
+      prisma.application.findMany({
+        where: {
+          status: 'pending'
+        },
+        include: {
+          job: {
+            select: {
+              id: true,
+              title: true,
+              company: true,
+              location: true,
+              status: true,
+              assignment: {
+                select: {
+                  id: true,
+                  recruiter: {
+                    select: { id: true, nombre: true, apellidoPaterno: true }
+                  }
                 }
-              }
-            },
-            user: {
-              select: {
-                nombre: true,
-                email: true,
-                companyRequest: {
-                  select: {
-                    nombreEmpresa: true
+              },
+              user: {
+                select: {
+                  nombre: true,
+                  email: true,
+                  companyRequest: {
+                    select: {
+                      nombreEmpresa: true
+                    }
                   }
                 }
               }
             }
           }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take
+      }),
+      prisma.application.count({ where: { status: 'pending' } })
+    ]);
 
+    const response = buildPaginatedResponse(applications, total, pagination);
+
+    // TODO(handoff): la pantalla /admin/direct-applications debe leer
+    // `pagination` y pintar controles; hoy sólo usa `data`.
     return NextResponse.json({
       success: true,
-      data: applications,
+      ...response,
       count: applications.length
     });
   } catch (error) {
@@ -98,15 +113,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Verificar que es admin
-    const userRole = request.headers.get('x-user-role');
-
-    if (userRole !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Acceso denegado - Solo administradores' },
-        { status: 403 }
-      );
-    }
+    // (Igual que en GET: fuera la segunda comprobación por header.)
 
     const body = await request.json();
     const { applicationId, newStatus } = body;
@@ -114,6 +121,14 @@ export async function PUT(request: Request) {
     if (!applicationId || !newStatus) {
       return NextResponse.json(
         { success: false, error: 'Se requiere applicationId y newStatus' },
+        { status: 400 }
+      );
+    }
+
+    const idAplicacion = Number(applicationId);
+    if (!Number.isInteger(idAplicacion) || idAplicacion <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'applicationId debe ser un entero positivo' },
         { status: 400 }
       );
     }
@@ -132,7 +147,7 @@ export async function PUT(request: Request) {
 
     // Verificar que la aplicación existe
     const existingApplication = await prisma.application.findUnique({
-      where: { id: applicationId }
+      where: { id: idAplicacion }
     });
 
     if (!existingApplication) {
@@ -142,13 +157,33 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Actualizar el status
-    const updatedApplication = await prisma.application.update({
-      where: { id: applicationId },
+    // Reclamo atómico: esta pantalla sólo procesa postulaciones 'pending', pero
+    // el reclutador trabaja las mismas filas desde su panel. Sin la condición,
+    // "Descartar" sobre una lista desactualizada pisaba un estado avanzado
+    // (p. ej. una ya enviada al especialista).
+    const reclamo = await prisma.application.updateMany({
+      where: { id: idAplicacion, status: 'pending' },
       data: {
         status: newStatus,
+        // Coherente con /api/applications/[id]: al pasar a revisión se marca la
+        // fecha, que antes nunca se fijaba por este flujo.
+        ...(newStatus === 'reviewing' ? { reviewedAt: new Date() } : {}),
         updatedAt: new Date()
-      },
+      }
+    });
+
+    if (reclamo.count === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `La postulación ya no está pendiente (estado actual: ${existingApplication.status}). Recarga la lista.`
+        },
+        { status: 409 }
+      );
+    }
+
+    const updatedApplication = await prisma.application.findUnique({
+      where: { id: idAplicacion },
       include: {
         job: {
           select: {

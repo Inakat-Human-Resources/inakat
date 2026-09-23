@@ -3,6 +3,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+// Misma tabla que usa POST /api/admin/specialties al crear una especialidad.
+// Antes aquí había una copia propia sin 'Practicante' (4 seniorities en lugar
+// de 5): una fila de practicante borrada no se regeneraba nunca y esa vacante
+// pasaba a costar el DEFAULT de 5 créditos, más que un Jr presencial.
+import {
+  COMBINACIONES_ESPERADAS,
+  claveCombinacion,
+  generarPreciosPorDefecto
+} from '@/app/api/admin/pricing/precios-por-defecto';
 
 /**
  * GET /api/admin/pricing/sync
@@ -24,28 +33,44 @@ export async function GET() {
       select: { id: true, name: true }
     });
 
-    // Obtener todos los profiles con precios
-    const existingPricing = await prisma.pricingMatrix.groupBy({
-      by: ['profile'],
-      _count: { id: true }
+    // Precios existentes por combinación (no por conteo): contar filas daba
+    // "completa" a una especialidad con 12 filas aunque le faltaran 3
+    // combinaciones y le sobraran otras (p. ej. con `location`).
+    const existingPricing = await prisma.pricingMatrix.findMany({
+      where: { profile: { in: specialties.map((s) => s.name) } },
+      select: { profile: true, seniority: true, workMode: true }
     });
 
-    const profilesWithPricing = new Set(existingPricing.map(p => p.profile));
+    const combinacionesPorPerfil = new Map<string, Set<string>>();
+    for (const fila of existingPricing) {
+      if (!combinacionesPorPerfil.has(fila.profile)) {
+        combinacionesPorPerfil.set(fila.profile, new Set());
+      }
+      combinacionesPorPerfil.get(fila.profile)!.add(claveCombinacion(fila.seniority, fila.workMode));
+    }
 
     // Encontrar especialidades sin precios o con precios incompletos
     const missingPricing = [];
     const incompletePricing = [];
 
     for (const specialty of specialties) {
-      const pricingEntry = existingPricing.find(p => p.profile === specialty.name);
+      const combinaciones = combinacionesPorPerfil.get(specialty.name);
 
-      if (!pricingEntry) {
+      if (!combinaciones || combinaciones.size === 0) {
         missingPricing.push(specialty);
-      } else if (pricingEntry._count.id < 12) {
+        continue;
+      }
+
+      const faltantes = generarPreciosPorDefecto(specialty.name)
+        .map((fila) => claveCombinacion(fila.seniority, fila.workMode))
+        .filter((clave) => !combinaciones.has(clave));
+
+      if (faltantes.length > 0) {
         incompletePricing.push({
           ...specialty,
-          currentCount: pricingEntry._count.id,
-          expected: 12
+          currentCount: COMBINACIONES_ESPERADAS - faltantes.length,
+          expected: COMBINACIONES_ESPERADAS,
+          missingCombinations: faltantes
         });
       }
     }
@@ -82,23 +107,6 @@ export async function POST() {
       );
     }
 
-    // Configuración de precios
-    const workModes = ['presential', 'hybrid', 'remote'];
-    const seniorityLevels = ['Director', 'Sr', 'Middle', 'Jr'];
-
-    const baseCredits: Record<string, number> = {
-      'Director': 10,
-      'Sr': 8,
-      'Middle': 6,
-      'Jr': 4
-    };
-
-    const workModeBonus: Record<string, number> = {
-      'presential': 0,
-      'hybrid': 1,
-      'remote': 2
-    };
-
     // Obtener todas las especialidades activas
     const specialties = await prisma.specialty.findMany({
       where: { isActive: true }
@@ -115,40 +123,27 @@ export async function POST() {
       });
 
       const existingCombinations = new Set(
-        existingPricing.map(p => `${p.seniority}-${p.workMode}`)
+        existingPricing.map(p => claveCombinacion(p.seniority, p.workMode))
       );
 
       // Generar combinaciones faltantes
-      const missingPricing = [];
-
-      for (const workMode of workModes) {
-        for (const seniority of seniorityLevels) {
-          const key = `${seniority}-${workMode}`;
-
-          if (!existingCombinations.has(key)) {
-            const credits = baseCredits[seniority] + workModeBonus[workMode];
-            missingPricing.push({
-              profile: specialty.name,
-              seniority,
-              workMode,
-              location: null,
-              credits,
-              isActive: true
-            });
-          }
-        }
-      }
+      const missingPricing = generarPreciosPorDefecto(specialty.name).filter(
+        (fila) => !existingCombinations.has(claveCombinacion(fila.seniority, fila.workMode))
+      );
 
       if (missingPricing.length > 0) {
-        await prisma.pricingMatrix.createMany({
+        // Se cuenta lo REALMENTE creado, no lo intentado: `location` es NULL y
+        // en PostgreSQL los NULL no colisionan, así que skipDuplicates puede no
+        // filtrar nada y el conteo anterior mentía.
+        const creados = await prisma.pricingMatrix.createMany({
           data: missingPricing,
           skipDuplicates: true
         });
 
-        totalCreated += missingPricing.length;
+        totalCreated += creados.count;
         syncedSpecialties.push({
           name: specialty.name,
-          created: missingPricing.length
+          created: creados.count
         });
       }
     }

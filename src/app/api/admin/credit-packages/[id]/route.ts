@@ -4,6 +4,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 
+// Longitud máxima del nombre visible del paquete (igual que en la ruta padre).
+const MAX_NOMBRE = 60;
+
 /**
  * GET /api/admin/credit-packages/[id]
  * Obtener un paquete específico
@@ -97,30 +100,63 @@ export async function PUT(
     const body = await request.json();
     const { name, credits, price, badge, sortOrder, isActive } = body;
 
-    // Preparar datos de actualización
+    // Preparar datos de actualización.
+    // Todo se valida por TIPO: antes `parseInt('abc')` daba NaN, 'NaN <= 0' es
+    // false y pasaba la validación, así que Prisma lanzaba y salía un 500; y
+    // `name: ''` dejaba un paquete sin nombre visible.
     const updateData: any = {};
 
-    if (name !== undefined) updateData.name = name;
-    if (sortOrder !== undefined) updateData.sortOrder = parseInt(sortOrder);
-    if (isActive !== undefined) updateData.isActive = isActive;
-
-    // Si cambian créditos o precio, recalcular pricePerCredit
-    const finalCredits = credits !== undefined ? parseInt(credits) : existing.credits;
-    const finalPrice = price !== undefined ? parseFloat(price) : existing.price;
-
-    if (credits !== undefined || price !== undefined) {
-      if (finalCredits <= 0) {
+    if (name !== undefined) {
+      const nombreLimpio = typeof name === 'string' ? name.trim() : '';
+      if (!nombreLimpio || nombreLimpio.length > MAX_NOMBRE) {
         return NextResponse.json(
-          { success: false, error: 'La cantidad de créditos debe ser mayor a 0' },
+          { success: false, error: `El nombre debe tener entre 1 y ${MAX_NOMBRE} caracteres` },
           { status: 400 }
         );
       }
-      if (finalPrice <= 0) {
+      updateData.name = nombreLimpio;
+    }
+
+    if (sortOrder !== undefined) {
+      if (!Number.isInteger(sortOrder) || sortOrder < 0) {
+        return NextResponse.json(
+          { success: false, error: 'sortOrder debe ser un entero mayor o igual a 0' },
+          { status: 400 }
+        );
+      }
+      updateData.sortOrder = sortOrder;
+    }
+
+    if (isActive !== undefined) {
+      if (typeof isActive !== 'boolean') {
+        return NextResponse.json(
+          { success: false, error: 'isActive debe ser booleano' },
+          { status: 400 }
+        );
+      }
+      updateData.isActive = isActive;
+    }
+
+    // Si cambian créditos o precio, recalcular pricePerCredit
+    if (credits !== undefined || price !== undefined) {
+      if (credits !== undefined && (!Number.isInteger(credits) || credits <= 0)) {
+        return NextResponse.json(
+          { success: false, error: 'La cantidad de créditos debe ser un entero mayor a 0' },
+          { status: 400 }
+        );
+      }
+      if (
+        price !== undefined &&
+        (typeof price !== 'number' || !Number.isFinite(price) || price <= 0)
+      ) {
         return NextResponse.json(
           { success: false, error: 'El precio debe ser mayor a 0' },
           { status: 400 }
         );
       }
+
+      const finalCredits = credits !== undefined ? credits : existing.credits;
+      const finalPrice = price !== undefined ? price : existing.price;
 
       updateData.credits = finalCredits;
       updateData.price = finalPrice;
@@ -137,6 +173,26 @@ export async function PUT(
         );
       }
       updateData.badge = badge || null;
+    }
+
+    // Dos paquetes activos con los mismos créditos hacen ambigua la compra.
+    // Se comprueba tanto al cambiar los créditos como al REACTIVAR un paquete
+    // (antes reactivar uno inactivo no pasaba por esta comprobación).
+    const creditosFinales: number = updateData.credits ?? existing.credits;
+    const seguiraActivo: boolean = updateData.isActive ?? existing.isActive;
+    if (seguiraActivo && (creditosFinales !== existing.credits || !existing.isActive)) {
+      const duplicado = await prisma.creditPackage.findFirst({
+        where: { credits: creditosFinales, isActive: true, id: { not: packageId } }
+      });
+      if (duplicado) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Ya existe un paquete activo de ${creditosFinales} crédito(s) ("${duplicado.name}").`
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const updated = await prisma.creditPackage.update({

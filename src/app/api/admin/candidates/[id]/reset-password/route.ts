@@ -35,7 +35,7 @@ export async function POST(
     const body = await request.json();
     const { password } = body;
 
-    if (!password || password.length < 8) {
+    if (!password || typeof password !== 'string' || password.length < 8) {
       return NextResponse.json(
         { success: false, error: 'La contraseña debe tener al menos 8 caracteres' },
         { status: 400 }
@@ -65,10 +65,17 @@ export async function POST(
     const hashedPassword = await bcrypt.hash(password, 10);
 
     if (candidate.userId) {
-      // Candidato YA tiene cuenta: actualizar contraseña del User vinculado
+      // Candidato YA tiene cuenta: actualizar contraseña del User vinculado e
+      // invalidar cualquier enlace de recuperación pendiente. Si no, un
+      // "olvidé mi contraseña" pedido antes seguiría sirviendo para retomar la
+      // cuenta justo después de que el admin la "asegurara".
       await prisma.user.update({
         where: { id: candidate.userId },
-        data: { password: hashedPassword }
+        data: {
+          password: hashedPassword,
+          resetToken: null,
+          resetTokenExpiry: null
+        }
       });
 
       return NextResponse.json({
@@ -91,23 +98,27 @@ export async function POST(
         );
       }
 
-      // Crear User con role='candidate'
-      const newUser = await prisma.user.create({
-        data: {
-          email: candidate.email.toLowerCase(),
-          password: hashedPassword,
-          nombre: candidate.nombre,
-          apellidoPaterno: candidate.apellidoPaterno || null,
-          apellidoMaterno: candidate.apellidoMaterno || null,
-          role: 'candidate',
-          isActive: true
-        }
-      });
+      // Crear User y vincularlo en UNA transacción: sueltos, si el update del
+      // candidato fallaba quedaba un User huérfano que bloqueaba el email.
+      const newUser = await prisma.$transaction(async (tx) => {
+        const creado = await tx.user.create({
+          data: {
+            email: candidate.email.toLowerCase(),
+            password: hashedPassword,
+            nombre: candidate.nombre,
+            apellidoPaterno: candidate.apellidoPaterno || null,
+            apellidoMaterno: candidate.apellidoMaterno || null,
+            role: 'candidate',
+            isActive: true
+          }
+        });
 
-      // Vincular candidato con el nuevo User
-      await prisma.candidate.update({
-        where: { id: candidateId },
-        data: { userId: newUser.id }
+        await tx.candidate.update({
+          where: { id: candidateId },
+          data: { userId: creado.id }
+        });
+
+        return creado;
       });
 
       return NextResponse.json({

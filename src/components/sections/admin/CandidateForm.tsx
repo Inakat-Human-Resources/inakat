@@ -60,6 +60,35 @@ interface CandidateFormProps {
   candidateToEdit?: any; // Si se pasa, es modo edición
 }
 
+/**
+ * ADM-052: vocabulario único de estatus de educación, el mismo del registro
+ * público (src/app/register/page.tsx) y el que colorean las vistas. Antes el
+ * alta desde admin guardaba Completa/En curso/Trunca, que ninguna vista
+ * reconocía: el badge salía siempre en gris.
+ */
+const ESTATUS_EDUCACION = ['Cursando', 'Terminado', 'Trunco', 'Titulado'];
+const ESTATUS_EDUCACION_POR_DEFECTO = 'Terminado';
+
+/** Id del <form>: el botón de guardar vive fuera de él, en el pie del modal. */
+const FORM_ID = 'candidate-form';
+
+/**
+ * ¿Es una URL http(s) absoluta? Misma regla que isSafeHttpUrl
+ * (src/lib/sanitize.ts). Estas URLs acaban como `href` que abren reclutadores,
+ * especialistas y empresas: `javascript:` no puede entrar (ADM-079).
+ */
+const esUrlHttp = (valor: string): boolean => {
+  try {
+    const url = new URL(valor);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+/** Formato mínimo de correo (el navegador no lo valida: ver FORM_ID). */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const CandidateForm = ({
   isOpen,
   onClose,
@@ -117,16 +146,38 @@ const CandidateForm = ({
   const [resetSuccess, setResetSuccess] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
 
-  // Opciones
-  const profiles = [
-    'Tecnología',
-    'Arquitectura',
-    'Diseño Gráfico',
-    'Producción Audiovisual',
-    'Educación',
-    'Administración de Oficina',
-    'Finanzas'
-  ];
+  // Opciones.
+  // ADM-024: los perfiles salen del catálogo de especialidades (/admin/specialties).
+  // Antes era una lista fija de 7 nombres: una especialidad nueva ("Marketing")
+  // no se podía asignar y una renombrada dejaba el select vacío al editar.
+  const [catalogoPerfiles, setCatalogoPerfiles] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelado = false;
+    const cargar = async () => {
+      try {
+        const res = await fetch('/api/specialties');
+        const data = await res.json();
+        if (!cancelado && data.success && Array.isArray(data.names)) {
+          setCatalogoPerfiles(data.names as string[]);
+        }
+      } catch (err) {
+        console.error('Error cargando especialidades:', err);
+      }
+    };
+    cargar();
+    return () => {
+      cancelado = true;
+    };
+  }, [isOpen]);
+
+  // Si el candidato tiene un perfil que ya no está en el catálogo (renombrado o
+  // desactivado) se conserva como opción para no borrárselo al guardar.
+  const profiles =
+    profile && !catalogoPerfiles.includes(profile)
+      ? [profile, ...catalogoPerfiles]
+      : catalogoPerfiles;
 
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
   const sources = [
@@ -178,7 +229,7 @@ const CandidateForm = ({
           carrera: candidateToEdit.carrera || '',
           añoInicio: null,
           añoFin: null,
-          estatus: 'Completa'
+          estatus: ESTATUS_EDUCACION_POR_DEFECTO
         }]);
       } else {
         setEducations([]);
@@ -299,7 +350,7 @@ const CandidateForm = ({
       carrera: '',
       añoInicio: null,
       añoFin: null,
-      estatus: 'Completa'
+      estatus: ESTATUS_EDUCACION_POR_DEFECTO
     }]);
   };
 
@@ -444,6 +495,46 @@ const CandidateForm = ({
     e.preventDefault();
     setError('');
 
+    /**
+     * ADM-032: los `required`/`type=email` del formulario no protegían nada. El
+     * botón de guardar estaba fuera del <form> y llamaba a handleSubmit por
+     * onClick, así que el navegador nunca validaba; y los campos de las pestañas
+     * no visibles ni siquiera están en el DOM. Borrar el email por error y
+     * pulsar "Actualizar" lo guardaba vacío y el candidato perdía el vínculo
+     * con sus postulaciones. Se valida aquí, siempre.
+     */
+    if (!nombre.trim() || !apellidoPaterno.trim()) {
+      setActiveTab('personal');
+      setError('Nombre y apellido paterno son obligatorios.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setActiveTab('personal');
+      setError('Escribe un email válido.');
+      return;
+    }
+
+    // ADM-079: sólo enlaces http(s); cualquier otra cosa acaba como href.
+    const urlsDePerfil: Array<[string, string]> = [
+      ['URL del CV', cvUrl],
+      ['LinkedIn', linkedinUrl],
+      ['Portafolio', portafolioUrl]
+    ];
+    const urlMala = urlsDePerfil.find(([, valor]) => valor.trim() && !esUrlHttp(valor.trim()));
+    if (urlMala) {
+      setActiveTab('links');
+      setError(`${urlMala[0]}: el enlace debe empezar por https:// (o http://).`);
+      return;
+    }
+    const documentoMalo = documents.find(
+      (doc) => doc.name && doc.fileUrl && !esUrlHttp(doc.fileUrl.trim())
+    );
+    if (documentoMalo) {
+      setActiveTab('documents');
+      setError(`El documento "${documentoMalo.name}" no tiene un enlace http(s) válido.`);
+      return;
+    }
+
     // Validar contraseña si se proporcionó
     if (password && password.length < 8) {
       setError('La contraseña debe tener al menos 8 caracteres');
@@ -454,10 +545,10 @@ const CandidateForm = ({
 
     try {
       const data = {
-        nombre,
-        apellidoPaterno,
+        nombre: nombre.trim(),
+        apellidoPaterno: apellidoPaterno.trim(),
         apellidoMaterno: apellidoMaterno || null,
-        email,
+        email: email.trim(),
         telefono: telefono || null,
         sexo: sexo || null,
         fechaNacimiento: fechaNacimiento || null,
@@ -628,7 +719,7 @@ const CandidateForm = ({
         </div>
 
         {/* Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
+        <form id={FORM_ID} onSubmit={handleSubmit} noValidate className="flex-1 overflow-y-auto p-6">
           {error && (
             <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
               <p>{error}</p>
@@ -1117,9 +1208,14 @@ const CandidateForm = ({
                             onChange={(e) => updateEducation(index, 'estatus', e.target.value)}
                             className="w-full p-3 border rounded-lg"
                           >
-                            <option value="Completa">Completa</option>
-                            <option value="En curso">En curso</option>
-                            <option value="Trunca">Trunca</option>
+                            {/* Un valor viejo (Completa/En curso/Trunca) se
+                                conserva como opción hasta que el admin lo cambie. */}
+                            {edu.estatus && !ESTATUS_EDUCACION.includes(edu.estatus) && (
+                              <option value={edu.estatus}>{edu.estatus}</option>
+                            )}
+                            {ESTATUS_EDUCACION.map((estatus) => (
+                              <option key={estatus} value={estatus}>{estatus}</option>
+                            ))}
                           </select>
                         </div>
                         <div>
@@ -1417,15 +1513,22 @@ const CandidateForm = ({
                         />
                         {doc.fileUrl ? (
                           <div className="flex items-center gap-2">
-                            <a
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 text-sm hover:underline flex items-center gap-1"
-                            >
-                              <FileText size={14} />
-                              Ver archivo
-                            </a>
+                            {esUrlHttp(doc.fileUrl) ? (
+                              <a
+                                href={doc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 text-sm hover:underline flex items-center gap-1"
+                              >
+                                <FileText size={14} />
+                                Ver archivo
+                              </a>
+                            ) : (
+                              <span className="text-red-600 text-sm flex items-center gap-1 break-all">
+                                <FileText size={14} />
+                                Enlace no válido: {doc.fileUrl}
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => updateDocument(index, 'fileUrl', '')}
@@ -1503,8 +1606,11 @@ const CandidateForm = ({
           >
             Cancelar
           </button>
+          {/* Botón de envío real del <form> (ADM-032): Enter y clic pasan por
+              onSubmit y por la validación de handleSubmit. */}
           <button
-            onClick={handleSubmit}
+            type="submit"
+            form={FORM_ID}
             disabled={isSubmitting}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold flex items-center gap-2"
           >

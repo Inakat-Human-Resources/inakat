@@ -30,6 +30,10 @@ import {
   ChevronRight
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
+import Paginacion from './_components/Paginacion';
+
+/** Filas por página de la tabla de vacantes. */
+const VACANTES_POR_PAGINA = 20;
 
 interface Job {
   id: number;
@@ -116,6 +120,12 @@ export default function AdminDashboardPage() {
   const [sortField, setSortField] = useState<string>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // ADM-003: la tabla hacía slice(0, 20) y sólo decía "Mostrando 20 de N": las
+  // vacantes 21+ no se podían abrir desde el panel. Ahora se pagina.
+  const [paginaTabla, setPaginaTabla] = useState(1);
+  // Cuántas vacantes hay en total según la API (la tabla carga hasta 100).
+  const [vacantesEnServidor, setVacantesEnServidor] = useState(0);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -133,6 +143,7 @@ export default function AdminDashboardPage() {
       filtered = filtered.filter(j => j.status === selectedStatus);
     }
     setFilteredJobs(filtered);
+    setPaginaTabla(1);
   }, [selectedCompany, selectedProfile, selectedStatus, jobs]);
 
   const fetchDashboardData = async () => {
@@ -147,15 +158,15 @@ export default function AdminDashboardPage() {
       // activas por defecto, así que borradores, pausadas y cerradas salían
       // siempre en 0. La tabla sí necesita las filas, y pide el máximo por
       // página incluyendo borradores.
+      // ADM-003: ya no se descarga /api/company-requests entero; su respuesta no
+      // se usaba (las pendientes vienen contadas de /api/admin/stats).
       const results = await Promise.allSettled([
         fetch('/api/jobs?includeDrafts=true&limit=100').then(r => r.json()),
-        fetch('/api/company-requests').then(r => r.json()),
         fetch('/api/admin/stats').then(r => r.json())
       ]);
 
       const jobsData = results[0].status === 'fulfilled' ? results[0].value : { success: false };
-      const requestsData = results[1].status === 'fulfilled' ? results[1].value : { success: false };
-      const statsData = results[2].status === 'fulfilled' ? results[2].value : { success: false };
+      const statsData = results[1].status === 'fulfilled' ? results[1].value : { success: false };
 
       if (statsData.success && statsData.data) {
         setStats(prev => ({ ...prev, ...statsData.data }));
@@ -166,6 +177,7 @@ export default function AdminDashboardPage() {
         const allJobs = jobsData.data || [];
         setJobs(allJobs);
         setFilteredJobs(allJobs);
+        setVacantesEnServidor(jobsData.pagination?.total ?? allJobs.length);
 
         // Extraer empresas únicas
         const uniqueCompanies = [...new Set(allJobs.map((j: Job) => j.company))].sort() as string[];
@@ -175,10 +187,6 @@ export default function AdminDashboardPage() {
         const uniqueProfiles = [...new Set(allJobs.map((j: Job) => j.profile).filter(Boolean))].sort() as string[];
         setProfiles(uniqueProfiles);
       }
-
-      // Las solicitudes pendientes también vienen contadas de /api/admin/stats;
-      // esta respuesta sólo se usa para la lista.
-      void requestsData;
 
     } catch (err) {
       console.error('Error fetching dashboard:', err);
@@ -233,7 +241,8 @@ export default function AdminDashboardPage() {
       interested: 'Le interesan',
       interviewed: 'Entrevistados',
       rejected: 'Rechazados',
-      accepted: 'Contratados'
+      accepted: 'Contratados',
+      archived: 'Archivados'
     };
     return labels[status] || status;
   };
@@ -539,7 +548,9 @@ export default function AdminDashboardPage() {
                     </td>
                   </tr>
                 ) : (
-                  sortedJobs.slice(0, 20).map(job => (
+                  sortedJobs
+                    .slice((paginaTabla - 1) * VACANTES_POR_PAGINA, paginaTabla * VACANTES_POR_PAGINA)
+                    .map(job => (
                     <tr key={job.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div>
@@ -639,10 +650,22 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Footer */}
-          {sortedJobs.length > 20 && (
+          <Paginacion
+            pagination={{
+              page: paginaTabla,
+              limit: VACANTES_POR_PAGINA,
+              total: sortedJobs.length,
+              totalPages: Math.max(1, Math.ceil(sortedJobs.length / VACANTES_POR_PAGINA)),
+              hasNext: paginaTabla * VACANTES_POR_PAGINA < sortedJobs.length,
+              hasPrev: paginaTabla > 1
+            }}
+            onChange={setPaginaTabla}
+            etiqueta="vacantes"
+          />
+          {vacantesEnServidor > jobs.length && (
             <div className="p-4 border-t text-center">
               <p className="text-sm text-gray-500">
-                Mostrando 20 de {sortedJobs.length} vacantes
+                La tabla carga las {jobs.length} vacantes más recientes de {vacantesEnServidor}.
               </p>
             </div>
           )}
@@ -905,6 +928,23 @@ export default function AdminDashboardPage() {
                   <p className="text-sm text-gray-500 text-center">
                     {pipelineData.total} candidato{pipelineData.total !== 1 ? 's' : ''} en total
                   </p>
+
+                  {/* ADM-090: las archivadas (desde Postulaciones Directas) entraban
+                      en el total pero en ninguna etapa: el modal decía 10 y las
+                      columnas sumaban 7, sin forma de verlas. */}
+                  {(pipelineData.archived ?? 0) > 0 && (
+                    <button
+                      onClick={() => setFilterStatus(filterStatus === 'archived' ? null : 'archived')}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm border transition-colors ${
+                        filterStatus === 'archived'
+                          ? 'bg-gray-100 text-gray-800'
+                          : 'hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <span>Archivados</span>
+                      <span className="font-bold text-gray-700">{pipelineData.archived}</span>
+                    </button>
+                  )}
 
                   {/* Secciones colapsables */}
                   {/* Reclutador */}

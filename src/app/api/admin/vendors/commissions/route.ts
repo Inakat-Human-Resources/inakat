@@ -3,14 +3,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { getPaginationParams } from '@/lib/pagination';
+import { etiquetaEstadoComision } from '@/lib/comisiones';
 
-// Helper para obtener info de usuario de los headers (agregados por middleware)
-function getAuthFromHeaders(request: NextRequest): { userId: number; role: string } | null {
-  const userId = request.headers.get('x-user-id');
-  const role = request.headers.get('x-user-role');
-  if (!userId || !role) return null;
-  return { userId: parseInt(userId), role };
-}
+// DEAD-CODE (#PAGO): se eliminó `getAuthFromHeaders`. Corría después de
+// `requireRole('admin')` (que ya valida cookie + rol en la base de datos), su
+// `userId` no se usaba, y respondía 401 si faltaban las cabeceras del
+// middleware: un segundo camino de fallo sin ninguna garantía adicional.
 
 // GET - Listar todas las comisiones (filtrable por status)
 export async function GET(request: NextRequest) {
@@ -24,21 +23,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const auth = getAuthFromHeaders(request);
-    if (!auth || auth.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
-    // Obtener parámetros
+    // VALIDACIÓN (#PAGO): page/limit acotados a [1,100] (antes `parseInt`
+    // directo: limit=abc -> NaN -> 500, page=0 -> skip negativo -> 500,
+    // limit=99999999 -> paginación anulada).
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const { page, limit, skip } = getPaginationParams(searchParams, 20);
     const status = searchParams.get('status'); // pending, paid
-    const vendorId = searchParams.get('vendorId');
-    const skip = (page - 1) * limit;
+    const vendorIdParam = searchParams.get('vendorId');
+
+    let vendorId: number | null = null;
+    if (vendorIdParam !== null) {
+      const parsed = Number.parseInt(vendorIdParam, 10);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'vendorId inválido' },
+          { status: 400 }
+        );
+      }
+      vendorId = parsed;
+    }
 
     // DINERO (#PAGO): una comisión sólo cuenta si la compra que la generó se
     // pagó. `DiscountCodeUse` se crea en POST /api/credits/purchases junto con la
@@ -52,10 +55,8 @@ export async function GET(request: NextRequest) {
     if (status) {
       whereClause.commissionStatus = status;
     }
-    if (vendorId) {
-      whereClause.code = {
-        userId: parseInt(vendorId)
-      };
+    if (vendorId !== null) {
+      whereClause.code = { userId: vendorId };
     }
 
     // Obtener comisiones
@@ -92,8 +93,16 @@ export async function GET(request: NextRequest) {
             }
           }
         },
+        // ORDEN (#PAGO): era `commissionStatus: 'asc'` con el comentario
+        // "Pending primero", pero el orden es lexicográfico y 'paid' < 'pending':
+        // sin filtro de estado la primera página traía sólo comisiones YA
+        // pagadas. Con 'desc' las pendientes van primero, y dentro de ellas
+        // manda la fecha límite: lo que antes vence, antes se ve (la lista se
+        // ordenaba por createdAt desc, así que las más urgentes eran justo las
+        // que quedaban escondidas al final).
         orderBy: [
-          { commissionStatus: 'asc' }, // Pending primero
+          { commissionStatus: 'desc' },
+          { paymentDueDate: 'asc' },
           { createdAt: 'desc' }
         ],
         skip,
@@ -127,7 +136,7 @@ export async function GET(request: NextRequest) {
       commission: {
         amount: comm.commissionAmount,
         status: comm.commissionStatus,
-        statusLabel: comm.commissionStatus === 'paid' ? 'Pagada' : 'Pendiente',
+        statusLabel: etiquetaEstadoComision(comm.commissionStatus),
         paidAt: comm.commissionPaidAt,
         dueDate: comm.paymentDueDate,
         proofUrl: comm.paymentProofUrl

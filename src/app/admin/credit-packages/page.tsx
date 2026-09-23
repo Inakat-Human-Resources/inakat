@@ -13,7 +13,6 @@ import {
   Check,
   AlertCircle,
   Package,
-  DollarSign,
   Tag
 } from 'lucide-react';
 
@@ -62,6 +61,9 @@ export default function AdminCreditPackagesPage() {
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ADM-067: el error de guardado va DENTRO del modal. El banner de la página
+  // queda debajo del overlay y el admin reintentaba sin saber qué pasaba.
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPackages();
@@ -90,6 +92,7 @@ export default function AdminCreditPackagesPage() {
   const openNewModal = () => {
     setEditingPackage(null);
     setFormData(INITIAL_FORM);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -102,6 +105,7 @@ export default function AdminCreditPackagesPage() {
       badge: pkg.badge || '',
       sortOrder: pkg.sortOrder
     });
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -109,12 +113,14 @@ export default function AdminCreditPackagesPage() {
     setIsModalOpen(false);
     setEditingPackage(null);
     setFormData(INITIAL_FORM);
+    setModalError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setModalError(null);
 
     try {
       const url = editingPackage
@@ -130,16 +136,16 @@ export default function AdminCreditPackagesPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.success) {
         setSuccess(data.message);
         closeModal();
         fetchPackages();
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError(data.error || 'Error al guardar');
+        setModalError(data.error || 'Error al guardar');
       }
-    } catch (err) {
-      setError('Error de conexión');
+    } catch {
+      setModalError('Error de conexión');
     } finally {
       setIsSubmitting(false);
     }
@@ -168,6 +174,13 @@ export default function AdminCreditPackagesPage() {
   };
 
   const handleToggleActive = async (pkg: CreditPackage) => {
+    // ADM-061: el pill desactivaba con un clic, sin aviso, mientras la papelera
+    // (que hace lo mismo) sí pedía confirmación. Un paquete inactivo deja de
+    // poder comprarse.
+    if (pkg.isActive && !confirm(`¿Desactivar el paquete "${pkg.name}"? Las empresas dejarán de poder comprarlo.`)) {
+      return;
+    }
+
     try {
       const response = await fetch(`/api/admin/credit-packages/${pkg.id}`, {
         method: 'PUT',
@@ -177,22 +190,27 @@ export default function AdminCreditPackagesPage() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.success) {
+        setSuccess(pkg.isActive ? 'Paquete desactivado' : 'Paquete activado');
         fetchPackages();
+        setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError(data.error);
+        setError(data.error || 'Error al actualizar el paquete');
       }
     } catch (err) {
       setError('Error de conexión');
     }
   };
 
+  // ADM-062: el formulario admite centavos (step 0.01) y el cargo se hace por
+  // el importe exacto. Redondear a pesos enteros aquí escondía la diferencia:
+  // un paquete de $34,999.50 se veía como $35,000.
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      maximumFractionDigits: 2
     }).format(amount);
   };
 
@@ -347,13 +365,15 @@ export default function AdminCreditPackagesPage() {
                           >
                             <Edit size={18} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(pkg)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Desactivar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {pkg.isActive && (
+                            <button
+                              onClick={() => handleDelete(pkg)}
+                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Desactivar"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -388,6 +408,13 @@ export default function AdminCreditPackagesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {modalError && (
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2">
+                  <AlertCircle size={16} className="flex-shrink-0" />
+                  {modalError}
+                </div>
+              )}
+
               {/* Nombre */}
               <div>
                 <label className="block text-sm font-semibold mb-1">Nombre del Paquete *</label>

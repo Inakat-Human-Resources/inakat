@@ -19,6 +19,7 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
+import Paginacion, { PAGINACION_VACIA, type PaginacionApi } from '../_components/Paginacion';
 
 interface User {
   id: number;
@@ -63,21 +64,39 @@ const ROLES = [
   { value: 'specialist', label: 'Especialista', icon: GraduationCap, color: 'green' }
 ];
 
-const SPECIALTIES = [
-  'Tecnología',
-  'Arquitectura',
-  'Diseño Gráfico',
-  'Producción Audiovisual',
-  'Educación',
-  'Administración de Oficina',
-  'Finanzas'
-];
+// Mínimo de contraseña del servidor (PASSWORD_MIN_LENGTH en src/lib/validations.ts).
+// ADM-050: el input pedía 6 y la API ya exige 8, así que el navegador dejaba
+// enviar contraseñas que el servidor rechazaba con un 400 genérico.
+const PASSWORD_MIN_LENGTH = 8;
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // ADM-024: las especialidades salen del catálogo (/admin/specialties), no de
+  // una lista de 7 nombres escrita a mano que impedía dar de alta a un
+  // especialista de una especialidad nueva.
+  const [specialties, setSpecialties] = useState<string[]>([]);
+
+  // ADM-009/051: id del admin conectado, para no ofrecerle desactivarse ni
+  // degradarse a sí mismo (la API ya lo rechaza; aquí se evita el intento).
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+  // Paginación (ADM-025: la API devuelve 30 por tanda)
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginacionApi>(PAGINACION_VACIA);
+
+  // Tarjetas de conteo: antes se calculaban con .filter() sobre la página
+  // cargada, así que con 35 usuarios "Total" decía 30 para siempre (ADM-025).
+  const [stats, setStats] = useState({
+    total: 0,
+    admins: 0,
+    recruiters: 0,
+    specialists: 0,
+    active: 0
+  });
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,8 +110,66 @@ export default function AdminUsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /**
+   * Conteos reales: una petición por tarjeta pidiendo una sola fila y leyendo
+   * `pagination.total`.
+   * TODO(handoff): un endpoint de conteo (groupBy role) ahorraría estas cinco
+   * llamadas, igual que hizo /api/admin/stats para el dashboard.
+   */
+  const fetchStats = async () => {
+    try {
+      const pedirTotal = async (extra?: Record<string, string>) => {
+        const params = new URLSearchParams({ limit: '1', ...(extra || {}) });
+        const res = await fetch(`/api/admin/users?${params}`);
+        const data = await res.json();
+        return data.success ? (data.pagination?.total ?? 0) : 0;
+      };
+
+      const [total, admins, recruiters, specialists, active] = await Promise.all([
+        pedirTotal(),
+        pedirTotal({ role: 'admin' }),
+        pedirTotal({ role: 'recruiter' }),
+        pedirTotal({ role: 'specialist' }),
+        pedirTotal({ isActive: 'true' })
+      ]);
+
+      setStats({ total, admins, recruiters, specialists, active });
+    } catch (err) {
+      console.error('Error cargando conteos de usuarios:', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    const cargarCatalogos = async () => {
+      try {
+        const [resEsp, resYo] = await Promise.all([
+          fetch('/api/specialties'),
+          fetch('/api/auth/me')
+        ]);
+
+        const dataEsp = await resEsp.json().catch(() => null);
+        if (dataEsp?.success && Array.isArray(dataEsp.names)) {
+          setSpecialties(dataEsp.names as string[]);
+        }
+
+        const dataYo = await resYo.json().catch(() => null);
+        if (dataYo?.success && dataYo.user) {
+          setCurrentUserId(dataYo.user.id);
+        }
+      } catch (err) {
+        console.error('Error cargando catálogos:', err);
+      }
+    };
+    cargarCatalogos();
   }, []);
 
   const fetchUsers = async () => {
@@ -104,12 +181,14 @@ export default function AdminUsersPage() {
       if (searchTerm) params.append('search', searchTerm);
       if (roleFilter) params.append('role', roleFilter);
       if (activeFilter !== '') params.append('isActive', activeFilter);
+      params.append('page', String(page));
 
       const response = await fetch(`/api/admin/users?${params}`);
       const data = await response.json();
 
       if (data.success) {
         setUsers(data.data);
+        setPagination(data.pagination || PAGINACION_VACIA);
       } else {
         setError(data.error || 'Error al cargar usuarios');
       }
@@ -120,8 +199,14 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Buscar siempre desde la primera página: filtrar estando en la 3 devolvía
+  // una tabla vacía.
   const handleSearch = () => {
-    fetchUsers();
+    if (page !== 1) {
+      setPage(1);
+    } else {
+      fetchUsers();
+    }
   };
 
   const openNewModal = () => {
@@ -164,6 +249,13 @@ export default function AdminUsersPage() {
         ...formData
       };
 
+      // ADM-097: al pasar a un especialista a otro rol, el formulario seguía
+      // enviando su especialidad anterior y la cuenta quedaba como reclutador
+      // "de Tecnología". Sólo el rol specialist lleva especialidad.
+      if (payload.role !== 'specialist') {
+        payload.specialty = '';
+      }
+
       if (editingUser) {
         payload.id = editingUser.id;
         // Si no se cambió la contraseña, no enviarla
@@ -181,10 +273,10 @@ export default function AdminUsersPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(data.message);
+        mostrarExito(data.message, data.activeAssignments);
         closeModal();
         fetchUsers();
-        setTimeout(() => setSuccess(null), 3000);
+        fetchStats();
       } else {
         setError(data.error || 'Error al guardar usuario');
       }
@@ -195,8 +287,36 @@ export default function AdminUsersPage() {
     }
   };
 
+  /**
+   * ADM-098: la API devuelve `activeAssignments` (vacantes vivas que quedan sin
+   * responsable al desactivar o cambiar el rol). Se avisa en el mensaje de éxito
+   * y se deja más tiempo en pantalla para que dé tiempo a leerlo.
+   */
+  const mostrarExito = (mensaje: string, vacantesSinResponsable?: unknown) => {
+    const n = typeof vacantesSinResponsable === 'number' ? vacantesSinResponsable : 0;
+    setSuccess(
+      n > 0
+        ? `${mensaje}. ${n} vacante(s) activa(s) quedaron sin responsable: reasígnalas en Asignaciones.`
+        : mensaje
+    );
+    setTimeout(() => setSuccess(null), n > 0 ? 8000 : 3000);
+  };
+
   const handleDelete = async (user: User) => {
-    if (!confirm(`¿Estás seguro de desactivar a ${user.nombre}?`)) return;
+    // ADM-009/051: la propia cuenta no se desactiva desde aquí; el botón ni
+    // siquiera se pinta, pero la guarda se queda por si se llama de otro modo.
+    if (esUsuarioActual(user)) {
+      setError('No puedes desactivar tu propia cuenta de administrador.');
+      return;
+    }
+
+    const asignaciones =
+      (user._count?.recruiterAssignments || 0) + (user._count?.specialistAssignments || 0);
+    const aviso = asignaciones > 0
+      ? `¿Desactivar a ${user.nombre}? Tiene ${asignaciones} vacante(s) asignada(s) que quedarán sin responsable.`
+      : `¿Estás seguro de desactivar a ${user.nombre}?`;
+
+    if (!confirm(aviso)) return;
 
     try {
       const response = await fetch(`/api/admin/users?id=${user.id}`, {
@@ -206,9 +326,9 @@ export default function AdminUsersPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Usuario desactivado exitosamente');
+        mostrarExito('Usuario desactivado exitosamente', data.activeAssignments);
         fetchUsers();
-        setTimeout(() => setSuccess(null), 3000);
+        fetchStats();
       } else {
         setError(data.error || 'Error al desactivar usuario');
       }
@@ -217,7 +337,27 @@ export default function AdminUsersPage() {
     }
   };
 
+  /** ¿Es la fila del admin que está usando la pantalla? (ADM-009/051) */
+  const esUsuarioActual = (user: User) => currentUserId !== null && user.id === currentUserId;
+
   const handleToggleActive = async (user: User) => {
+    if (esUsuarioActual(user) && user.isActive) {
+      setError('No puedes desactivar tu propia cuenta de administrador.');
+      return;
+    }
+
+    // ADM-098: el mismo aviso de vacantes asignadas que en el botón de
+    // desactivar; desde el pill se desactivaba sin enterarse de que quedaban
+    // vacantes sin responsable.
+    if (user.isActive) {
+      const asignaciones =
+        (user._count?.recruiterAssignments || 0) + (user._count?.specialistAssignments || 0);
+      const aviso = asignaciones > 0
+        ? `¿Desactivar a ${user.nombre}? Perderá el acceso al sistema y tiene ${asignaciones} vacante(s) asignada(s) que quedarán sin responsable.`
+        : `¿Desactivar a ${user.nombre}? Perderá el acceso al sistema.`;
+      if (!confirm(aviso)) return;
+    }
+
     try {
       const response = await fetch('/api/admin/users', {
         method: 'PUT',
@@ -231,9 +371,12 @@ export default function AdminUsersPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(`Usuario ${user.isActive ? 'desactivado' : 'activado'} exitosamente`);
+        mostrarExito(
+          `Usuario ${user.isActive ? 'desactivado' : 'activado'} exitosamente`,
+          data.activeAssignments
+        );
         fetchUsers();
-        setTimeout(() => setSuccess(null), 3000);
+        fetchStats();
       } else {
         setError(data.error || 'Error al actualizar usuario');
       }
@@ -259,14 +402,6 @@ export default function AdminUsersPage() {
     );
   };
 
-  // Stats
-  const stats = {
-    total: users.length,
-    admins: users.filter(u => u.role === 'admin').length,
-    recruiters: users.filter(u => u.role === 'recruiter').length,
-    specialists: users.filter(u => u.role === 'specialist').length,
-    active: users.filter(u => u.isActive).length
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -481,16 +616,28 @@ export default function AdminUsersPage() {
                         {user.role === 'admin' && <span className="text-gray-400">-</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleToggleActive(user)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            user.isActive
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
-                        >
-                          {user.isActive ? 'Activo' : 'Inactivo'}
-                        </button>
+                        {/* ADM-009/051: sobre la propia fila no se ofrece
+                            desactivar; quedarse sin admin activo deja el panel
+                            inaccesible para todos. */}
+                        {esUsuarioActual(user) && user.isActive ? (
+                          <span
+                            className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                            title="Es tu cuenta: no puedes desactivarte"
+                          >
+                            Activo (tú)
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleActive(user)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              user.isActive
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                            }`}
+                          >
+                            {user.isActive ? 'Activo' : 'Inactivo'}
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-1">
@@ -501,13 +648,15 @@ export default function AdminUsersPage() {
                           >
                             <Edit size={18} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(user)}
-                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Desactivar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {!esUsuarioActual(user) && (
+                            <button
+                              onClick={() => handleDelete(user)}
+                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Desactivar"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -518,10 +667,21 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
+        {/* Paginación (ADM-025) */}
+        {!isLoading && (
+          <div className="bg-white rounded-lg shadow mt-4">
+            <Paginacion
+              pagination={pagination}
+              onChange={setPage}
+              etiqueta="usuarios"
+            />
+          </div>
+        )}
+
         {/* Results count */}
         {!isLoading && users.length > 0 && (
           <div className="mt-4 text-center text-sm text-gray-600">
-            Mostrando {users.length} usuario{users.length !== 1 ? 's' : ''}
+            Mostrando {users.length} de {pagination.total} usuario{pagination.total !== 1 ? 's' : ''}
           </div>
         )}
       </div>
@@ -564,7 +724,7 @@ export default function AdminUsersPage() {
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
                     required={!editingUser}
-                    minLength={6}
+                    minLength={PASSWORD_MIN_LENGTH}
                   />
                   <button
                     type="button"
@@ -574,6 +734,9 @@ export default function AdminUsersPage() {
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Mínimo {PASSWORD_MIN_LENGTH} caracteres.
+                </p>
               </div>
 
               {/* Nombre */}
@@ -616,13 +779,21 @@ export default function AdminUsersPage() {
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                   required
+                  // ADM-009/051: un admin no puede degradarse a sí mismo; se
+                  // quedaría fuera del panel en la siguiente petición.
+                  disabled={editingUser ? esUsuarioActual(editingUser) : false}
                 >
                   {ROLES.map(role => (
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
+                {editingUser && esUsuarioActual(editingUser) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Es tu propia cuenta: otro administrador debe cambiarte el rol.
+                  </p>
+                )}
               </div>
 
               {/* Especialidad (solo para specialists) */}
@@ -636,7 +807,14 @@ export default function AdminUsersPage() {
                     required
                   >
                     <option value="">Seleccionar especialidad</option>
-                    {SPECIALTIES.map(spec => (
+                    {/* ADM-024: catálogo real. Si el especialista tiene una
+                        especialidad que ya no está en el catálogo (renombrada o
+                        desactivada) se añade como opción para no cambiársela
+                        sin querer al guardar. */}
+                    {(specialties.includes(formData.specialty) || !formData.specialty
+                      ? specialties
+                      : [formData.specialty, ...specialties]
+                    ).map(spec => (
                       <option key={spec} value={spec}>{spec}</option>
                     ))}
                   </select>

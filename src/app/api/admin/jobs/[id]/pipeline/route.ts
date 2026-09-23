@@ -74,20 +74,23 @@ export async function GET(
       orderBy: { updatedAt: 'desc' }
     });
 
-    // Enriquecer con datos del perfil de candidato (Candidate por email)
-    const candidateEmails = applications.map(a => a.candidateEmail);
+    // Enriquecer con datos del perfil de candidato (Candidate por email).
+    // La comparación es insensible a mayúsculas, igual que en assign-candidates:
+    // con `in` exacto, una fila heredada con distinto casing
+    // ('Juan.Perez@Gmail.com') salía sin perfil (sin CV, foto ni experiencia).
+    const candidateEmails = applications.map(a => a.candidateEmail.toLowerCase());
     const candidates = await prisma.candidate.findMany({
-      where: { email: { in: candidateEmails } },
+      where: { email: { in: candidateEmails, mode: 'insensitive' } },
       include: {
         experiences: true,
         documents: true
       }
     });
-    const candidateMap = new Map(candidates.map(c => [c.email, c]));
+    const candidateMap = new Map(candidates.map(c => [c.email.toLowerCase(), c]));
 
     // Mapear applications con candidateProfile y notas de evaluación
     const enrichedApplications = applications.map(app => {
-      const candidate = candidateMap.get(app.candidateEmail);
+      const candidate = candidateMap.get(app.candidateEmail.toLowerCase());
       return {
         ...app,
         evaluationNotes: app.evaluationNotes.map(note => ({
@@ -150,6 +153,11 @@ export async function GET(
       }
     };
 
+    // 'archived' (lo asigna Postulaciones Directas) no caía en ninguna etapa,
+    // pero sí entraba en `total`: el modal decía "10 candidatos" y las columnas
+    // sumaban 7, sin forma de ver las archivadas.
+    const archived = countByStatus['archived'] || 0;
+
     // Totales por etapa
     const recruiterTotal = stages.recruiter.pending + stages.recruiter.reviewing +
       stages.recruiter.sent_to_specialist + stages.recruiter.discarded;
@@ -168,10 +176,12 @@ export async function GET(
           habilidades: job.habilidades
         },
         total: applications.length,
+        archived,
         stageTotals: {
           recruiter: recruiterTotal,
           specialist: specialistTotal,
-          company: companyTotal
+          company: companyTotal,
+          archived
         },
         stages,
         applications: enrichedApplications,

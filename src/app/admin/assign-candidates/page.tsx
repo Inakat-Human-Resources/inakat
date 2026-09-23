@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Search,
@@ -19,11 +19,23 @@ import {
   Clock,
   UserCheck,
   UserCog,
-  Send,
-  XCircle,
   MessageSquare,
   Calendar
 } from 'lucide-react';
+import Paginacion, { PAGINACION_VACIA, type PaginacionApi } from '../_components/Paginacion';
+import { isSafeHttpUrl } from '@/lib/sanitize';
+
+/**
+ * `cvUrl` llega de POST /api/applications, que es público y no valida el
+ * esquema, así que no puede ir crudo a un href: `javascript:` o `data:` se
+ * convierten en un enlace ejecutable al pulsar "Ver CV". Sólo se deja pasar
+ * http(s) absoluto; lo que parece un dominio suelto se fuerza a https y lo que
+ * no es URL se anula.
+ */
+const ensureUrl = (url: string): string | undefined => {
+  const candidata = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  return isSafeHttpUrl(candidata) ? candidata : undefined;
+};
 
 interface Job {
   id: number;
@@ -51,6 +63,10 @@ interface Candidate {
   universidad: string | null;
   status: string;
   source: string;
+  // ADM-011: conteo de postulaciones calculado en el servidor (si lo manda).
+  applicationsCount?: number;
+  /** Postulaciones vivas del candidato; lo calcula GET /api/admin/candidates (groupBy). */
+  activeApplications?: number;
 }
 
 interface PipelineCandidate {
@@ -83,6 +99,10 @@ interface PipelineStats {
   sentToSpecialist: number;
   evaluating: number;
   sentToCompany: number;
+  // ADM-053: opcionales para no romper si la API aún no los devuelve.
+  companyInterested?: number;
+  interviewed?: number;
+  archived?: number;
   hired: number;
   rejected: number;
 }
@@ -137,6 +157,14 @@ function AssignCandidatesContent() {
 
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
 
+  // Paginación de candidatos (ADM-010: la API devuelve 30 por tanda)
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginacionApi>(PAGINACION_VACIA);
+
+  // ADM-054: id de la vacante cuya carga está en curso. Las respuestas que no
+  // correspondan a ella se tiran en vez de pintarse.
+  const vacanteVigente = useRef<number | null>(null);
+
   // Función para obtener badge de status del pipeline
   const getPipelineStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
@@ -146,6 +174,12 @@ function AssignCandidatesContent() {
       sent_to_specialist: 'bg-sky-100 text-sky-700',
       evaluating: 'bg-blue-100 text-blue-800',
       sent_to_company: 'bg-purple-100 text-purple-800',
+      // ADM-053: estados que el schema sí usa y este mapa ignoraba. El propio
+      // módulo de entrevistas pone la Application en 'interviewed' al
+      // confirmar, y el badge salía en gris con el texto crudo en inglés.
+      company_interested: 'bg-indigo-100 text-indigo-800',
+      interviewed: 'bg-teal-100 text-teal-800',
+      archived: 'bg-gray-100 text-gray-600',
       hired: 'bg-green-100 text-green-800',
       accepted: 'bg-green-100 text-green-800',
       rejected: 'bg-red-100 text-red-800',
@@ -159,6 +193,9 @@ function AssignCandidatesContent() {
       sent_to_specialist: 'Con Especialista',
       evaluating: 'En Evaluación',
       sent_to_company: 'Enviado a Empresa',
+      company_interested: 'Interesa a la Empresa',
+      interviewed: 'Entrevistado',
+      archived: 'Archivado',
       hired: 'Contratado',
       accepted: 'Contratado',
       rejected: 'Rechazado',
@@ -179,6 +216,11 @@ function AssignCandidatesContent() {
       const response = await fetch(`/api/admin/assign-candidates?jobId=${jobId}`);
       const data = await response.json();
 
+      // ADM-054: si mientras tanto el admin pulsó otra vacante, esta respuesta
+      // es de la anterior y pintarla mezcla el pipeline de A bajo el encabezado
+      // de B. Se descarta.
+      if (vacanteVigente.current !== jobId) return;
+
       if (data.success) {
         setPipelineCandidates(data.data || []);
         setPipelineStats(data.pipelineStats || null);
@@ -192,12 +234,13 @@ function AssignCandidatesContent() {
       }
     } catch (err) {
       console.error('Error fetching pipeline:', err);
+      if (vacanteVigente.current !== jobId) return;
       setError('Error de conexión al cargar el pipeline.');
       setPipelineCandidates([]);
       setPipelineStats(null);
       setJobAssignment(null);
     } finally {
-      setIsLoadingPipeline(false);
+      if (vacanteVigente.current === jobId) setIsLoadingPipeline(false);
     }
   };
 
@@ -229,31 +272,101 @@ function AssignCandidatesContent() {
     fetchSpecialties();
   }, []);
 
-  // Cargar candidatos cuando cambia la vacante seleccionada
+  // Cargar candidatos cuando cambia la vacante seleccionada.
+  // ADM-012: la selección se vacía SIEMPRE al cambiar de vacante. Antes sólo se
+  // limpiaba al deseleccionar, así que los 3 candidatos marcados para la
+  // vacante A se acababan inyectando en la B con un clic en "Asignar".
+  // ADM-054: se reinicia también el pipeline y los "ya asignados" para no
+  // enseñar los de la vacante anterior mientras carga la nueva.
   useEffect(() => {
+    setSelectedCandidates(new Set());
+    setAlreadyAssigned(new Set());
+    setSuccess(null);
+
     if (selectedJob) {
-      fetchCandidates();
+      vacanteVigente.current = selectedJob.id;
+      setPipelineCandidates([]);
+      setPipelineStats(null);
+      setJobAssignment(null);
+      setPage(1);
+      fetchCandidates(1);
       fetchAlreadyAssigned(selectedJob.id);
       fetchPipelineCandidates(selectedJob.id);
     } else {
+      vacanteVigente.current = null;
       setCandidates([]);
-      setSelectedCandidates(new Set());
-      setAlreadyAssigned(new Set());
       setPipelineCandidates([]);
       setPipelineStats(null);
       setJobAssignment(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob]);
 
-  // Seleccionar vacante desde URL al cargar
+  // ADM-013: los selects de Perfil / Nivel / Subcategoría sólo hacían setState.
+  // La lista no cambiaba y el admin concluía que el filtro no servía (o que
+  // todos los candidatos cumplían) y asignaba a quien no correspondía.
+  // ADM-012: al cambiar el filtro, los marcados que dejan de verse se quitan de
+  // la selección; si no, "Asignar" inyectaba candidatos que el admin ya no veía.
   useEffect(() => {
-    if (jobIdFromUrl && jobs.length > 0 && !selectedJob) {
-      const jobToSelect = jobs.find(j => j.id === parseInt(jobIdFromUrl));
-      if (jobToSelect) {
-        setSelectedJob(jobToSelect);
-      }
+    if (!selectedJob) return;
+    setSelectedCandidates(new Set());
+    setPage(1);
+    fetchCandidates(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileFilter, seniorityFilter, subcategoryFilter]);
+
+  // Búsqueda por texto (Enter o botón de refrescar): mismo criterio que los
+  // filtros, la selección oculta se descarta (ADM-012).
+  const buscarCandidatos = () => {
+    setSelectedCandidates(new Set());
+    setPage(1);
+    fetchCandidates(1);
+  };
+
+  // Cambio de página del banco de candidatos (ADM-010)
+  const irAPagina = (nuevaPagina: number) => {
+    setPage(nuevaPagina);
+    fetchCandidates(nuevaPagina);
+  };
+
+  // Seleccionar vacante desde URL al cargar.
+  // ADM-001: el listado trae como mucho 100 vacantes activas. Si la del enlace
+  // (?jobId= desde el dashboard) no está en esa tanda, antes la página abría
+  // sin vacante seleccionada y sin decir nada. Ahora se pide por id y, si no
+  // está activa o no existe, se avisa.
+  const deepLinkResuelto = useRef(false);
+  useEffect(() => {
+    if (!jobIdFromUrl || isLoadingJobs || selectedJob || deepLinkResuelto.current) return;
+    deepLinkResuelto.current = true;
+
+    const idPedido = Number(jobIdFromUrl);
+    if (!Number.isInteger(idPedido) || idPedido <= 0) {
+      setError('El enlace apunta a una vacante no válida.');
+      return;
     }
-  }, [jobIdFromUrl, jobs]);
+
+    const enLista = jobs.find(j => j.id === idPedido);
+    if (enLista) {
+      setSelectedJob(enLista);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/jobs/${idPedido}`);
+        const data = await res.json();
+        if (res.ok && data.success && data.data?.status === 'active') {
+          const vacante: Job = data.data;
+          setJobs(prev => (prev.some(j => j.id === vacante.id) ? prev : [vacante, ...prev]));
+          setSelectedJob(vacante);
+        } else {
+          setError('La vacante del enlace no existe o ya no está activa.');
+        }
+      } catch {
+        setError('Error de conexión al cargar la vacante del enlace.');
+      }
+    })();
+  }, [jobIdFromUrl, jobs, isLoadingJobs, selectedJob]);
 
   // Handler para seleccionar vacante y actualizar URL
   const handleSelectJob = (job: Job) => {
@@ -280,7 +393,7 @@ function AssignCandidatesContent() {
     }
   };
 
-  const fetchCandidates = async () => {
+  const fetchCandidates = async (paginaPedida = page) => {
     try {
       setIsLoadingCandidates(true);
       setError(null);
@@ -290,22 +403,34 @@ function AssignCandidatesContent() {
       if (profileFilter) params.append('profile', profileFilter);
       if (seniorityFilter) params.append('seniority', seniorityFilter);
       if (subcategoryFilter) params.append('subcategory', subcategoryFilter);
-      // NO filtrar por status para permitir asignar candidatos a múltiples vacantes
-      // Los candidatos "available" e "in_process" pueden ser asignados
+      // ADM-010: el descarte de hired/inactive se hace en el WHERE del servidor.
+      // Filtrándolo en el navegador DESPUÉS de paginar, una tanda de 30 podía
+      // quedarse en 12 visibles y el contador de la pestaña mentía.
+      params.append('status', 'available,in_process');
+      params.append('page', String(paginaPedida));
 
       const response = await fetch(`/api/admin/candidates?${params}`);
       const data = await response.json();
 
       if (data.success) {
-        // Filtrar solo available e in_process (excluir hired e inactive)
-        // También incluir candidatos sin status definido como disponibles
-        const filteredCandidates = data.data.filter(
-          (c: Candidate) => !c.status || c.status === 'available' || c.status === 'in_process'
-        );
-        setCandidates(filteredCandidates);
+        const lista: Candidate[] = data.data || [];
+        setCandidates(lista);
+        setPagination(data.pagination || PAGINACION_VACIA);
 
-        // Obtener conteo de asignaciones por candidato
-        await fetchCandidateAssignments(filteredCandidates);
+        // ADM-011: el contador de "N vacantes" no bloquea el listado. Antes se
+        // esperaba (await) a una descarga de TODAS las applications antes de
+        // quitar el spinner. GET /api/admin/candidates ya trae el conteo por
+        // candidato (`activeApplications`, groupBy que excluye procesos
+        // cerrados); si faltara, se pide sólo el conteo a /api/applications/counts.
+        const conteoDe = (c: Candidate) =>
+          typeof c.activeApplications === 'number' ? c.activeApplications : c.applicationsCount;
+        if (lista.length > 0 && lista.every(c => typeof conteoDe(c) === 'number')) {
+          const counts: Record<string, number> = {};
+          for (const c of lista) counts[c.email.toLowerCase()] = conteoDe(c) as number;
+          setCandidateAssignments(counts);
+        } else {
+          void fetchCandidateAssignments(lista);
+        }
       } else {
         setError('Error al cargar candidatos');
       }
@@ -316,26 +441,30 @@ function AssignCandidatesContent() {
     }
   };
 
-  // Obtener cuántas vacantes tiene asignadas cada candidato
+  /**
+   * Cuántas vacantes tiene asignadas cada candidato visible (respaldo cuando
+   * el listado no trae el conteo).
+   *
+   * ADM-011 / VAC-011: antes pedía GET /api/applications SIN filtros (toda la
+   * tabla con PII, coverLetter y notas) sólo para pintar un número. Ahora se
+   * pide el conteo por correo a /api/applications/counts (groupBy en la base);
+   * los correos sin postulaciones no aparecen en la respuesta.
+   */
   const fetchCandidateAssignments = async (candidateList: Candidate[]) => {
+    if (candidateList.length === 0) return;
     try {
-      const emails = candidateList.map(c => c.email.toLowerCase());
-      const response = await fetch('/api/applications');
+      const response = await fetch('/api/applications/counts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: candidateList.map(c => c.email.toLowerCase()) })
+      });
       const data = await response.json();
 
       if (data.success) {
-        const counts: Record<string, number> = {};
-        for (const app of data.data) {
-          const email = app.candidateEmail?.toLowerCase();
-          if (email && emails.includes(email)) {
-            counts[email] = (counts[email] || 0) + 1;
-          }
-        }
-        setCandidateAssignments(counts);
+        setCandidateAssignments(data.data || {});
       }
     } catch (err) {
       console.error('Error fetching assignments:', err);
-      setError('Error al cargar las asignaciones.');
     }
   };
 
@@ -343,6 +472,9 @@ function AssignCandidatesContent() {
     try {
       const response = await fetch(`/api/applications?jobId=${jobId}`);
       const data = await response.json();
+
+      // ADM-054: respuesta de una vacante que ya no es la seleccionada.
+      if (vacanteVigente.current !== jobId) return;
 
       if (data.success) {
         const emails = new Set<string>(
@@ -352,6 +484,7 @@ function AssignCandidatesContent() {
       }
     } catch (err) {
       console.error('Error fetching assigned:', err);
+      if (vacanteVigente.current !== jobId) return;
       setError('Error al cargar los candidatos asignados.');
     }
   };
@@ -366,12 +499,22 @@ function AssignCandidatesContent() {
     setSelectedCandidates(newSelected);
   };
 
+  /**
+   * ADM-012: comparar tamaños daba falsos positivos —una selección de 3 hecha
+   * en otra vacante "coincidía" con 3 visibles y el botón desmarcaba en vez de
+   * marcar; con 0 disponibles el icono salía siempre marcado—. Ahora se mira
+   * pertenencia real.
+   */
   const handleSelectAll = () => {
     const availableCandidates = candidates.filter(
       c => !alreadyAssigned.has(c.email.toLowerCase())
     );
 
-    if (selectedCandidates.size === availableCandidates.length) {
+    const todosMarcados =
+      availableCandidates.length > 0 &&
+      availableCandidates.every(c => selectedCandidates.has(c.id));
+
+    if (todosMarcados) {
       setSelectedCandidates(new Set());
     } else {
       setSelectedCandidates(new Set(availableCandidates.map(c => c.id)));
@@ -416,29 +559,16 @@ function AssignCandidatesContent() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      available: 'bg-green-100 text-green-800',
-      in_process: 'bg-yellow-100 text-yellow-800',
-      hired: 'bg-blue-100 text-blue-800',
-      inactive: 'bg-gray-100 text-gray-800'
-    };
-    const labels: Record<string, string> = {
-      available: 'Disponible',
-      in_process: 'En Proceso',
-      hired: 'Contratado',
-      inactive: 'Inactivo'
-    };
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.inactive}`}>
-        {labels[status] || status}
-      </span>
-    );
-  };
-
   const availableCandidatesCount = candidates.filter(
     c => !alreadyAssigned.has(c.email.toLowerCase())
   ).length;
+
+  const candidatosVisibles = candidates.filter(
+    c => !alreadyAssigned.has(c.email.toLowerCase())
+  );
+  const todosVisiblesMarcados =
+    candidatosVisibles.length > 0 &&
+    candidatosVisibles.every(c => selectedCandidates.has(c.id));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -582,9 +712,11 @@ function AssignCandidatesContent() {
 
                 {activeTab === 'pipeline' && selectedJob && (
                   <>
-                    {/* Stats del pipeline */}
+                    {/* Stats del pipeline. ADM-053: las cajas no cuadraban con el
+                        total: 'company_interested' e 'interviewed' no caían en
+                        ninguna y los rechazados no se pintaban. */}
                     {pipelineStats && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
                         <div className="bg-gray-50 p-2 rounded text-center">
                           <p className="text-lg font-bold text-gray-700">{pipelineStats.pending + pipelineStats.injected}</p>
                           <p className="text-xs text-gray-500">Pendientes</p>
@@ -598,12 +730,24 @@ function AssignCandidatesContent() {
                           <p className="text-xs text-blue-600">Evaluación</p>
                         </div>
                         <div className="bg-purple-50 p-2 rounded text-center">
-                          <p className="text-lg font-bold text-purple-700">{pipelineStats.sentToCompany}</p>
+                          <p className="text-lg font-bold text-purple-700">
+                            {pipelineStats.sentToCompany + (pipelineStats.companyInterested ?? 0)}
+                          </p>
                           <p className="text-xs text-purple-600">Enviados</p>
+                        </div>
+                        <div className="bg-teal-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-teal-700">{pipelineStats.interviewed ?? 0}</p>
+                          <p className="text-xs text-teal-600">Entrevista</p>
                         </div>
                         <div className="bg-green-50 p-2 rounded text-center">
                           <p className="text-lg font-bold text-green-700">{pipelineStats.hired}</p>
                           <p className="text-xs text-green-600">Contratados</p>
+                        </div>
+                        <div className="bg-red-50 p-2 rounded text-center">
+                          <p className="text-lg font-bold text-red-700">
+                            {pipelineStats.rejected + (pipelineStats.archived ?? 0)}
+                          </p>
+                          <p className="text-xs text-red-600">Descartados</p>
                         </div>
                       </div>
                     )}
@@ -655,7 +799,9 @@ function AssignCandidatesContent() {
                           placeholder="Buscar candidatos..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && fetchCandidates()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') buscarCandidatos();
+                          }}
                           className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -672,7 +818,9 @@ function AssignCandidatesContent() {
                       </button>
 
                       <button
-                        onClick={fetchCandidates}
+                        onClick={buscarCandidatos}
+                        title="Actualizar lista"
+                        aria-label="Actualizar lista de candidatos"
                         className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
                       >
                         <RefreshCw size={20} />
@@ -772,9 +920,9 @@ function AssignCandidatesContent() {
                               </div>
                               <p className="text-sm text-gray-600">{candidate.candidateEmail}</p>
                             </div>
-                            {candidate.cvUrl && (
+                            {candidate.cvUrl && ensureUrl(candidate.cvUrl) && (
                               <a
-                                href={candidate.cvUrl}
+                                href={ensureUrl(candidate.cvUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-xs font-medium shrink-0"
@@ -900,12 +1048,12 @@ function AssignCandidatesContent() {
                           onClick={handleSelectAll}
                           className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
                         >
-                          {selectedCandidates.size === availableCandidatesCount ? (
+                          {todosVisiblesMarcados ? (
                             <CheckSquare size={20} />
                           ) : (
                             <Square size={20} />
                           )}
-                          Seleccionar todos ({availableCandidatesCount})
+                          Seleccionar todos ({availableCandidatesCount} en esta página)
                         </button>
 
                         <span className="text-sm text-gray-500">
@@ -924,6 +1072,18 @@ function AssignCandidatesContent() {
                             <div
                               key={candidate.id}
                               onClick={() => !isAlreadyAssigned && handleSelectCandidate(candidate.id)}
+                              // ADM-056: operable también con teclado (Espacio/Enter).
+                              role="checkbox"
+                              aria-checked={isSelected}
+                              aria-disabled={isAlreadyAssigned}
+                              tabIndex={isAlreadyAssigned ? -1 : 0}
+                              onKeyDown={(e) => {
+                                if (isAlreadyAssigned) return;
+                                if (e.key === ' ' || e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSelectCandidate(candidate.id);
+                                }
+                              }}
                               className={`p-4 rounded-lg border-2 transition-all ${
                                 isAlreadyAssigned
                                   ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
@@ -989,13 +1149,22 @@ function AssignCandidatesContent() {
                           );
                         })}
                       </div>
+
+                      {/* Paginación del banco (ADM-010) */}
+                      <Paginacion
+                        pagination={pagination}
+                        onChange={irAPagina}
+                        etiqueta="candidatos disponibles"
+                      />
                     </>
                   )}
                 </div>
               )}
 
-              {/* Footer con botón de asignar */}
-              {selectedJob && selectedCandidates.size > 0 && (
+              {/* Footer con botón de asignar.
+                  ADM-012: sólo en la pestaña "Asignar Nuevos"; antes aparecía
+                  también sobre el Pipeline, donde no hay nada que asignar. */}
+              {selectedJob && activeTab === 'assign' && selectedCandidates.size > 0 && (
                 <div className="p-4 md:p-6 border-t bg-gray-50">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div>

@@ -3,18 +3,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
+import { isSafeHttpUrl } from '@/lib/sanitize';
+import { etiquetaEstadoComision } from '@/lib/comisiones';
+import { parseId } from '@/lib/pagination';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// Helper para obtener info de usuario de los headers (agregados por middleware)
-function getAuthFromHeaders(request: NextRequest): { userId: number; role: string } | null {
-  const userId = request.headers.get('x-user-id');
-  const role = request.headers.get('x-user-role');
-  if (!userId || !role) return null;
-  return { userId: parseInt(userId), role };
-}
+// DEAD-CODE (#PAGO): se eliminó `getAuthFromHeaders`; `requireRole('admin')` ya
+// valida cookie + rol contra la base de datos y devuelve el usuario actor.
 
 // PUT - Actualizar estado de comisión
 export async function PUT(request: NextRequest, { params }: RouteParams) {
@@ -28,18 +26,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const auth = getAuthFromHeaders(request);
-    if (!auth || auth.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
     const { id } = await params;
-    const commissionId = parseInt(id);
+    const commissionId = parseId(id);
 
-    if (isNaN(commissionId)) {
+    if (commissionId === null) {
       return NextResponse.json(
         { success: false, error: 'ID de comisión inválido' },
         { status: 400 }
@@ -99,6 +89,47 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // TRANSICIÓN (#PAGO): una comisión 'cancelled' (el webhook la cancela cuando
+    // la compra se rechaza, se devuelve o sufre un contracargo) no se reabre.
+    // Revertirla a 'pending' la devolvía a la lista de comisiones por liquidar
+    // de una venta cuyo dinero ya no existe.
+    if (commission.commissionStatus === 'cancelled' && status) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Esta comisión se canceló porque la compra se rechazó o se devolvió; no se puede reabrir.',
+          commissionStatus: commission.commissionStatus
+        },
+        { status: 409 }
+      );
+    }
+
+    // VALIDACIÓN (#PAGO): el comprobante se guardaba tal cual, de cualquier tipo
+    // y con cualquier esquema, y luego se renderiza como `href` en el panel del
+    // vendedor. Un "drive.google.com/file/abc" sin protocolo acababa como enlace
+    // relativo roto (/vendor/drive.google.com/...), y un `javascript:` sería XSS
+    // almacenado. Un número u objeto reventaba en Prisma y devolvía 500, no 400.
+    if (
+      paymentProofUrl !== undefined &&
+      paymentProofUrl !== null &&
+      !isSafeHttpUrl(paymentProofUrl)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'El comprobante debe ser una URL http(s) completa (incluye https://)'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (typeof paymentProofUrl === 'string' && paymentProofUrl.length > 2000) {
+      return NextResponse.json(
+        { success: false, error: 'La URL del comprobante es demasiado larga' },
+        { status: 400 }
+      );
+    }
+
     // Preparar datos de actualización
     const updateData: Record<string, unknown> = {};
 
@@ -109,13 +140,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       if (status === 'paid') {
         updateData.commissionPaidAt = new Date();
       } else if (status === 'pending') {
-        // Si se revierte a pending, limpiar fecha de pago
+        // Si se revierte a pending, limpiar fecha de pago y comprobante: el
+        // comprobante de un pago que se está deshaciendo no debe sobrevivirle.
         updateData.commissionPaidAt = null;
+        updateData.paymentProofUrl = null;
       }
     }
 
     if (paymentProofUrl !== undefined) {
-      updateData.paymentProofUrl = paymentProofUrl;
+      // DATOS (#PAGO): la UI envía SIEMPRE paymentProofUrl (null si el campo va
+      // vacío), así que un segundo "Marcar Pagada" sin URL borraba el
+      // comprobante que ya había guardado otro admin. Un null no pisa lo que
+      // existe; para quitarlo hay que revertir a 'pending'.
+      if (paymentProofUrl !== null || !commission.paymentProofUrl) {
+        updateData.paymentProofUrl = paymentProofUrl;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -125,30 +164,72 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Actualizar comisión
-    const updatedCommission = await prisma.discountCodeUse.update({
-      where: { id: commissionId },
-      data: updateData,
-      include: {
-        code: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nombre: true,
-                email: true
-              }
+    // TRANSICIÓN (#PAGO): marcar como pagada es un reclamo ATÓMICO sobre una
+    // comisión que siga pendiente.
+    //
+    // Antes el handler no comparaba el estado actual con el pedido: dos admins
+    // con la lista vieja abierta podían marcar la misma comisión, el segundo PUT
+    // respondía 200, reescribía `commissionPaidAt` con su hora y (al enviar la
+    // UI paymentProofUrl:null) borraba el comprobante del primero. Se perdía la
+    // prueba del pago y era muy probable una segunda transferencia real.
+    if (status === 'paid') {
+      const reclamada = await prisma.discountCodeUse.updateMany({
+        where: { id: commissionId, commissionStatus: 'pending' },
+        data: updateData
+      });
+
+      if (reclamada.count === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'La comisión ya fue pagada por otro administrador.',
+            commissionStatus: commission.commissionStatus,
+            paidAt: commission.commissionPaidAt,
+            proofUrl: commission.paymentProofUrl
+          },
+          { status: 409 }
+        );
+      }
+
+      console.info('[Commissions] Comisión marcada como pagada:', {
+        commissionId,
+        adminId: roleCheck.user.id
+      });
+    }
+
+    // El resto de transiciones (revertir a 'pending', actualizar comprobante) no
+    // necesitan reclamo: no mueven dinero.
+    const incluirRelaciones = {
+      code: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              nombre: true,
+              email: true
             }
           }
-        },
-        purchase: {
-          select: {
-            id: true,
-            amount: true
-          }
+        }
+      },
+      purchase: {
+        select: {
+          id: true,
+          amount: true
         }
       }
-    });
+    };
+
+    const updatedCommission =
+      status === 'paid'
+        ? await prisma.discountCodeUse.findUniqueOrThrow({
+            where: { id: commissionId },
+            include: incluirRelaciones
+          })
+        : await prisma.discountCodeUse.update({
+            where: { id: commissionId },
+            data: updateData,
+            include: incluirRelaciones
+          });
 
     return NextResponse.json({
       success: true,
@@ -163,7 +244,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         commission: {
           amount: updatedCommission.commissionAmount,
           status: updatedCommission.commissionStatus,
-          statusLabel: updatedCommission.commissionStatus === 'paid' ? 'Pagada' : 'Pendiente',
+          statusLabel: etiquetaEstadoComision(updatedCommission.commissionStatus),
           paidAt: updatedCommission.commissionPaidAt,
           proofUrl: updatedCommission.paymentProofUrl
         },
@@ -192,18 +273,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const auth = getAuthFromHeaders(request);
-    if (!auth || auth.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
     const { id } = await params;
-    const commissionId = parseInt(id);
+    const commissionId = parseId(id);
 
-    if (isNaN(commissionId)) {
+    if (commissionId === null) {
       return NextResponse.json(
         { success: false, error: 'ID de comisión inválido' },
         { status: 400 }
@@ -278,7 +351,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         commission: {
           amount: commission.commissionAmount,
           status: commission.commissionStatus,
-          statusLabel: commission.commissionStatus === 'paid' ? 'Pagada' : 'Pendiente',
+          statusLabel: etiquetaEstadoComision(commission.commissionStatus),
           paidAt: commission.commissionPaidAt,
           dueDate: commission.paymentDueDate,
           proofUrl: commission.paymentProofUrl

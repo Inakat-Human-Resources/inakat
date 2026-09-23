@@ -2,10 +2,8 @@
 
 'use client';
 
-// FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
-const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Search,
   Filter,
@@ -27,6 +25,46 @@ import {
   Loader2
 } from 'lucide-react';
 import CandidateForm from '@/components/sections/admin/CandidateForm';
+import Paginacion, { PAGINACION_VACIA, type PaginacionApi } from '../_components/Paginacion';
+import { isSafeHttpUrl } from '@/lib/sanitize';
+
+/**
+ * FIX-02: asegura que los enlaces externos lleven protocolo (un "linkedin.com/in/x"
+ * suelto se fuerza a https). Y sólo deja pasar http(s): con `startsWith('http')`
+ * un valor raro llegaba tal cual a href. Lo que no es URL se anula.
+ */
+const ensureUrl = (url: string): string | undefined => {
+  const candidata = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  return isSafeHttpUrl(candidata) ? candidata : undefined;
+};
+
+/**
+ * ADM-060: `fechaInicio`/`fechaFin` se guardan como medianoche UTC. Pintarlas
+ * con toLocaleDateString('es-MX') a secas las corre un día hacia atrás en
+ * México (UTC-6): una experiencia del 01/01/2020 se leía "31/12/2019".
+ */
+const formatoSoloFecha = (valor: string | Date) =>
+  new Date(valor).toLocaleDateString('es-MX', { timeZone: 'UTC' });
+
+/**
+ * ADM-052: el vocabulario de `estatus` de educación no era uno solo. El alta
+ * desde admin guardaba Completa/En curso/Trunca y esta vista sólo coloreaba
+ * Titulado/Terminado/Cursando, así que todo lo capturado por el admin salía en
+ * gris. CandidateForm ya usa el vocabulario bueno; aquí se reconocen también
+ * los valores viejos que siguen en la base.
+ */
+const colorEstatusEducacion = (estatus: string): string => {
+  const verde = ['Titulado', 'Completa'];
+  const azul = ['Terminado'];
+  const amarillo = ['Cursando', 'En curso'];
+  const rojo = ['Trunco', 'Trunca'];
+
+  if (verde.includes(estatus)) return 'bg-green-100 text-green-700';
+  if (azul.includes(estatus)) return 'bg-blue-100 text-blue-700';
+  if (amarillo.includes(estatus)) return 'bg-yellow-100 text-yellow-700';
+  if (rojo.includes(estatus)) return 'bg-red-100 text-red-700';
+  return 'bg-gray-100 text-gray-700';
+};
 
 interface CandidateDocument {
   id: number;
@@ -76,7 +114,13 @@ interface Candidate {
   userId: number | null;
 }
 
-export default function AdminCandidatesPage() {
+function AdminCandidatesContent() {
+  // ADM-099: el error 409 de CandidateForm enlaza a
+  // /admin/candidates?search=<email>. La página ignoraba el parámetro, así que
+  // el enlace sólo cerraba el modal y el admin tenía que reescribir el correo.
+  const searchParams = useSearchParams();
+  const searchFromUrl = searchParams.get('search') || '';
+
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +142,25 @@ export default function AdminCandidatesPage() {
   const [newDocName, setNewDocName] = useState('');
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
+  // Paginación (ADM-016: la API devuelve 30 por tanda y la página no tenía
+  // forma de pedir la siguiente ni de conocer el total real)
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginacionApi>(PAGINACION_VACIA);
+
+  // Tarjetas de conteo. Antes se calculaban con .filter() sobre la página
+  // cargada, así que con 500 candidatos decían "Total 30" y "Contratados 0"
+  // (ADM-016). Ahora cada cifra es el `pagination.total` que devuelve la API
+  // para ese estado: se cuenta en la base, no en el navegador.
+  const [stats, setStats] = useState({
+    total: 0,
+    available: 0,
+    inProcess: 0,
+    hired: 0
+  });
+
   // Filtros
   const [showFilters, setShowFilters] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
   const [sexoFilter, setSexoFilter] = useState('');
   const [universidadFilter, setUniversidadFilter] = useState('');
   const [profileFilter, setProfileFilter] = useState('');
@@ -112,16 +172,12 @@ export default function AdminCandidatesPage() {
   const [minExperience, setMinExperience] = useState('');
   const [maxExperience, setMaxExperience] = useState('');
 
-  // Opciones para filtros
-  const profiles = [
-    'Tecnología',
-    'Arquitectura',
-    'Diseño Gráfico',
-    'Producción Audiovisual',
-    'Educación',
-    'Administración de Oficina',
-    'Finanzas'
-  ];
+  // Opciones para filtros.
+  // ADM-024: antes era una lista de 7 nombres escrita a mano. Si el admin daba
+  // de alta "Marketing" en /admin/specialties no había forma de filtrar por
+  // ella, y al renombrar una especialidad el filtro dejaba de encontrar a sus
+  // candidatos. Ahora sale del catálogo real.
+  const [profiles, setProfiles] = useState<string[]>([]);
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
   const statuses = [
     { value: 'available', label: 'Disponible' },
@@ -136,14 +192,15 @@ export default function AdminCandidatesPage() {
     { value: 'referido', label: 'Referido' }
   ];
 
-  // Fetch candidates
-  const fetchCandidates = async () => {
+  // Fetch candidates. `busqueda` permite pedir con un término que todavía no
+  // está en el estado (el que llega por la URL, ADM-099).
+  const fetchCandidates = async (busqueda: string = search) => {
     try {
       setIsLoading(true);
       setError(null);
 
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
+      if (busqueda) params.append('search', busqueda);
       if (sexoFilter) params.append('sexo', sexoFilter);
       if (universidadFilter) params.append('universidad', universidadFilter);
       if (profileFilter) params.append('profile', profileFilter);
@@ -154,12 +211,14 @@ export default function AdminCandidatesPage() {
       if (maxAge) params.append('maxAge', maxAge);
       if (minExperience) params.append('minExperience', minExperience);
       if (maxExperience) params.append('maxExperience', maxExperience);
+      params.append('page', String(page));
 
       const response = await fetch(`/api/admin/candidates?${params}`);
       const data = await response.json();
 
       if (response.ok && data.success) {
         setCandidates(data.data);
+        setPagination(data.pagination || PAGINACION_VACIA);
       } else {
         setError(data.error || 'Error al cargar candidatos');
       }
@@ -171,13 +230,84 @@ export default function AdminCandidatesPage() {
     }
   };
 
+  /**
+   * Conteos del banco completo (sin filtros): una petición por estado pidiendo
+   * una sola fila y quedándonos con `pagination.total`.
+   * TODO(handoff): sustituir por un endpoint de conteo (groupBy status) cuando
+   * exista; /api/admin/stats ya hace lo mismo para el dashboard.
+   */
+  const fetchStats = async () => {
+    try {
+      const pedirTotal = async (status?: string) => {
+        const params = new URLSearchParams({ limit: '1' });
+        if (status) params.append('status', status);
+        const res = await fetch(`/api/admin/candidates?${params}`);
+        const data = await res.json();
+        return data.success ? (data.pagination?.total ?? 0) : 0;
+      };
+
+      const [total, available, inProcess, hired] = await Promise.all([
+        pedirTotal(),
+        pedirTotal('available'),
+        pedirTotal('in_process'),
+        pedirTotal('hired')
+      ]);
+
+      setStats({ total, available, inProcess, hired });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
   useEffect(() => {
     fetchCandidates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  useEffect(() => {
+    fetchStats();
   }, []);
 
-  // Aplicar filtros
+  // ADM-099: el enlace "Buscar en Banco de Candidatos" del alta duplicada lleva
+  // a esta misma página con ?search=<email>. Como la página ya está montada, el
+  // estado inicial no se vuelve a leer: hay que reaccionar al cambio de URL.
+  const busquedaDeUrlAplicada = useRef(searchFromUrl);
+  useEffect(() => {
+    if (searchFromUrl === busquedaDeUrlAplicada.current) return;
+    busquedaDeUrlAplicada.current = searchFromUrl;
+    setSearch(searchFromUrl);
+    if (page !== 1) {
+      setPage(1); // el efecto de [page] recarga ya con el término nuevo
+    } else {
+      fetchCandidates(searchFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchFromUrl]);
+
+  // Catálogo de especialidades para el filtro de perfil (ADM-024)
+  useEffect(() => {
+    const cargarEspecialidades = async () => {
+      try {
+        const res = await fetch('/api/specialties');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.names)) {
+          setProfiles(data.names as string[]);
+        }
+      } catch (err) {
+        console.error('Error fetching specialties:', err);
+      }
+    };
+    cargarEspecialidades();
+  }, []);
+
+  // Aplicar filtros. Siempre vuelve a la página 1: filtrar quedándose en la
+  // página 4 devolvía una lista vacía sin explicación.
   const applyFilters = () => {
-    fetchCandidates();
+    if (page !== 1) {
+      setPage(1);
+    } else {
+      fetchCandidates();
+    }
   };
 
   // Limpiar filtros
@@ -206,6 +336,7 @@ export default function AdminCandidatesPage() {
 
       if (response.ok) {
         fetchCandidates();
+        fetchStats();
         setNotification({ type: 'success', message: 'Candidato eliminado exitosamente' });
       } else {
         const data = await response.json();
@@ -229,14 +360,20 @@ export default function AdminCandidatesPage() {
     await fetchDocuments(candidate.id);
   };
 
-  // Cargar documentos de un candidato
+  // Cargar documentos de un candidato.
+  // ADM-059: la lista sólo se escribía cuando la respuesta venía bien, así que
+  // si fallaba la de un candidato se seguían viendo los documentos del anterior
+  // como si fueran suyos. Se vacía al empezar y también en caso de error.
   const fetchDocuments = async (candidateId: number) => {
+    setDocuments([]);
     try {
       setIsLoadingDocs(true);
       const response = await fetch(`/api/admin/candidates/${candidateId}/documents`);
       const data = await response.json();
       if (data.success) {
         setDocuments(data.data);
+      } else {
+        setNotification({ type: 'error', message: data.error || 'Error al cargar los documentos del candidato.' });
       }
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -249,6 +386,13 @@ export default function AdminCandidatesPage() {
   // Subir archivo y agregar documento
   const handleAddDocument = async (file: File) => {
     if (!candidateToView || !newDocName.trim()) return;
+
+    // PERF-028: /api/upload rechaza por encima de 4MB y Vercel corta los
+    // cuerpos de más de 4.5MB con un 413 que no es JSON.
+    if (file.size > 4 * 1024 * 1024) {
+      setNotification({ type: 'error', message: 'El archivo excede el tamaño máximo de 4MB.' });
+      return;
+    }
 
     try {
       setIsUploadingDoc(true);
@@ -405,13 +549,6 @@ export default function AdminCandidatesPage() {
     return [];
   };
 
-  // Stats
-  const stats = {
-    total: candidates.length,
-    available: candidates.filter((c) => c.status === 'available').length,
-    inProcess: candidates.filter((c) => c.status === 'in_process').length,
-    hired: candidates.filter((c) => c.status === 'hired').length
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -554,8 +691,10 @@ export default function AdminCandidatesPage() {
 
             {/* Refresh */}
             <button
-              onClick={fetchCandidates}
+              onClick={() => fetchCandidates()}
               disabled={isLoading}
+              title="Actualizar lista"
+              aria-label="Actualizar lista de candidatos"
               className="px-4 py-2 border rounded-lg hover:bg-gray-50"
             >
               <RefreshCw
@@ -918,11 +1057,22 @@ export default function AdminCandidatesPage() {
           </>
         )}
 
+        {/* Paginación (ADM-016) */}
+        {!isLoading && (
+          <div className="bg-white rounded-lg shadow mt-4">
+            <Paginacion
+              pagination={pagination}
+              onChange={setPage}
+              etiqueta="candidatos"
+            />
+          </div>
+        )}
+
         {/* Results count */}
         {!isLoading && candidates.length > 0 && (
           <div className="mt-4 text-center text-sm text-gray-600">
-            Mostrando {candidates.length} candidato
-            {candidates.length !== 1 ? 's' : ''}
+            Mostrando {candidates.length} de {pagination.total} candidato
+            {pagination.total !== 1 ? 's' : ''}
           </div>
         )}
       </div>
@@ -934,7 +1084,10 @@ export default function AdminCandidatesPage() {
           setIsFormOpen(false);
           setCandidateToEdit(null);
         }}
-        onSuccess={fetchCandidates}
+        onSuccess={() => {
+          fetchCandidates();
+          fetchStats();
+        }}
         candidateToEdit={candidateToEdit}
       />
 
@@ -1019,12 +1172,7 @@ export default function AdminCandidatesPage() {
                             )}
                           </div>
                           {edu.estatus && (
-                            <span className={`px-2 py-1 text-xs font-medium rounded ${
-                              edu.estatus === 'Titulado' ? 'bg-green-100 text-green-700' :
-                              edu.estatus === 'Terminado' ? 'bg-blue-100 text-blue-700' :
-                              edu.estatus === 'Cursando' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
+                            <span className={`px-2 py-1 text-xs font-medium rounded ${colorEstatusEducacion(edu.estatus)}`}>
                               {edu.estatus}
                             </span>
                           )}
@@ -1060,16 +1208,12 @@ export default function AdminCandidatesPage() {
                         <p className="font-medium">{exp.puesto}</p>
                         <p className="text-sm text-gray-600">{exp.empresa}</p>
                         <p className="text-xs text-gray-400">
-                          {new Date(exp.fechaInicio).toLocaleDateString(
-                            'es-MX'
-                          )}{' '}
+                          {formatoSoloFecha(exp.fechaInicio)}{' '}
                           -
                           {exp.esActual
                             ? ' Actual'
                             : exp.fechaFin
-                            ? ` ${new Date(exp.fechaFin).toLocaleDateString(
-                                'es-MX'
-                              )}`
+                            ? ` ${formatoSoloFecha(exp.fechaFin)}`
                             : ''}
                         </p>
                       </div>
@@ -1191,7 +1335,7 @@ export default function AdminCandidatesPage() {
                       </button>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">
-                      Formatos: PDF, JPG, PNG, WEBP. Máximo 5MB.
+                      Formatos: PDF, JPG, PNG, WEBP. Máximo 4MB.
                     </p>
                   </div>
                 )}
@@ -1224,15 +1368,19 @@ export default function AdminCandidatesPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <a
-                            href={doc.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-blue-600 hover:bg-blue-100 rounded"
-                            title="Ver/Descargar"
-                          >
-                            <Download size={16} />
-                          </a>
+                          {/* ADM-079: el fileUrl de documentos creados desde
+                              admin no se validaba; sólo http(s) llega a href. */}
+                          {isSafeHttpUrl(doc.fileUrl) && (
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                              title="Ver/Descargar"
+                            >
+                              <Download size={16} />
+                            </a>
+                          )}
                           <button
                             onClick={() => handleDeleteDocument(doc.id)}
                             className="p-2 text-red-500 hover:bg-red-100 rounded"
@@ -1251,5 +1399,20 @@ export default function AdminCandidatesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// useSearchParams exige Suspense en el App Router (ADM-099)
+export default function AdminCandidatesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <RefreshCw className="animate-spin text-gray-400" size={32} />
+        </div>
+      }
+    >
+      <AdminCandidatesContent />
+    </Suspense>
   );
 }

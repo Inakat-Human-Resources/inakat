@@ -134,8 +134,39 @@ const RequestDetailModal = ({
     );
   };
 
+  /**
+   * ¿Es una URL http(s) absoluta (o una ruta local de desarrollo)?
+   *
+   * `window.open` NO está protegido por React —React 19 sólo bloquea
+   * `javascript:` en atributos `href`—, así que una solicitud guardada con
+   * `identificacionUrl: "javascript:fetch('/api/admin/users',…)"` ejecutaba ese
+   * script con el origen de INAKAT y la cookie del admin en cuanto éste pulsaba
+   * "Ver identificación" durante el flujo normal de aprobación. El schema ya
+   * exige http(s) al guardar, pero las filas creadas antes de ese arreglo
+   * siguen en la base: aquí se comprueba también al abrir.
+   */
+  const esUrlSegura = (url: string): boolean => {
+    // Ruta servida por la propia app. '//host' y '/\host' NO lo son: el
+    // navegador los resuelve como URL de otro dominio.
+    if (url.startsWith('/')) return !url.startsWith('//') && !url.startsWith('/\\');
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const [urlError, setUrlError] = useState<string | null>(null);
+
   const openFile = (url: string) => {
-    window.open(url, '_blank');
+    if (!esUrlSegura(url)) {
+      setUrlError('El enlace del documento no es válido y no se abrió por seguridad.');
+      return;
+    }
+    setUrlError(null);
+    // noopener/noreferrer: la pestaña abierta no debe poder tocar window.opener.
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -300,7 +331,7 @@ const RequestDetailModal = ({
                     placeholder="https://www.ejemplo.com"
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                ) : request.sitioWeb ? (
+                ) : request.sitioWeb && esUrlSegura(request.sitioWeb) ? (
                   <a
                     href={request.sitioWeb}
                     target="_blank"
@@ -310,6 +341,10 @@ const RequestDetailModal = ({
                     {request.sitioWeb}
                     <ExternalLink className="w-4 h-4" />
                   </a>
+                ) : request.sitioWeb ? (
+                  // Fila antigua con un esquema que no es http(s): se muestra el
+                  // texto, nunca como enlace pinchable.
+                  <p className="font-medium text-gray-500 break-all">{request.sitioWeb}</p>
                 ) : (
                   <p className="text-gray-400 italic">No especificado</p>
                 )}
@@ -335,6 +370,11 @@ const RequestDetailModal = ({
             <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
               📄 Documentos
             </h3>
+            {urlError && (
+              <div role="alert" className="mb-3 p-2 bg-red-100 text-red-700 rounded-lg text-sm">
+                {urlError}
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Identificación */}
               <div>
