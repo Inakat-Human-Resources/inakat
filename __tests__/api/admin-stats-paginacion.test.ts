@@ -60,7 +60,8 @@ describe('El dashboard consume esas cifras', () => {
 describe('Pantallas que consumían APIs paginadas sin paginar', () => {
   it.each([
     ['src/app/admin/assign-candidates/page.tsx', "fetch('/api/jobs?status=active&limit=100')"],
-    ['src/components/sections/talents/SearchPositionsSection.tsx', "fetch('/api/jobs?status=active&limit=100')"],
+    // SearchPositionsSection ya no pide un lote de 100: pagina de 20 en 20 con
+    // filtros en servidor (VAC-010). Lo cubre __tests__/components/vac-search-positions.test.tsx.
     ['src/app/admin/interviews/page.tsx', "fetch('/api/admin/interviews?limit=100')"]
   ])('%s pide el máximo por página', (archivo, esperado) => {
     expect(readFile(archivo)).toContain(esperado);

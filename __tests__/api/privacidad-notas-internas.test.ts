@@ -56,8 +56,12 @@ describe('Dashboard de empresa', () => {
 
   it('limpia también las applications que cuelgan de allJobs', () => {
     // El filtro anterior sólo cubría `enrichedApplications`; éstas venían del
-    // include completo y conservaban `notes`.
-    expect(c).toContain('applications.map(({ notes: _n, ...app }) => app)');
+    // include completo y conservaban `notes`. Desde EMP-004/EMP-014 allJobs ya
+    // no embebe applications: sólo lleva el conteo. (Se quitan los comentarios
+    // para que la explicación del cambio no cuente como código.)
+    const code = c.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).not.toMatch(/include:\s*\{\s*applications/);
+    expect(c).toContain('applicationCount: candidatosDe(job.id)');
   });
 });
 
@@ -82,17 +86,24 @@ describe('Vacantes confidenciales', () => {
   it('las tres rutas ocultan userId y coordenadas, no sólo el nombre', () => {
     // `userId` identifica a la empresa dueña y las coordenadas apuntan a su
     // domicilio: sin ocultarlos, la confidencialidad era aparente.
+    // La función vive centralizada en src/lib/jobs-public.ts; las tres rutas la importan.
+    const lib = readFile('src/lib/jobs-public.ts');
+    const idx = lib.indexOf('export function sanitizeConfidentialJob');
+    expect(idx).toBeGreaterThan(-1);
+    const sanit = lib.slice(idx);
+    expect(sanit).toContain('userId: null');
+    expect(sanit).toContain('latitude: null');
+    expect(sanit).toContain('longitude: null');
+    expect(sanit).toContain("company: 'Empresa Confidencial'");
     for (const ruta of [
       'src/app/api/jobs/route.ts',
       'src/app/api/jobs/publish/route.ts',
       'src/app/api/jobs/[id]/route.ts'
     ]) {
       const c = readFile(ruta);
-      const sanit = c.slice(c.indexOf('function sanitizeConfidentialJob'));
-      expect(sanit).toContain('userId: null');
-      expect(sanit).toContain('latitude: null');
-      expect(sanit).toContain('longitude: null');
-      expect(sanit).toContain("company: 'Empresa Confidencial'");
+      expect(c).toContain("import { sanitizeConfidentialJob } from '@/lib/jobs-public'");
+      expect(c).toMatch(/sanitizeConfidentialJob\(/);
+      expect(c).not.toContain('function sanitizeConfidentialJob');
     }
   });
 });

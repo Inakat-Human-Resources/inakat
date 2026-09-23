@@ -29,6 +29,8 @@ jest.mock('@/lib/prisma', () => ({
 
 jest.mock('@/lib/auth', () => ({
   verifyToken: jest.fn(),
+  // EMP-002: la compra exige empresa aprobada; aquí se da por aprobada.
+  requireApprovedCompany: jest.fn().mockResolvedValue(null),
 }));
 
 jest.mock('mercadopago', () => ({
@@ -89,6 +91,6 @@ describe('POST /api/credits/purchases — auth verification', () => {
     const content = fs.readFileSync(filePath, 'utf8');
     expect(content).not.toMatch(/^import jwt from 'jsonwebtoken'/m);
     expect(content).not.toMatch(/jwt\.verify\(/);
-    expect(content).toContain("import { verifyToken } from '@/lib/auth'");
+    expect(content).toMatch(/import \{[^}]*\bverifyToken\b[^}]*\} from '@\/lib\/auth'/);
   });
 });

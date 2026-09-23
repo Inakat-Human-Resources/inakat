@@ -128,14 +128,31 @@ describe('API Route: /api/notifications', () => {
 
   it('PATCH should support marking all as read', () => {
     const content = readFile('src/app/api/notifications/route.ts');
-    expect(content).toContain('body.all');
+    // El cuerpo se valida con zod: la rama "todas" es `{ all: true }`.
+    expect(content).toContain('all: z.literal(true)');
     expect(content).toContain('read: true');
     expect(content).toContain('readAt');
   });
 
   it('PATCH should support marking specific ids as read', () => {
     const content = readFile('src/app/api/notifications/route.ts');
-    expect(content).toContain('body.ids');
+    // La rama de ids acotada: array de enteros positivos, con tope.
+    expect(content).toContain('ids: z.array(z.number().int().positive())');
+    expect(content).toContain('parsed.data.ids');
+  });
+
+  it('PATCH debe rechazar cuerpos inválidos con 400, no con 500 (JSON roto o ids no numéricos)', () => {
+    const content = readFile('src/app/api/notifications/route.ts');
+    // request.json() nunca debe lanzar sin red de seguridad
+    expect(content).toContain('request.json().catch(() => null)');
+    // y el parseo fallido responde 400
+    expect(content).toMatch(/if \(!parsed\.success\)[\s\S]{0,200}status: 400/);
+  });
+
+  it('GET debe normalizar page/limit con getPaginationParams (nada de NaN a Prisma)', () => {
+    const content = readFile('src/app/api/notifications/route.ts');
+    expect(content).toContain('getPaginationParams');
+    expect(content).not.toContain("parseInt(searchParams.get('page')");
   });
 });
 
@@ -180,7 +197,14 @@ describe('NotificationBell component', () => {
     const content = readFile('src/components/shared/NotificationBell.tsx');
     expect(content).toContain('/api/notifications/count');
     expect(content).toContain('setInterval');
-    expect(content).toContain('30000');
+    expect(content).toContain('POLL_INTERVAL = 60000');
+  });
+
+  it('no debe encuestar con la pestaña oculta ni seguir tras un 401/403', () => {
+    const content = readFile('src/components/shared/NotificationBell.tsx');
+    expect(content).toContain('document.hidden');
+    expect(content).toContain('visibilitychange');
+    expect(content).toMatch(/res\.status === 401 \|\| res\.status === 403/);
   });
 
   it('should fetch notifications on dropdown open', () => {
@@ -286,7 +310,9 @@ describe('Notification triggers in API routes', () => {
     const content = readFile('src/app/api/company-requests/route.ts');
     expect(content).toContain('notifyAllAdmins');
     expect(content).toContain('new_request');
-    expect(content).toContain('.catch(() => {})');
+    // EMP-009/EMP-013: nada de `.catch(() => {})` suelto; se entrega con
+    // runAfterResponse / after(), que mantienen viva la función y registran el error.
+    expect(content).toMatch(/runAfterResponse\(|after\(/);
   });
 
   it('G2: company-requests/[id]/route.ts should notify company on status change', () => {
@@ -341,7 +367,7 @@ describe('Notification triggers in API routes', () => {
     expect(content).toContain('application_status');
   });
 
-  it('All triggers should use fire-and-forget pattern (.catch)', () => {
+  it('All triggers deliver after the response (runAfterResponse / after), not a bare .catch', () => {
     // El webhook de pagos es la EXCEPCIÓN deliberada (#70): await + allSettled
     // para garantizar la entrega en serverless, en vez de fire-and-forget.
     // Se verifica aparte en el test siguiente.
@@ -359,7 +385,9 @@ describe('Notification triggers in API routes', () => {
     files.forEach((file) => {
       const content = readFile(file);
       if (content.includes('createNotification') || content.includes('notifyAllAdmins')) {
-        expect(content).toContain('.catch(() => {})');
+        // Entrega garantizada: después de la respuesta (runAfterResponse /
+        // after) o esperada antes de responder (await Promise.allSettled).
+        expect(content).toMatch(/runAfterResponse\(|after\(|await Promise\.allSettled\(/);
       }
     });
   });

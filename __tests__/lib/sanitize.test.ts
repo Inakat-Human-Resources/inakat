@@ -33,18 +33,32 @@ describe('sanitizeText', () => {
     expect(sanitizeText('<img onerror="alert(1)">Juan')).toBe('Juan');
   });
 
-  it('debe remover javascript: URLs', () => {
-    expect(sanitizeText('javascript:alert(1)')).toBe('alert(1)');
+  // Las reglas que borraban 'javascript:', 'data:text/html' y los `on*="…"`
+  // se eliminaron: mutilaban texto legítimo (ver los casos de más abajo) y no
+  // aportaban seguridad real, porque el escape lo hace React al renderizar y
+  // escapeHtml en los correos.
+  it('NO debe mutilar la cadena javascript: dentro de texto plano', () => {
+    expect(sanitizeText('JavaScript: avanzado')).toBe('JavaScript: avanzado');
+    expect(sanitizeText('javascript:alert(1)')).toBe('javascript:alert(1)');
   });
 
-  it('debe remover event handlers inline', () => {
-    expect(sanitizeText('onclick="hack()" texto')).toBe('texto');
-  });
-
-  it('debe remover data:text/html', () => {
+  it('debe remover el <script> completo aunque quede texto alrededor', () => {
     const result = sanitizeText('data:text/html,<script>alert(1)</script>');
-    expect(result).not.toContain('data:text/html');
     expect(result).not.toContain('<script>');
+    expect(result).not.toContain('alert(1)');
+  });
+
+  it('debe preservar comparaciones numéricas con < y >', () => {
+    expect(sanitizeText('React < 2 años, Node > 3 años')).toBe('React < 2 años, Node > 3 años');
+  });
+
+  it('debe preservar una nota de evaluación real completa', () => {
+    const nota = 'JavaScript: avanzado. Experiencia React < 2 años, Node > 3 años';
+    expect(sanitizeText(nota)).toBe(nota);
+  });
+
+  it('debe eliminar caracteres de control', () => {
+    expect(sanitizeText('hola\u0000mundo')).toBe('holamundo');
   });
 
   it('debe normalizar whitespace excesivo', () => {
@@ -77,17 +91,12 @@ describe('sanitizeText', () => {
     expect(sanitizeText(nested)).toBe('contenido');
   });
 
-  it('debe remover múltiples event handlers', () => {
-    const input = 'onload="hack()" onmouseover="steal()" texto limpio';
+  it('debe remover event handlers que viven DENTRO de un tag', () => {
+    const input = '<span onload="hack()" onmouseover="steal()">texto limpio</span>';
     const result = sanitizeText(input);
     expect(result).not.toContain('onload');
     expect(result).not.toContain('onmouseover');
-    expect(result).toContain('texto limpio');
-  });
-
-  it('debe remover javascript: case insensitive', () => {
-    expect(sanitizeText('JAVASCRIPT:alert(1)')).toBe('alert(1)');
-    expect(sanitizeText('JavaScript:void(0)')).toBe('void(0)');
+    expect(result).toBe('texto limpio');
   });
 
   it('debe manejar null/undefined sin crash (via guard clause)', () => {

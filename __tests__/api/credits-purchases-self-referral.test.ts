@@ -34,6 +34,8 @@ jest.mock('@/lib/prisma', () => ({
 
 jest.mock('@/lib/auth', () => ({
   verifyToken: jest.fn(),
+  // EMP-002: la compra exige empresa aprobada; aquí se da por aprobada.
+  requireApprovedCompany: jest.fn().mockResolvedValue(null),
 }));
 
 const mockPaymentCreate = jest.fn();

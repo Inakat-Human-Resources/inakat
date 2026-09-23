@@ -24,6 +24,9 @@ jest.mock('@/lib/prisma', () => ({
   prisma: {
     job: { findUnique: jest.fn(), update: jest.fn() },
     application: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
+    // requireAuth / getOptionalAuthUser consultan el usuario en la base
+    // (isActive y rol actual) en vez de fiarse del JWT.
+    user: { findUnique: jest.fn() },
   },
 }));
 
@@ -31,6 +34,10 @@ jest.mock('next/headers', () => ({ cookies: jest.fn() }));
 
 jest.mock('@/lib/notifications', () => ({
   notifyAllAdmins: jest.fn().mockResolvedValue(undefined),
+  // La ruta envía la notificación con runAfterResponse (EMP-009/EMP-013).
+  runAfterResponse: jest.fn(async (_etiqueta: string, fn: () => Promise<unknown>) => {
+    await fn();
+  }),
 }));
 
 import { prisma } from '@/lib/prisma';
@@ -38,7 +45,27 @@ import { cookies } from 'next/headers';
 
 type JobMock = { findUnique: jest.Mock; update: jest.Mock };
 type AppMock = { findUnique: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
-const mockPrisma = prisma as unknown as { job: JobMock; application: AppMock };
+const mockPrisma = prisma as unknown as {
+  job: JobMock;
+  application: AppMock;
+  user: { findUnique: jest.Mock };
+};
+
+/** Usuarios activos que devuelve la base, por id (los mismos que firman los tokens). */
+const USUARIOS: Record<
+  number,
+  { email: string; role: string; nombre: string; companyRequest?: { status: string } }
+> = {
+  1: { email: 'admin@test.com', role: 'admin', nombre: 'Admin' },
+  // EMP-002: reactivar una vacante exige empresa aprobada (requireApprovedCompany).
+  5: {
+    email: 'empresa@test.com',
+    role: 'company',
+    nombre: 'Empresa',
+    companyRequest: { status: 'approved' },
+  },
+  7: { email: 'cand@test.com', role: 'candidate', nombre: 'Cand' },
+};
 const mockCookies = cookies as unknown as jest.Mock;
 
 function setCookie(token?: string): void {
@@ -62,6 +89,22 @@ function patchContext(id: string): { params: Promise<{ id: string }> } {
 describe('Seguridad bundle jobs-id-applications', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPrisma.user.findUnique.mockImplementation(
+      async ({ where }: { where: { id: number } }) => {
+        const u = USUARIOS[where.id];
+        return u
+          ? {
+              id: where.id,
+              ...u,
+              apellidoPaterno: null,
+              apellidoMaterno: null,
+              isActive: true,
+              credits: 0,
+              specialty: null,
+            }
+          : null;
+      }
+    );
   });
 
   describe('#39 PATCH /api/jobs/[id] — no publicación gratis', () => {

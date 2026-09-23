@@ -48,7 +48,8 @@ describe('Entrevistas del panel de admin', () => {
 
   it('las respuestas llevan success, que es lo que la UI comprueba', () => {
     expect(c).not.toMatch(/return NextResponse\.json\(\{ interview \}\)/);
-    expect((c.match(/NextResponse\.json\(\{ success: true, interview \}\)/g) || []).length).toBe(2);
+    // ADM-008: la respuesta es { success: true, data: interview, interview }
+    expect((c.match(/NextResponse\.json\(\{ success: true,[^)]*\binterview \}\)/g) || []).length).toBe(2);
   });
 
   it('null y cadena vacía significan «sin fecha», no 1970', () => {
@@ -63,7 +64,11 @@ describe('La UI del perfil y la API de documentos siguen hablando el mismo idiom
   it('la API de documentos sigue esperando JSON con name y fileUrl', () => {
     // Si esto cambiara, el arreglo de arriba habría que revisarlo.
     const api = readFile('src/app/api/profile/documents/route.ts');
-    expect(api).toContain('const { name, fileUrl, fileType } = await request.json()');
+    // PERF-019: el JSON se parsea en su propio try/catch (cuerpo inválido ->
+    // 400) y luego se desestructura; el contrato { name, fileUrl, fileType } es
+    // el mismo.
+    expect(api).toContain('body = await request.json()');
+    expect(api).toMatch(/const \{ name, fileUrl, fileType \} = \(body \|\| \{\}\)/);
     expect(api).toContain("searchParams.get('id')");
   });
 });

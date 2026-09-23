@@ -14,29 +14,75 @@ export async function login(page: Page, email: string, password: string) {
   });
 }
 
+type Rol = 'admin' | 'company' | 'recruiter' | 'specialist' | 'candidate';
+
 /**
- * Credenciales de test por rol
- * NOTA: Estas cuentas deben existir en la DB de test/staging
+ * Cuentas de test por rol.
+ *
+ * INFRA-015: antes los emails (empresa@test.com, reclutador@test.com...) no
+ * existían en ningún seed y las contraseñas caían a valores por defecto
+ * escritos aquí mismo, así que la suite no podía pasar y además publicaba
+ * contraseñas en el repo.
+ *
+ * Ahora:
+ *  - Los emails por defecto son los de las cuentas que crea `npx prisma db seed`
+ *    (se pueden cambiar con E2E_<ROL>_EMAIL para apuntar a staging).
+ *  - Las contraseñas SÓLO salen de E2E_<ROL>_PASSWORD (.env.e2e). Contra una base
+ *    sembrada en local son las mismas que SEED_<ROL>_PASSWORD. Si falta la
+ *    variable, el test que la necesita falla con un mensaje claro en vez de
+ *    agotar 10 s en /login con una contraseña inventada.
  */
-export const TEST_ACCOUNTS = {
+const DEFINICION: Record<Rol, { emailVar: string; emailSeed: string; passwordVar: string }> = {
   admin: {
-    email: 'admin@inakat.com',
-    password: process.env.E2E_ADMIN_PASSWORD || 'TestAdmin123!',
+    emailVar: 'E2E_ADMIN_EMAIL',
+    emailSeed: 'admin@inakat.com', // ADMIN_EMAIL del seed si no se definió otro
+    passwordVar: 'E2E_ADMIN_PASSWORD',
   },
   company: {
-    email: 'empresa@test.com',
-    password: process.env.E2E_COMPANY_PASSWORD || 'TestCompany123!',
+    emailVar: 'E2E_COMPANY_EMAIL',
+    emailSeed: 'contact@techsolutions.mx',
+    passwordVar: 'E2E_COMPANY_PASSWORD',
   },
   recruiter: {
-    email: 'reclutador@test.com',
-    password: process.env.E2E_RECRUITER_PASSWORD || 'TestRecruiter123!',
+    emailVar: 'E2E_RECRUITER_EMAIL',
+    emailSeed: 'reclutador1@inakat.com',
+    passwordVar: 'E2E_RECRUITER_PASSWORD',
   },
   specialist: {
-    email: 'especialista@test.com',
-    password: process.env.E2E_SPECIALIST_PASSWORD || 'TestSpecialist123!',
+    emailVar: 'E2E_SPECIALIST_EMAIL',
+    emailSeed: 'especialista.tech@inakat.com',
+    passwordVar: 'E2E_SPECIALIST_PASSWORD',
   },
   candidate: {
-    email: 'candidato@test.com',
-    password: process.env.E2E_CANDIDATE_PASSWORD || 'TestCandidate123!',
+    emailVar: 'E2E_CANDIDATE_EMAIL',
+    emailSeed: 'candidato.test@example.com',
+    passwordVar: 'E2E_CANDIDATE_PASSWORD',
   },
+};
+
+function cuenta(rol: Rol): { readonly email: string; readonly password: string } {
+  const { emailVar, emailSeed, passwordVar } = DEFINICION[rol];
+  return {
+    get email() {
+      return process.env[emailVar] || emailSeed;
+    },
+    get password() {
+      const valor = process.env[passwordVar];
+      if (!valor) {
+        throw new Error(
+          `Falta ${passwordVar}. Defínela en .env.e2e (ver .env.e2e.example); ` +
+            `contra una base sembrada en local es la misma que la SEED_*_PASSWORD del rol.`
+        );
+      }
+      return valor;
+    },
+  };
+}
+
+export const TEST_ACCOUNTS: Record<Rol, { readonly email: string; readonly password: string }> = {
+  admin: cuenta('admin'),
+  company: cuenta('company'),
+  recruiter: cuenta('recruiter'),
+  specialist: cuenta('specialist'),
+  candidate: cuenta('candidate'),
 };

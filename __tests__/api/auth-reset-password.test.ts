@@ -63,7 +63,9 @@ describe('API: /api/auth/forgot-password', () => {
 
   it('should send email with reset link', () => {
     const content = readFile('src/app/api/auth/forgot-password/route.ts');
-    expect(content).toContain('sendEmail');
+    // La plantilla vive en src/lib/email.ts (sobre baseTemplate + escapeHtml)
+    // desde AUTH-006: la ruta ya no arma HTML a mano.
+    expect(content).toContain('sendPasswordResetEmail');
     expect(content).toContain('resetUrl');
     expect(content).toContain('reset-password?token=');
   });
@@ -104,7 +106,9 @@ describe('API: /api/auth/reset-password', () => {
 
   it('should verify token is valid and not expired', () => {
     const content = readFile('src/app/api/auth/reset-password/route.ts');
-    expect(content).toContain('resetToken: token');
+    // El token se busca por su SHA-256 (AUTH-021): en la base nunca se guarda
+    // el valor en claro que viaja por correo.
+    expect(content).toContain('resetToken: hashResetToken(token)');
     expect(content).toContain('resetTokenExpiry');
     expect(content).toContain('gt');
   });

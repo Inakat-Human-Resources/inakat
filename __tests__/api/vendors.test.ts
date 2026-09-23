@@ -30,7 +30,11 @@ const mockPrisma = {
     findUnique: jest.fn(),
     count: jest.fn(),
     aggregate: jest.fn(),
-    update: jest.fn()
+    update: jest.fn(),
+    // PAGO-012: marcar como pagada es un reclamo atómico (updateMany sobre
+    // 'pending') seguido de una relectura.
+    updateMany: jest.fn(),
+    findUniqueOrThrow: jest.fn()
   }
 };
 
@@ -43,10 +47,32 @@ jest.mock('@/lib/prisma', () => ({
 jest.mock('@/lib/auth', () => ({
   requireRole: jest.fn(),
   requireAuth: jest.fn(),
+  // /api/discount-codes/validate mira la sesión (opcional) para el auto-referido.
+  getOptionalAuthUser: jest.fn(async () => null),
 }));
 
 import { requireRole } from '@/lib/auth';
 const mockRequireRole = requireRole as jest.Mock;
+
+/**
+ * Sesión de un usuario con rol 'vendor' para la próxima llamada a requireRole.
+ * AUTH-004: /api/vendor/* ya no está abierto a cualquier cuenta autenticada.
+ */
+function sesionDeVendedor(id = 1) {
+  mockRequireRole.mockResolvedValueOnce({
+    user: {
+      id,
+      email: 'vendedor@test.com',
+      nombre: 'Vendedor',
+      apellidoPaterno: null,
+      apellidoMaterno: null,
+      role: 'vendor',
+      isActive: true,
+      credits: 0,
+      specialty: null,
+    },
+  });
+}
 
 // Helper para crear requests con headers de autenticación
 function createMockRequest(options: {
@@ -67,7 +93,10 @@ function createMockRequest(options: {
   // Sincronizar el mock de requireRole con el rol del request:
   // - userRole='admin' → success
   // - otro rol → 401 No autorizado (mismo status que el header check actual)
-  if (options.userRole === 'admin') {
+  if (options.userRole === 'vendor') {
+    // AUTH-004: /api/vendor/* exige rol vendor (o admin) comprobado en la base.
+    sesionDeVendedor(options.userId || 1);
+  } else if (options.userRole === 'admin') {
     mockRequireRole.mockResolvedValueOnce({
       user: {
         id: options.userId || 1,
@@ -111,10 +140,11 @@ describe('Sistema de Vendedores', () => {
     describe('GET - Obtener mi código', () => {
       it('debe retornar null si el usuario no tiene código', async () => {
         mockPrisma.discountCode.findFirst.mockResolvedValue(null);
+        // AUTH-004: sólo un vendedor (o admin) llega al handler.
+        sesionDeVendedor();
 
         const { GET } = await import('@/app/api/vendor/my-code/route');
-        const request = createMockRequest({ userId: 1, userRole: 'user' });
-        const response = await GET(request);
+        const response = await GET();
         const data = await response.json();
 
         expect(data.success).toBe(true);
@@ -134,10 +164,10 @@ describe('Sistema de Vendedores', () => {
         };
 
         mockPrisma.discountCode.findFirst.mockResolvedValue(mockCode);
+        sesionDeVendedor();
 
         const { GET } = await import('@/app/api/vendor/my-code/route');
-        const request = createMockRequest({ userId: 1, userRole: 'user' });
-        const response = await GET(request);
+        const response = await GET();
         const data = await response.json();
 
         expect(data.success).toBe(true);
@@ -146,9 +176,10 @@ describe('Sistema de Vendedores', () => {
       });
 
       it('debe retornar 401 si no está autenticado', async () => {
+        createMockRequest({}); // Sin sesión: requireRole responde 401
         const { GET } = await import('@/app/api/vendor/my-code/route');
-        const request = createMockRequest({}); // Sin userId
-        const response = await GET(request);
+        // GET ya no recibe la request: la sesión sale de requireRole (AUTH-004).
+        const response = await GET();
 
         expect(response.status).toBe(401);
       });
@@ -172,7 +203,7 @@ describe('Sistema de Vendedores', () => {
         const { POST } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'micodigo' }
         });
         const response = await POST(request);
@@ -187,7 +218,7 @@ describe('Sistema de Vendedores', () => {
         const { POST } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'AB' }
         });
         const response = await POST(request);
@@ -201,7 +232,7 @@ describe('Sistema de Vendedores', () => {
         const { POST } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'MI-CODIGO' }
         });
         const response = await POST(request);
@@ -218,7 +249,7 @@ describe('Sistema de Vendedores', () => {
         const { POST } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'EXISTENTE' }
         });
         const response = await POST(request);
@@ -234,7 +265,7 @@ describe('Sistema de Vendedores', () => {
         const { POST } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'NUEVO' }
         });
         const response = await POST(request);
@@ -265,7 +296,7 @@ describe('Sistema de Vendedores', () => {
         const { PUT } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'NUEVO' }
         });
         const response = await PUT(request);
@@ -281,7 +312,7 @@ describe('Sistema de Vendedores', () => {
         const { PUT } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { code: 'NUEVO' }
         });
         const response = await PUT(request);
@@ -306,7 +337,7 @@ describe('Sistema de Vendedores', () => {
         const { PUT } = await import('@/app/api/vendor/my-code/route');
         const request = createMockRequest({
           userId: 1,
-          userRole: 'user',
+          userRole: 'vendor',
           body: { isActive: false }
         });
         const response = await PUT(request);
@@ -328,7 +359,7 @@ describe('Sistema de Vendedores', () => {
       const { GET } = await import('@/app/api/vendor/my-sales/route');
       const request = createMockRequest({
         userId: 1,
-        userRole: 'user',
+        userRole: 'vendor',
         url: 'http://localhost:3000/api/vendor/my-sales'
       });
       const response = await GET(request);
@@ -378,7 +409,7 @@ describe('Sistema de Vendedores', () => {
       const { GET } = await import('@/app/api/vendor/my-sales/route');
       const request = createMockRequest({
         userId: 1,
-        userRole: 'user',
+        userRole: 'vendor',
         url: 'http://localhost:3000/api/vendor/my-sales'
       });
       const response = await GET(request);
@@ -602,7 +633,8 @@ describe('Sistema de Vendedores', () => {
         },
         purchase: { id: 1, amount: 10 }
       };
-      mockPrisma.discountCodeUse.update.mockResolvedValue(updatedCommission);
+      mockPrisma.discountCodeUse.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.discountCodeUse.findUniqueOrThrow.mockResolvedValue(updatedCommission);
 
       const { PUT } = await import('@/app/api/admin/vendors/commissions/[id]/route');
       const request = createMockRequest({
@@ -637,9 +669,10 @@ describe('Sistema de Vendedores', () => {
   // =============================================
   describe('Permisos de Acceso', () => {
     it('/api/vendor/* requiere autenticación', async () => {
+      createMockRequest({}); // Sin sesión: requireRole responde 401
       const { GET } = await import('@/app/api/vendor/my-code/route');
-      const request = createMockRequest({}); // Sin userId
-      const response = await GET(request);
+      // GET ya no recibe la request: la sesión sale de requireRole (AUTH-004).
+      const response = await GET();
 
       expect(response.status).toBe(401);
     });

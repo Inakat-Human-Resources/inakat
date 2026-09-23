@@ -126,7 +126,8 @@ describe('E-5: Document upload should have timeout and error feedback', () => {
 
   it('should validate file size before upload', () => {
     const content = readFile('src/app/register/page.tsx');
-    expect(content).toMatch(/5\s*\*\s*1024\s*\*\s*1024/);
+    expect(content).toMatch(/MAX_UPLOAD_BYTES\s*=\s*MAX_UPLOAD_MB\s*\*\s*1024\s*\*\s*1024/);
+    expect(content).toMatch(/value\.size\s*>\s*MAX_UPLOAD_BYTES/);
   });
 
   it('should show error feedback to user (not just console.error)', () => {
@@ -134,7 +135,7 @@ describe('E-5: Document upload should have timeout and error feedback', () => {
     const uploadSection = content.match(/updateDocument[\s\S]*?catch[\s\S]*?\}/);
     expect(uploadSection).toBeTruthy();
     if (uploadSection) {
-      expect(uploadSection[0]).toMatch(/alert/i);
+      expect(uploadSection[0]).toMatch(/error:\s*errorMsg/);
     }
   });
 });

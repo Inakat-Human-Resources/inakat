@@ -16,6 +16,16 @@ import * as path from 'path';
 const readFile = (filePath: string) =>
   fs.readFileSync(path.join(process.cwd(), filePath), 'utf-8');
 
+// INFRA-009: los bloques que leían los componentes de la HOME y afirmaban su
+// copy o su implementación (testimonios, hero, 11 pasos en page.tsx, stats, FAQ
+// y las secciones que importa page.tsx) se retiraron: rompían el CI con cada
+// rediseño aunque la home funcionara. La home se prueba por comportamiento en
+// __tests__/qa/infra-home-comportamiento.test.tsx.
+//
+// Las lecturas que quedan se hacen en beforeAll y no al declarar el describe:
+// si un archivo se renombra, fallan sólo los tests de ese bloque, no la suite
+// entera.
+
 // ============================================================
 // P1 (09a32e6): Admin Interviews API — response format
 // Bug: API retornaba {interviews} pero frontend esperaba {success, data}
@@ -49,7 +59,10 @@ describe('P1-09a: Admin interviews API returns correct format', () => {
 // ============================================================
 
 describe('P2-09a: Upload route accepts office document formats', () => {
-  const uploadRoute = readFile('src/app/api/upload/route.ts');
+  let uploadRoute = '';
+  beforeAll(() => {
+    uploadRoute = readFile('src/app/api/upload/route.ts');
+  });
 
   it('should allow .docx MIME type', () => {
     expect(uploadRoute).toContain('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -94,7 +107,10 @@ describe('P2-09a: Company form accepts office documents', () => {
 // ============================================================
 
 describe('P3-09a: ExpertsSection uses real team profiles', () => {
-  const content = readFile('src/components/sections/aboutus/ExpertsSection.tsx');
+  let content = '';
+  beforeAll(() => {
+    content = readFile('src/components/sections/aboutus/ExpertsSection.tsx');
+  });
 
   it('should NOT have placeholder names', () => {
     expect(content).not.toContain('David Bisbal');
@@ -145,58 +161,6 @@ describe('P3-09a: ExpertsSection uses real team profiles', () => {
 });
 
 // ============================================================
-// P4 (09a32e6 + 901b9aa): TestimonialsSection — real client testimonials
-// ============================================================
-
-describe('P4-09a: TestimonialsSection uses real client testimonials', () => {
-  const content = readFile('src/components/sections/home/TestimonialsSection.tsx');
-
-  it('should NOT have generic "Equipo INAKAT" testimonials', () => {
-    expect(content).not.toMatch(/author:\s*['"]Equipo INAKAT['"]/);
-  });
-
-  it('should have Mayela Sánchez testimonial', () => {
-    expect(content).toContain('Mayela Sánchez');
-  });
-
-  it('should have Adrian Cuadros testimonial', () => {
-    expect(content).toContain('Adrian Cuadros');
-  });
-
-  it('should reference Grupo 4S', () => {
-    expect(content).toContain('Grupo 4S');
-  });
-
-  it('should reference Reserhub', () => {
-    expect(content).toContain('Reserhub');
-  });
-
-  it('should import Image from next/image (for client photos)', () => {
-    expect(content).toMatch(/import.*Image.*from\s*['"]next\/image['"]/);
-  });
-
-  it('should have image field in testimonials', () => {
-    expect(content).toMatch(/image:\s*img(Mayela|Adrian)/);
-  });
-
-  it('should render testimonial photos', () => {
-    expect(content).toMatch(/<Image[\s\S]*?testimonial\.image/);
-  });
-});
-
-// ============================================================
-// P5 (09a32e6): Hero image updated
-// ============================================================
-
-describe('P5-09a: Hero image is updated', () => {
-  it('should import hero image file (not old 1.png)', () => {
-    const content = readFile('src/components/sections/home/HeroSection.tsx');
-    expect(content).toMatch(/import.*hero.*from/i);
-    expect(content).toContain('hero-inakat');
-  });
-});
-
-// ============================================================
 // P6 (09a32e6): Candidate injection — admin only
 // ============================================================
 
@@ -227,21 +191,12 @@ describe('P6-09a: Candidate injection is admin-only', () => {
 });
 
 // ============================================================
-// P1 (ed93ef8): 11 pasos del proceso en Home
-// Home should show full 11-step process, not 4 simplified steps
+// P1 (ed93ef8): 11 pasos del proceso de selección
+// (INFRA-009: ya no se afirma qué importa src/app/page.tsx; sólo el contenido
+// del componente de proceso, que también usa /about)
 // ============================================================
 
-describe('P1-ed9: Home page shows full 11-step selection process', () => {
-  it('should import SelectionProcessSection (not HowItWorksSection)', () => {
-    const content = readFile('src/app/page.tsx');
-    expect(content).toContain('SelectionProcessSection');
-  });
-
-  it('should NOT import HowItWorksSection', () => {
-    const content = readFile('src/app/page.tsx');
-    expect(content).not.toMatch(/import\s+HowItWorksSection/);
-  });
-
+describe('P1-ed9: SelectionProcessSection shows the full 11-step process', () => {
   it('SelectionProcessSection should have 11 steps total', () => {
     const content = readFile('src/components/sections/aboutus/SelectionProcessSection.tsx');
     const mainSteps = content.match(/number:\s*\d+/g) || [];
@@ -261,8 +216,11 @@ describe('P1-ed9: Home page shows full 11-step selection process', () => {
 // ============================================================
 
 describe('P2-ed9: Navbar mobile menu has admin links', () => {
-  const navbar = readFile('src/components/commons/Navbar.tsx');
-  const mobileSection = navbar.slice(navbar.indexOf('mobileMenuOpen && ('));
+  let mobileSection = '';
+  beforeAll(() => {
+    const navbar = readFile('src/components/commons/Navbar.tsx');
+    mobileSection = navbar.slice(navbar.indexOf('mobileMenuOpen && ('));
+  });
 
   it('mobile menu should have Vacantes link for admin', () => {
     expect(mobileSection).toContain('/admin"');
@@ -343,74 +301,10 @@ describe('P3-ed9: notifyAllAdmins has debug logging', () => {
 });
 
 // ============================================================
-// P4 (ed93ef8): StatsSection — updated metrics
-// ============================================================
-
-describe('P4-ed9: StatsSection has impressive metrics', () => {
-  const content = readFile('src/components/sections/home/StatsSection.tsx');
-
-  it('should show 100% (evaluados por humanos)', () => {
-    expect(content).toMatch(/value:\s*100/);
-  });
-
-  it('should show 150+ (especialistas)', () => {
-    expect(content).toMatch(/value:\s*150/);
-  });
-
-  it('should show 15+ (estados)', () => {
-    expect(content).toMatch(/value:\s*15\b/);
-  });
-
-  it('should show 11 (etapas)', () => {
-    expect(content).toMatch(/value:\s*11/);
-  });
-
-  it('should NOT have small numbers like value: 2 or value: 7', () => {
-    expect(content).not.toMatch(/value:\s*2[,\s]/);
-    expect(content).not.toMatch(/value:\s*7[,\s]/);
-  });
-});
-
-// ============================================================
-// P5 (ed93ef8): FAQ updated
-// ============================================================
-
-describe('P5-ed9: FAQ has updated answers (replaced March 2026)', () => {
-  const content = readFile('src/components/sections/home/FAQSection.tsx');
-
-  it('FAQ should have 9 questions', () => {
-    const questions = content.match(/question:/g) || [];
-    expect(questions.length).toBe(9);
-  });
-
-  it('FAQ should mention evaluación humana especializada', () => {
-    expect(content).toContain('evaluación humana especializada');
-  });
-
-  it('FAQ about pricing should mention calculadora de costo', () => {
-    expect(content).toContain('calculadora de costo');
-  });
-
-  it('FAQ should have transparency question', () => {
-    expect(content).toContain('transparente');
-  });
-});
-
-// ============================================================
 // GENERAL: Structural integrity checks
 // ============================================================
 
 describe('Structural integrity', () => {
-  it('Home page should have all expected sections', () => {
-    const content = readFile('src/app/page.tsx');
-    expect(content).toContain('HeroSection');
-    expect(content).toContain('SelectionProcessSection');
-    expect(content).toContain('TestimonialsSection');
-    expect(content).toContain('StatsSection');
-    expect(content).toContain('FAQSection');
-    expect(content).toContain('Footer');
-  });
-
   it('About page should have all expected sections', () => {
     const content = readFile('src/app/about/page.tsx');
     expect(content).toContain('ExpertsSection');
@@ -422,11 +316,5 @@ describe('Structural integrity', () => {
     const content = readFile('src/components/sections/aboutus/ExpertsSection.tsx');
     const imports = content.match(/import\s+\w+\s+from\s+['"]@\/assets/g) || [];
     expect(imports.length).toBeGreaterThanOrEqual(8);
-  });
-
-  it('Testimonial photos should exist as imports', () => {
-    const content = readFile('src/components/sections/home/TestimonialsSection.tsx');
-    expect(content).toMatch(/import.*imgMayela/);
-    expect(content).toMatch(/import.*imgAdrian/);
   });
 });

@@ -6,17 +6,48 @@
  * y sincroniza con campos legacy (universidad, carrera, nivelEstudios)
  */
 
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
 
 // Tests de INTEGRACIÓN contra una base de datos real (crean/leen/borran registros).
 // Se omiten por defecto (CI y local sin DB, donde fallarían con ENOTFOUND) y se
-// ejecutan con `npm run test:integration` o RUN_INTEGRATION_TESTS=true, siempre
-// con un DATABASE_URL alcanzable.
-const describeDb =
+// piden con `npm run test:integration` o RUN_INTEGRATION_TESTS=true.
+//
+// INFRA-020: next/jest carga .env/.env.local, así que antes estos tests usaban
+// el DATABASE_URL del desarrollador — que puede ser el de producción — y creaban
+// y borraban candidatos ahí. Ahora SÓLO corren contra TEST_DATABASE_URL, una
+// variable dedicada que no puede coincidir con DATABASE_URL ni con DIRECT_URL.
+const integracionPedida =
   process.env.RUN_INTEGRATION_TESTS === 'true' ||
-  process.env.npm_lifecycle_event === 'test:integration'
-    ? describe
-    : describe.skip;
+  process.env.npm_lifecycle_event === 'test:integration';
+
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL?.trim() || '';
+const motivoBloqueo = !TEST_DATABASE_URL
+  ? 'Falta TEST_DATABASE_URL: los tests de integración no usan DATABASE_URL (podría ser producción).'
+  : [process.env.DATABASE_URL, process.env.DIRECT_URL].some(
+        (url) => url && url.trim() === TEST_DATABASE_URL
+      )
+    ? 'TEST_DATABASE_URL coincide con DATABASE_URL/DIRECT_URL: usa una base de pruebas dedicada.'
+    : null;
+
+if (integracionPedida && motivoBloqueo) {
+  // Pedirlos explícitamente con una configuración insegura es un error, no un
+  // skip silencioso: así quien los lanza sabe por qué no corrieron.
+  describe('FEATURE: Educación Múltiple (integración)', () => {
+    it('requiere una base de pruebas dedicada', () => {
+      throw new Error(motivoBloqueo);
+    });
+  });
+}
+
+const describeDb = integracionPedida && !motivoBloqueo ? describe : describe.skip;
+
+// El cliente sólo se construye cuando los tests van a correr, y siempre contra
+// la base de pruebas.
+const prisma = (
+  integracionPedida && !motivoBloqueo
+    ? new PrismaClient({ datasources: { db: { url: TEST_DATABASE_URL } } })
+    : null
+) as PrismaClient;
 
 // Datos de prueba
 const TEST_EDUCATIONS = [
@@ -62,6 +93,7 @@ describeDb('FEATURE: Educación Múltiple', () => {
     if (testUserId) {
       await prisma.user.delete({ where: { id: testUserId } }).catch(() => {});
     }
+    await prisma.$disconnect();
   });
 
   describe('Creación de candidato con educación múltiple', () => {

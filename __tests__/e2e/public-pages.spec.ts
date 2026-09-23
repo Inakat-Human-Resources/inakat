@@ -2,25 +2,24 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Paginas Publicas — Navegacion y Renderizado', () => {
+  // INFRA-009: la home se comprueba por roles y estructura, no por copy
+  // literal, para que un rediseño que conserve el comportamiento no la rompa.
   test('Home page carga correctamente', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveTitle(/INAKAT/i);
-    await expect(page.locator('h1')).toBeVisible();
-    await expect(
-      page.locator('text=Preguntas frecuentes')
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.locator('a[href="/companies"]').first()).toBeVisible();
   });
 
   test('Home — FAQ accordion funciona', async ({ page }) => {
     await page.goto('/');
-    const firstQuestion = page.locator(
-      'text=¿Cómo funciona el proceso de selección?'
-    );
-    await firstQuestion.scrollIntoViewIfNeeded();
-    await firstQuestion.click();
-    await expect(
-      page.locator('text=evaluación humana especializada')
-    ).toBeVisible();
+    const primera = page.locator('details').first();
+    const pregunta = primera.locator('summary');
+    await pregunta.scrollIntoViewIfNeeded();
+    await expect(primera).not.toHaveAttribute('open', /.*/);
+    await pregunta.click();
+    await expect(primera).toHaveAttribute('open', /.*/);
+    await expect(primera.locator('summary + *')).toBeVisible();
   });
 
   test('About page carga correctamente', async ({ page }) => {
@@ -110,7 +109,8 @@ test.describe('Responsive — Mobile', () => {
     await page.goto('/');
     const menuButton = page
       .locator(
-        '[aria-label*="menu"], [aria-label*="Menu"], button.md\\:hidden'
+        // UI-006/UI-021: el botón se llama «Abrir menú» (con tilde) y se oculta en lg.
+        '[aria-label="Abrir menú"], button.lg\\:hidden'
       )
       .first();
     if (await menuButton.isVisible()) {
