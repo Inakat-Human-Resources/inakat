@@ -1,6 +1,7 @@
 // RUTA: src/lib/auth.ts
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
 import { prisma } from './prisma';
 
 // =============================================
@@ -22,6 +23,52 @@ if (process.env.JWT_SECRET.length < 32) {
 
 const JWT_SECRET: string = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+/** Duración por defecto de la sesión (7 días) en segundos. */
+const DEFAULT_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+
+/**
+ * Convierte el valor de JWT_EXPIRES_IN ('7d', '24h', '30m', '3600') a segundos.
+ *
+ * CONFIG (AUTH-022): la vida del token salía de la variable de entorno pero el
+ * `maxAge` de la cookie que lo transporta estaba escrito a mano (7 días) en
+ * login y en register. Al tocar JWT_EXPIRES_IN los dos relojes se
+ * desincronizaban: con '1d' el navegador seguía mandando durante 6 días un
+ * token muerto; con '30d' la sesión moría a los 7 y la configuración no servía
+ * de nada. Ahora ambos salen del mismo sitio.
+ */
+export function getAuthCookieMaxAge(): number {
+  const raw = String(JWT_EXPIRES_IN).trim();
+  const match = /^(\d+(?:\.\d+)?)\s*(s|m|h|d)?$/i.exec(raw);
+
+  if (!match) return DEFAULT_MAX_AGE_SECONDS;
+
+  const value = parseFloat(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_MAX_AGE_SECONDS;
+
+  const unit = (match[2] || 's').toLowerCase();
+  const multipliers: Record<string, number> = {
+    s: 1,
+    m: 60,
+    h: 60 * 60,
+    d: 60 * 60 * 24
+  };
+
+  return Math.floor(value * multipliers[unit]);
+}
+
+/**
+ * Opciones de la cookie de sesión. Una sola fuente para login y register.
+ */
+export function getAuthCookieOptions() {
+  return {
+    httpOnly: true, // No accesible desde JavaScript (seguridad contra XSS)
+    secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
+    sameSite: 'lax' as const, // Protección CSRF
+    maxAge: getAuthCookieMaxAge(),
+    path: '/' // Disponible en todas las rutas
+  };
+}
 
 // =============================================
 // TYPES
@@ -107,6 +154,25 @@ export function verifyToken(token: string): JWTPayload | null {
   } catch {
     return null;
   }
+}
+
+// =============================================
+// TOKEN DE RESET DE CONTRASEÑA
+// =============================================
+
+/**
+ * SHA-256 del token de recuperación de contraseña.
+ *
+ * SEGURIDAD (AUTH-021): en `User.resetToken` se guarda ESTE valor, no el token
+ * que viaja por correo. Guardarlo en claro convertía cualquier lectura de la
+ * tabla (backup, réplica, acceso de soporte, un `findMany` sin `select`) en un
+ * pase para tomar cuentas ajenas durante la hora de validez.
+ *
+ * Una función de un solo paso basta: el token son 32 bytes aleatorios, no una
+ * contraseña adivinable, así que no hace falta bcrypt/argon.
+ */
+export function hashResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 // =============================================
@@ -341,6 +407,86 @@ export async function requireRole(
   }
 
   return auth;
+}
+
+// =============================================
+// APROBACIÓN DE EMPRESA
+// =============================================
+
+export interface CompanyApprovalError {
+  error: string;
+  code: 'COMPANY_NOT_APPROVED' | 'COMPANY_NOT_FOUND';
+  status: number;
+}
+
+/**
+ * Comprueba que la empresa que hay detrás de `userId` está APROBADA por un
+ * admin antes de dejarla operar.
+ *
+ * El alta de empresa es un endpoint público que crea en el acto un User con
+ * role 'company' e isActive true; el panel de admin aprueba o rechaza, pero
+ * ninguna ruta consultaba `companyRequest.status`, así que el flujo de
+ * aprobación no tenía ningún efecto: una empresa inventada (o ya rechazada)
+ * seguía publicando vacantes y recibiendo datos de candidatos.
+ *
+ * Devuelve `null` cuando puede operar y un error tipado cuando no. El admin
+ * queda exento (opera en nombre de INAKAT, no de una empresa concreta).
+ *
+ * INTERRUPTOR: sólo se exige si `ENFORCE_COMPANY_APPROVAL=true`. Encenderlo es
+ * decisión de negocio, no técnica: hoy hay empresas operando (publicando y
+ * pagando) cuya solicitud nunca se aprobó formalmente, y activarlo sin revisar
+ * antes esa lista las dejaría sin servicio de un día para otro. Antes de
+ * encenderlo, aprobar en /admin/requests a las empresas legítimas.
+ *
+ * @param userId - id del User de la sesión
+ * @param role - rol de la sesión ('admin' queda exento)
+ */
+export async function requireApprovedCompany(
+  userId: number,
+  role?: string | null
+): Promise<CompanyApprovalError | null> {
+  if (process.env.ENFORCE_COMPANY_APPROVAL !== 'true') return null;
+  if (role === 'admin') return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      isActive: true,
+      role: true,
+      companyRequest: { select: { status: true } }
+    }
+  });
+
+  if (!user || !user.isActive) {
+    return {
+      error: 'Usuario no encontrado o desactivado',
+      code: 'COMPANY_NOT_FOUND',
+      status: 403
+    };
+  }
+
+  if (user.role === 'admin') return null;
+
+  if (!user.companyRequest) {
+    return {
+      error: 'No tienes una empresa registrada. Contacta a soporte.',
+      code: 'COMPANY_NOT_FOUND',
+      status: 403
+    };
+  }
+
+  if (user.companyRequest.status !== 'approved') {
+    return {
+      error:
+        user.companyRequest.status === 'rejected'
+          ? 'Tu solicitud de empresa fue rechazada. Contacta a soporte.'
+          : 'Tu empresa está en revisión. Podrás usar esta función cuando INAKAT apruebe tu cuenta.',
+      code: 'COMPANY_NOT_APPROVED',
+      status: 403
+    };
+  }
+
+  return null;
 }
 
 /**

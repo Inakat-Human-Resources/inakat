@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword, hashResetToken } from '@/lib/auth';
 import { applyRateLimit, RESET_PASSWORD_RATE_LIMIT } from '@/lib/rate-limit';
 
 // Misma política de contraseña que el registro: mín 8, una mayúscula y un número.
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
     const rateLimited = applyRateLimit(request, 'reset-password', RESET_PASSWORD_RATE_LIMIT);
     if (rateLimited) return rateLimited;
 
-    const body = await request.json();
+    // VALIDACIÓN (AUTH-015): cuerpo no-JSON → 400, no 500.
+    const body = await request.json().catch(() => null);
     const validation = resetPasswordSchema.safeParse(body);
 
     if (!validation.success) {
@@ -40,33 +41,38 @@ export async function POST(request: Request) {
 
     const { token, password } = validation.data;
 
-    // Buscar usuario con token válido y no expirado
-    const user = await prisma.user.findFirst({
-      where: {
-        resetToken: token,
-        resetTokenExpiry: { gt: new Date() }
-      }
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Token inválido o expirado' },
-        { status: 400 }
-      );
-    }
-
     // Hash de la nueva contraseña
     const hashedPassword = await hashPassword(password);
 
-    // Actualizar contraseña y limpiar token
-    await prisma.user.update({
-      where: { id: user.id },
+    // CONSUMO ATÓMICO (AUTH-021)
+    // Antes era findFirst → hash → update por id: dos peticiones simultáneas
+    // con el mismo token pasaban ambas la comprobación, así que el enlace no
+    // era realmente de un solo uso. Con un updateMany condicionado, la
+    // condición y la escritura son la misma operación: sólo una gana, y la
+    // segunda ve count === 0. Se comprueba además `isActive`: un usuario
+    // desactivado no debe poder recuperar el acceso por correo.
+    //
+    // El token viaja en claro por correo pero en la base vive su SHA-256, así
+    // que la búsqueda es por el hash.
+    const resultado = await prisma.user.updateMany({
+      where: {
+        resetToken: hashResetToken(token),
+        resetTokenExpiry: { gt: new Date() },
+        isActive: true
+      },
       data: {
         password: hashedPassword,
         resetToken: null,
         resetTokenExpiry: null
       }
     });
+
+    if (resultado.count !== 1) {
+      return NextResponse.json(
+        { success: false, error: 'Token inválido o expirado' },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

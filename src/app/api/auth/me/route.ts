@@ -15,27 +15,27 @@ export async function GET() {
     const cookieStore = await cookies();
     const token = cookieStore.get('auth-token')?.value;
 
+    // UI-017: un visitante anónimo no es un error. Cada página pública pedía
+    // /api/auth/me desde el Navbar y dejaba un 401 en consola (Lighthouse lo
+    // penaliza). Sin cookie se responde 200 con user null; el 401 queda para
+    // un token inválido o expirado.
     if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'No autenticado'
-        },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: true, user: null });
     }
 
     // Verificar token
     const payload = verifyToken(token);
 
     if (!payload) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           success: false,
           error: 'Token inválido o expirado'
         },
         { status: 401 }
       );
+      response.cookies.delete('auth-token');
+      return response;
     }
 
     // Obtener usuario actualizado de la base de datos
@@ -56,24 +56,31 @@ export async function GET() {
       }
     });
 
+    // SESIÓN (AUTH-002): usuario borrado o desactivado → además de negar, se
+    // borra la cookie. Si no, el navegador seguía mandando durante días un
+    // token que ya no representa a nadie.
     if (!user) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           success: false,
           error: 'Usuario no encontrado'
         },
         { status: 404 }
       );
+      response.cookies.delete('auth-token');
+      return response;
     }
 
     if (!user.isActive) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           success: false,
           error: 'Usuario desactivado'
         },
         { status: 403 }
       );
+      response.cookies.delete('auth-token');
+      return response;
     }
 
     return NextResponse.json({

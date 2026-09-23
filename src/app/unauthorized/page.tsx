@@ -7,9 +7,34 @@ import { Suspense } from 'react';
 import { ShieldX } from 'lucide-react';
 import Footer from '@/components/commons/Footer';
 
+/**
+ * AUTHUI-001: el middleware añade ?redirect=<ruta> al mandar aquí sin sesión,
+ * pero el enlace a 'Iniciar Sesión' no lo propagaba y el deep-link se perdía
+ * siempre. Se propaga sólo si es una ruta interna (nunca '//evil.com',
+ * '/\evil.com' ni una URL absoluta), para no abrir un open redirect.
+ */
+const esRedirectInterno = (valor: string | null): valor is string => {
+  if (!valor) return false;
+  if (valor.charAt(0) !== '/') return false;
+  if (valor.charAt(1) === '/' || valor.charAt(1) === '\\') return false;
+  if (valor.indexOf('\\') !== -1) return false;
+  if (valor.indexOf('://') !== -1) return false;
+  if (/[\s\u0000-\u001F\u007F]/.test(valor)) return false;
+  return true;
+};
+
 function UnauthorizedContent() {
   const searchParams = useSearchParams();
   const reason = searchParams.get('reason');
+  const redirect = searchParams.get('redirect');
+
+  // El deep-link sólo tiene sentido cuando falta la sesión: con
+  // reason=no-permission el usuario ya está autenticado con otro rol.
+  const propagaRedirect = reason === 'no-token' || reason === 'expired';
+  const loginHref =
+    propagaRedirect && esRedirectInterno(redirect)
+      ? `/login?redirect=${encodeURIComponent(redirect)}`
+      : '/login';
 
   const getMessage = () => {
     switch (reason) {
@@ -40,7 +65,7 @@ function UnauthorizedContent() {
 
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <Link
-          href="/login"
+          href={loginHref}
           className="inline-flex items-center justify-center bg-button-orange text-white font-semibold px-8 py-3 rounded-full hover:scale-105 hover:shadow-lg transition-all duration-300"
         >
           Iniciar Sesión

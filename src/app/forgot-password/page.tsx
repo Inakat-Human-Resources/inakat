@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
         {sent ? (
-          <div className="text-center">
+          <div role="status" className="text-center">
             <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
             <h2 className="text-xl font-bold text-gray-800 mb-2">Correo enviado</h2>
             <p className="text-gray-600 mb-6">
@@ -64,7 +64,8 @@ export default function ForgotPasswordPage() {
             </p>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+              // AUTHUI-014: sin role="alert" el lector de pantalla no anunciaba el error.
+              <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
                 {error}
               </div>
             )}

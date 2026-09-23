@@ -2,9 +2,10 @@
 
 'use client';
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useRef, FormEvent, Suspense } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import ErrorToast from '@/components/shared/ErrorToast';
 import loginImage from '@/assets/images/6-login/1.png';
 import logoIcon from '@/assets/images/6-login/logo-dark-green.png';
@@ -14,7 +15,60 @@ interface LoginFormData {
   password: string;
 }
 
-export default function LoginPage() {
+// === INICIO destino-tras-login ===
+// AUTHUI-001 / AUTHUI-011: once pantallas y el middleware mandan
+// ?redirect=<ruta>, pero el login lo ignoraba y siempre aterrizaba en el
+// destino por rol (y 'vendor' caía en el genérico /talents). Aquí se resuelve
+// el destino: se respeta el deep-link SÓLO si es una ruta interna y además
+// pertenece a un prefijo permitido para el rol; si no, el home del rol.
+// El bloque se mantiene sin dependencias para poder probar su lógica aparte.
+const HOME_POR_ROL: Record<string, string> = {
+  admin: '/admin/requests',
+  company: '/company/dashboard',
+  recruiter: '/recruiter/dashboard',
+  specialist: '/specialist/dashboard',
+  vendor: '/vendor/dashboard',
+  candidate: '/talents',
+  user: '/talents'
+};
+
+const PREFIJOS_POR_ROL: Record<string, string[]> = {
+  admin: ['/admin', '/applications', '/talents', '/my-applications', '/profile', '/notifications'],
+  company: ['/company', '/talents', '/profile', '/notifications'],
+  recruiter: ['/recruiter', '/talents', '/profile', '/notifications'],
+  specialist: ['/specialist', '/talents', '/profile', '/notifications'],
+  vendor: ['/vendor', '/talents', '/profile', '/notifications'],
+  candidate: ['/talents', '/my-applications', '/candidate', '/profile', '/notifications'],
+  user: ['/talents', '/my-applications', '/profile', '/notifications']
+};
+
+// Sólo rutas internas: descarta '//evil.com', '/\evil.com', 'https://…',
+// cualquier cosa con '://' o con espacios/saltos de línea (open redirect).
+const esRedirectInterno = (valor: string | null) => {
+  if (!valor) return false;
+  if (valor.charAt(0) !== '/') return false;
+  if (valor.charAt(1) === '/' || valor.charAt(1) === '\\') return false;
+  if (valor.indexOf('\\') !== -1) return false;
+  if (valor.indexOf('://') !== -1) return false;
+  if (/[\s\u0000-\u001F\u007F]/.test(valor)) return false;
+  return true;
+};
+
+const destinoTrasLogin = (rol: string, redirect: string | null) => {
+  const home = HOME_POR_ROL[rol] || '/talents';
+  if (!esRedirectInterno(redirect)) return home;
+  const destino = String(redirect);
+  const ruta = destino.split('?')[0].split('#')[0];
+  const permitidos = PREFIJOS_POR_ROL[rol] || PREFIJOS_POR_ROL.user;
+  const permitido = permitidos.some((prefijo) => ruta === prefijo || ruta.indexOf(prefijo + '/') === 0);
+  return permitido ? destino : home;
+};
+// === FIN destino-tras-login ===
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect');
+
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
     password: ''
@@ -22,6 +76,9 @@ export default function LoginPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AUTHUI-020: guarda síncrona; isSubmitting sólo se refleja tras el re-render,
+  // así que dos Enter seguidos disparaban dos POST.
+  const enviandoRef = useRef(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -31,6 +88,9 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -46,28 +106,27 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        const role = data.user.role;
-
-        if (role === 'admin') {
-          window.location.href = '/admin/requests';
-        } else if (role === 'company') {
-          window.location.href = '/company/dashboard';
-        } else if (role === 'recruiter') {
-          window.location.href = '/recruiter/dashboard';
-        } else if (role === 'specialist') {
-          window.location.href = '/specialist/dashboard';
-        } else {
-          window.location.href = '/talents';
-        }
-      } else {
-        setError(data.error || 'Error al iniciar sesión');
+        const role = typeof data?.user?.role === 'string' ? data.user.role : '';
+        // AUTHUI-020: no se reactiva el botón; la navegación ya está en curso.
+        window.location.href = destinoTrasLogin(role, redirect);
+        return;
       }
+
+      // AUTHUI-002: el 400 de validación llega en `errors` ([{field, message}])
+      // y sin clave `error`; antes todo fallo de validación se veía como
+      // 'Error al iniciar sesión'.
+      const mensaje =
+        data?.error ||
+        (Array.isArray(data?.errors) && data.errors[0]?.message) ||
+        'Error al iniciar sesión';
+      setError(mensaje);
     } catch (error) {
       setError('Error al conectar con el servidor');
       console.error('Error logging in:', error);
-    } finally {
-      setIsSubmitting(false);
     }
+
+    enviandoRef.current = false;
+    setIsSubmitting(false);
   };
 
   return (
@@ -114,7 +173,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-4">
             {/* Mensaje de error */}
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              <div role="alert" className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
                 {error}
               </div>
             )}
@@ -203,5 +262,20 @@ export default function LoginPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+export default function LoginPage() {
+  // useSearchParams obliga a un límite de Suspense en el App Router.
+  return (
+    <Suspense
+      fallback={
+        <section className="bg-custom-beige min-h-screen flex items-center justify-center px-4">
+          <p className="text-title-dark">Cargando...</p>
+        </section>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

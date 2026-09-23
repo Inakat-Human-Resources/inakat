@@ -23,8 +23,22 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+    // AUTHUI-008: la página anunciaba y validaba 6 caracteres mientras
+    // /api/auth/reset-password exige 8 + mayúscula + número, así que el usuario
+    // descubría la política a prueba y error, gastando el rate limit (5/15 min)
+    // con un token que caduca en 1 hora. Mismas reglas que el API y que /register.
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      setError('Debe contener al menos una mayúscula');
+      return;
+    }
+
+    if (!/[0-9]/.test(password)) {
+      setError('Debe contener al menos un número');
       return;
     }
 
@@ -77,7 +91,7 @@ function ResetPasswordForm() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
         {success ? (
-          <div className="text-center">
+          <div role="status" className="text-center">
             <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
             <h2 className="text-xl font-bold text-gray-800 mb-2">Contraseña actualizada</h2>
             <p className="text-gray-600 mb-4">
@@ -95,7 +109,7 @@ function ResetPasswordForm() {
             </p>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+              <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -111,20 +125,26 @@ function ResetPasswordForm() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    minLength={6}
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    // AUTHUI-025: botón sólo-icono sin nombre accesible.
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    aria-pressed={showPassword}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                   </button>
                 </div>
+                <p className="text-gray-500 text-xs mt-1">
+                  8+ caracteres, 1 mayúscula, 1 número
+                </p>
               </div>
 
               <div>
@@ -137,7 +157,7 @@ function ResetPasswordForm() {
                     id="confirmPassword"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    minLength={6}
+                    minLength={8}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

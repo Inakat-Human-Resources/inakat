@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, FormEvent } from 'react';
+import React, { useState, useEffect, useCallback, useRef, FormEvent } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -37,6 +37,9 @@ interface Education {
 }
 
 interface Experience {
+  // AUTHUI-004/AUTHUI-005: identidad estable. Con listas indexadas por posición,
+  // borrar una fila desplazaba errores y snapshots a la fila equivocada.
+  id: number;
   empresa: string;
   puesto: string;
   ubicacion: string;
@@ -47,10 +50,13 @@ interface Experience {
 }
 
 interface Document {
+  id: number;
   name: string;
   file: File | null;
   fileUrl: string;
   uploading: boolean;
+  /** AUTHUI-017: el fallo de subida se muestra en la tarjeta, no en un alert(). */
+  error: string;
 }
 
 interface Specialty {
@@ -75,6 +81,38 @@ const STEPS = [
 
 const SENIORITIES = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
 const NIVELES_ESTUDIO = ['Preparatoria', 'Técnico', 'Licenciatura', 'Posgrado'];
+
+/**
+ * AUTHUI-017: la UI anunciaba 5MB, pero las funciones de Vercel rechazan
+ * cuerpos mayores a 4.5MB con un 413 en texto plano ANTES de llegar al handler,
+ * así que un archivo de 4.5-5MB reventaba con un SyntaxError de JSON.
+ */
+const MAX_UPLOAD_MB = 4;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+// AUTHUI-024/AUTHUI-026: cotas de fechas y años (se calculan al cargar, no fijas).
+const HOY_ISO = new Date().toISOString().slice(0, 10);
+const AÑO_ACTUAL = new Date().getFullYear();
+const AÑO_MIN_EDUCACION = 1950;
+const AÑO_MAX_EDUCACION = AÑO_ACTUAL + 8;
+const FECHA_MIN_NACIMIENTO = '1930-01-01';
+
+// AUTHUI-019: campos cuyo error SÍ se pinta junto al control en el paso 1.
+const CAMPOS_CON_ERROR_EN_PASO_1 = [
+  'nombre',
+  'apellidoPaterno',
+  'email',
+  'telefono',
+  'fechaNacimiento',
+  'password',
+  'confirmPassword',
+  'fotoUrl'
+];
+const FECHA_MAX_NACIMIENTO = (() => {
+  const fecha = new Date();
+  fecha.setFullYear(fecha.getFullYear() - 15);
+  return fecha.toISOString().slice(0, 10);
+})();
 
 export default function RegisterPage() {
   // Estado de navegación
@@ -110,12 +148,16 @@ export default function RegisterPage() {
 
   // Paso 3: Profesional
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  // AUTHUI-016: sin estado de carga, un fallo de /api/specialties dejaba el
+  // select vacío y sin explicación (y el candidato se registraba sin perfil).
+  const [specialtiesStatus, setSpecialtiesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [profile, setProfile] = useState('');
   const [subcategory, setSubcategory] = useState('');
   const [seniority, setSeniority] = useState('');
 
   // Paso 4: Experiencias
   const [experiences, setExperiences] = useState<Experience[]>([]);
+  // AUTHUI-004: indexado por ID de experiencia, no por posición.
   const [expErrors, setExpErrors] = useState<Record<number, string>>({});
 
   // Paso 5: Links
@@ -128,17 +170,38 @@ export default function RegisterPage() {
   // Paso 6: Documentos
   const [documents, setDocuments] = useState<Document[]>([]);
 
+  // AUTHUI-020: guarda síncrona contra el doble envío (isSubmitting sólo se ve
+  // tras el re-render, así que dos Enter seguidos disparaban dos POST).
+  const enviandoRef = useRef(false);
+
+  // AUTHUI-004/AUTHUI-005: generador de identidades estables para las listas.
+  const idRef = useRef(0);
+  const nuevoId = () => {
+    idRef.current += 1;
+    return idRef.current;
+  };
+
   // Cargar especialidades
-  useEffect(() => {
+  const cargarEspecialidades = useCallback(() => {
+    setSpecialtiesStatus('loading');
     fetch('/api/specialties?subcategories=true')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setSpecialties(data.data);
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data?.success || !Array.isArray(data.data)) {
+          throw new Error('Respuesta inválida de /api/specialties');
         }
+        setSpecialties(data.data);
+        setSpecialtiesStatus('ready');
       })
-      .catch(console.error);
+      .catch((error) => {
+        console.error('Error cargando especialidades:', error);
+        setSpecialtiesStatus('error');
+      });
   }, []);
+
+  useEffect(() => {
+    cargarEspecialidades();
+  }, [cargarEspecialidades]);
 
   // Obtener subcategorías del perfil seleccionado
   const currentSubcategories = specialties.find(s => s.name === profile)?.subcategories || [];
@@ -148,21 +211,56 @@ export default function RegisterPage() {
     const formData = new FormData();
     formData.append('file', file);
     const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error);
+
+    // AUTHUI-017: la plataforma responde 413/504 en texto plano (no JSON) antes
+    // de llegar al handler; res.json() lanzaba un SyntaxError en inglés.
+    const contentType = res.headers?.get?.('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      if (res.status === 413) {
+        throw new Error(`El archivo es demasiado grande (máximo ${MAX_UPLOAD_MB}MB)`);
+      }
+      if (res.status === 429) {
+        throw new Error('Demasiadas subidas, espera unos minutos e inténtalo de nuevo');
+      }
+      throw new Error('No pudimos subir el archivo. Inténtalo de nuevo más tarde');
+    }
+
+    let data: { success?: boolean; url?: string; error?: string };
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('No pudimos subir el archivo. Inténtalo de nuevo más tarde');
+    }
+
+    if (!res.ok || !data?.success || !data.url) {
+      throw new Error(data?.error || 'No pudimos subir el archivo. Inténtalo de nuevo más tarde');
+    }
     return data.url;
   };
 
   // Manejar upload de CV
   const handleCvUpload = async (file: File) => {
+    // AUTHUI-003: validar el tamaño ANTES de subir, como ya se hacía con la foto.
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setErrors(prev => ({
+        ...prev,
+        cvUrl: `El archivo no debe exceder ${MAX_UPLOAD_MB}MB (${(file.size / (1024 * 1024)).toFixed(1)}MB)`
+      }));
+      return;
+    }
     setCvUploading(true);
+    setErrors(prev => { const { cvUrl: _omitido, ...resto } = prev; return resto; });
     try {
       const url = await uploadFile(file);
       setCvUrl(url);
       setCvFile(file);
     } catch (error) {
       console.error('Error uploading CV:', error);
-      setErrors(prev => ({ ...prev, cvUrl: 'Error al subir el archivo' }));
+      // AUTHUI-003: conservar el motivo real del servidor, no un genérico.
+      setErrors(prev => ({
+        ...prev,
+        cvUrl: error instanceof Error ? error.message : 'Error al subir el archivo'
+      }));
     } finally {
       setCvUploading(false);
     }
@@ -188,7 +286,10 @@ export default function RegisterPage() {
       setFotoFile(file);
     } catch (error) {
       console.error('Error uploading photo:', error);
-      setErrors(prev => ({ ...prev, fotoUrl: 'Error al subir la foto' }));
+      setErrors(prev => ({
+        ...prev,
+        fotoUrl: error instanceof Error ? error.message : 'Error al subir la foto'
+      }));
     } finally {
       setFotoUploading(false);
     }
@@ -199,6 +300,7 @@ export default function RegisterPage() {
     setExperiences([
       ...experiences,
       {
+        id: nuevoId(),
         empresa: '',
         puesto: '',
         ubicacion: '',
@@ -213,28 +315,43 @@ export default function RegisterPage() {
   const updateExperience = (index: number, field: keyof Experience, value: any) => {
     const updated = [...experiences];
     updated[index] = { ...updated[index], [field]: value };
+    const expId = updated[index].id;
     if (field === 'esActual' && value) {
       updated[index].fechaFin = '';
-      setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+      setExpErrors(prev => { const n = { ...prev }; delete n[expId]; return n; });
     }
     // Validar que fechaFin no sea anterior a fechaInicio
     if (field === 'fechaInicio' || field === 'fechaFin') {
       const exp = updated[index];
       if (exp.fechaInicio && exp.fechaFin && !exp.esActual) {
         if (new Date(exp.fechaFin) < new Date(exp.fechaInicio)) {
-          setExpErrors(prev => ({ ...prev, [index]: 'La fecha de fin no puede ser anterior a la fecha de inicio' }));
+          setExpErrors(prev => ({ ...prev, [expId]: 'La fecha de fin no puede ser anterior a la fecha de inicio' }));
         } else {
-          setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+          setExpErrors(prev => { const n = { ...prev }; delete n[expId]; return n; });
         }
       } else {
-        setExpErrors(prev => { const n = { ...prev }; delete n[index]; return n; });
+        setExpErrors(prev => { const n = { ...prev }; delete n[expId]; return n; });
       }
     }
     setExperiences(updated);
   };
 
   const removeExperience = (index: number) => {
+    // AUTHUI-004: al borrar la fila hay que soltar TAMBIÉN su error; si no,
+    // quedaba una clave huérfana que bloqueaba el alta sin mostrar nada (y con
+    // claves por posición el error se heredaba a la fila siguiente).
+    const expId = experiences[index]?.id;
     setExperiences(experiences.filter((_, i) => i !== index));
+    setExpErrors(prev => {
+      const n = { ...prev };
+      delete n[expId];
+      return n;
+    });
+    setErrors(prev => {
+      const n = { ...prev };
+      delete n[`exp-${expId}`];
+      return n;
+    });
   };
 
   // Manejar educaciones (FEATURE: Educación múltiple)
@@ -242,7 +359,7 @@ export default function RegisterPage() {
     setEducations([
       ...educations,
       {
-        id: Date.now(),
+        id: nuevoId(),
         nivel: '',
         institucion: '',
         carrera: '',
@@ -260,26 +377,47 @@ export default function RegisterPage() {
   };
 
   const removeEducation = (index: number) => {
+    const eduId = educations[index]?.id;
     setEducations(educations.filter((_, i) => i !== index));
+    setErrors(prev => {
+      const n = { ...prev };
+      delete n[`edu-${eduId}`];
+      return n;
+    });
   };
 
   // Manejar documentos
   const addDocument = () => {
-    setDocuments([...documents, { name: '', file: null, fileUrl: '', uploading: false }]);
+    setDocuments([
+      ...documents,
+      { id: nuevoId(), name: '', file: null, fileUrl: '', uploading: false, error: '' }
+    ]);
   };
 
-  const updateDocument = async (index: number, field: keyof Document, value: any) => {
-    const updated = [...documents];
-
+  /**
+   * AUTHUI-005: antes se copiaba `documents` al entrar, se mutaba el objeto en
+   * sitio y, tras esperar hasta 30 s el upload, se escribía ese snapshot viejo:
+   * el nombre tecleado mientras subía se perdía, los documentos agregados
+   * después desaparecían y los eliminados reaparecían. Ahora TODA escritura es
+   * funcional e inmutable y localiza el documento por id, no por posición.
+   */
+  const updateDocument = async (id: number, field: keyof Document, value: any) => {
     if (field === 'file' && value instanceof File) {
-      const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-      if (value.size > MAX_SIZE) {
-        alert(`El archivo "${value.name}" excede el tamaño máximo de 5MB (${(value.size / (1024 * 1024)).toFixed(1)}MB)`);
+      if (value.size > MAX_UPLOAD_BYTES) {
+        setDocuments(prev =>
+          prev.map(d =>
+            d.id === id
+              ? {
+                  ...d,
+                  error: `El archivo excede el tamaño máximo de ${MAX_UPLOAD_MB}MB (${(value.size / (1024 * 1024)).toFixed(1)}MB)`
+                }
+              : d
+          )
+        );
         return;
       }
 
-      updated[index].uploading = true;
-      setDocuments([...updated]);
+      setDocuments(prev => prev.map(d => (d.id === id ? { ...d, uploading: true, error: '' } : d)));
 
       try {
         const uploadPromise = uploadFile(value);
@@ -288,29 +426,37 @@ export default function RegisterPage() {
         );
 
         const url = await Promise.race([uploadPromise, timeoutPromise]);
-        updated[index].file = value;
-        updated[index].fileUrl = url;
-        updated[index].uploading = false;
+        setDocuments(prev =>
+          prev.map(d => (d.id === id ? { ...d, file: value, fileUrl: url, uploading: false, error: '' } : d))
+        );
       } catch (error) {
         console.error('Error uploading document:', error);
-        updated[index].uploading = false;
-        updated[index].file = null;
-        updated[index].fileUrl = '';
+        // AUTHUI-017: el fallo se muestra en la tarjeta, no en un alert() nativo.
         const errorMsg = error instanceof Error ? error.message : 'Error al subir archivo';
-        alert(`Error al subir "${value.name}": ${errorMsg}`);
+        setDocuments(prev =>
+          prev.map(d =>
+            d.id === id ? { ...d, file: null, fileUrl: '', uploading: false, error: errorMsg } : d
+          )
+        );
       }
-
-      setDocuments([...updated]);
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
+      return;
     }
 
-    setDocuments(updated);
+    setDocuments(prev => prev.map(d => (d.id === id ? { ...d, [field]: value } : d)));
   };
 
-  const removeDocument = (index: number) => {
-    setDocuments(documents.filter((_, i) => i !== index));
+  const removeDocument = (id: number) => {
+    // AUTHUI-005: funcional, para no pisar una subida que termine en paralelo.
+    setDocuments(prev => prev.filter(d => d.id !== id));
+    setErrors(prev => {
+      const n = { ...prev };
+      delete n[`doc-${id}`];
+      return n;
+    });
   };
+
+  // AUTHUI-007: ¿queda algún archivo en vuelo? (foto, CV o documentos)
+  const hayArchivosSubiendo = fotoUploading || cvUploading || documents.some(doc => doc.uploading);
 
   // Manejadores de contraseña con validación en tiempo real
   const handlePasswordChange = (value: string) => {
@@ -355,7 +501,11 @@ export default function RegisterPage() {
   };
 
   // Validaciones por paso
-  const validateStep = (step: number): boolean => {
+  /**
+   * Devuelve los errores del paso SIN tocar el estado, para poder revisar
+   * varios pasos de una sola vez al enviar (AUTHUI-006).
+   */
+  const erroresDePaso = (step: number): FormErrors => {
     const newErrors: FormErrors = {};
 
     if (step === 1) {
@@ -379,8 +529,102 @@ export default function RegisterPage() {
       if (password !== confirmPassword) {
         newErrors.confirmPassword = 'Las contraseñas no coinciden';
       }
+      // AUTHUI-023: el teléfono es opcional, pero es el dato con el que el
+      // reclutador contacta al candidato: si viene, debe servir para llamar.
+      if (telefono.trim()) {
+        const normalizado = telefono.replace(/[\s\-().]/g, '');
+        if (!/^(\+?52)?\d{10}$/.test(normalizado)) {
+          newErrors.telefono = 'Teléfono inválido. Formato: 10 dígitos, ej. 8112345678';
+        }
+      }
+      // AUTHUI-024: una fecha de nacimiento en el futuro contamina los filtros
+      // por edad y no se detectaba en ningún lado.
+      if (fechaNacimiento) {
+        if (fechaNacimiento < FECHA_MIN_NACIMIENTO) {
+          newErrors.fechaNacimiento = 'Revisa la fecha de nacimiento';
+        } else if (fechaNacimiento > FECHA_MAX_NACIMIENTO) {
+          newErrors.fechaNacimiento = 'Debes tener al menos 15 años para registrarte';
+        }
+      }
     }
 
+    // AUTHUI-006/AUTHUI-026: las filas a medio llenar se descartaban en silencio
+    // pese a los asteriscos; sólo se ignoran las filas COMPLETAMENTE vacías.
+    if (step === 2) {
+      educations.forEach((edu) => {
+        const vacia =
+          !edu.nivel && !edu.institucion.trim() && !edu.carrera.trim() &&
+          !edu.añoInicio && !edu.añoFin && !edu.estatus;
+        if (vacia) return;
+
+        const clave = `edu-${edu.id}`;
+        if (!edu.nivel) {
+          newErrors[clave] = 'Selecciona el nivel de estudios';
+        } else if (!edu.institucion.trim()) {
+          newErrors[clave] = 'Indica la institución';
+        } else if (
+          edu.añoInicio != null &&
+          (!Number.isInteger(edu.añoInicio) || edu.añoInicio < AÑO_MIN_EDUCACION || edu.añoInicio > AÑO_MAX_EDUCACION)
+        ) {
+          newErrors[clave] = `El año de inicio debe estar entre ${AÑO_MIN_EDUCACION} y ${AÑO_MAX_EDUCACION}`;
+        } else if (
+          edu.añoFin != null &&
+          (!Number.isInteger(edu.añoFin) || edu.añoFin < AÑO_MIN_EDUCACION || edu.añoFin > AÑO_MAX_EDUCACION)
+        ) {
+          newErrors[clave] = `El año de fin debe estar entre ${AÑO_MIN_EDUCACION} y ${AÑO_MAX_EDUCACION}`;
+        } else if (edu.añoInicio != null && edu.añoFin != null && edu.añoFin < edu.añoInicio) {
+          newErrors[clave] = 'El año de fin no puede ser anterior al de inicio';
+        }
+      });
+    }
+
+    if (step === 4) {
+      experiences.forEach((exp) => {
+        const vacia =
+          !exp.empresa.trim() && !exp.puesto.trim() && !exp.ubicacion.trim() &&
+          !exp.fechaInicio && !exp.fechaFin && !exp.descripcion.trim() && !exp.esActual;
+        if (vacia) return;
+
+        const clave = `exp-${exp.id}`;
+        if (!exp.empresa.trim()) {
+          newErrors[clave] = 'Indica la empresa';
+        } else if (!exp.puesto.trim()) {
+          newErrors[clave] = 'Indica el puesto';
+        } else if (!exp.fechaInicio) {
+          newErrors[clave] = 'Indica la fecha de inicio';
+        } else if (exp.fechaInicio > HOY_ISO) {
+          newErrors[clave] = 'La fecha de inicio no puede ser futura';
+        } else if (!exp.esActual && !exp.fechaFin) {
+          // AUTHUI-024: sin fecha fin el servidor la cuenta 'hasta hoy' e infla
+          // añosExperiencia.
+          newErrors[clave] = 'Indica la fecha de fin o marca "Trabajo actual"';
+        } else if (!exp.esActual && exp.fechaFin && exp.fechaFin < exp.fechaInicio) {
+          newErrors[clave] = 'La fecha de fin no puede ser anterior a la fecha de inicio';
+        }
+      });
+    }
+
+    if (step === 6) {
+      documents.forEach((doc) => {
+        const vacio = !doc.name.trim() && !doc.fileUrl && !doc.uploading;
+        if (vacio) return;
+
+        const clave = `doc-${doc.id}`;
+        if (doc.uploading) {
+          newErrors[clave] = 'Espera a que termine de subir el archivo';
+        } else if (!doc.name.trim()) {
+          newErrors[clave] = 'Ponle un nombre al documento';
+        } else if (!doc.fileUrl) {
+          newErrors[clave] = 'Adjunta el archivo del documento';
+        }
+      });
+    }
+
+    return newErrors;
+  };
+
+  const validateStep = (step: number): boolean => {
+    const newErrors = erroresDePaso(step);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -418,17 +662,45 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!validateStep(1)) {
-      setCurrentStep(1);
+    // AUTHUI-020: guarda síncrona contra el doble envío.
+    if (enviandoRef.current) return;
+
+    // AUTHUI-007: el payload toma fotoUrl/cvUrl/doc.fileUrl del estado en este
+    // instante: lo que siga subiendo se enviaría vacío y se perdería en silencio.
+    if (hayArchivosSubiendo) {
+      setGeneralError('Espera a que terminen de subir tus archivos');
+      return;
+    }
+
+    // AUTHUI-006/AUTHUI-018: validar TODOS los pasos con contenido antes de
+    // enviar; antes las filas incompletas se filtraban sin avisar y el usuario
+    // veía '¡Registro exitoso!' sin su información.
+    let erroresTotales: FormErrors = {};
+    let primerPasoConError = 0;
+    for (const paso of [1, 2, 4, 6]) {
+      const erroresPaso = erroresDePaso(paso);
+      if (Object.keys(erroresPaso).length > 0 && primerPasoConError === 0) {
+        primerPasoConError = paso;
+      }
+      erroresTotales = { ...erroresTotales, ...erroresPaso };
+    }
+
+    if (primerPasoConError !== 0) {
+      setErrors(erroresTotales);
+      setCurrentStep(primerPasoConError);
+      setGeneralError('Revisa los datos marcados antes de crear tu cuenta');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     // Validar errores de fechas en experiencias
     if (Object.keys(expErrors).length > 0) {
+      setCurrentStep(4);
       setGeneralError('Corrige los errores en las fechas de experiencia antes de continuar');
       return;
     }
 
+    enviandoRef.current = true;
     setIsSubmitting(true);
     setGeneralError(null);
 
@@ -461,10 +733,10 @@ export default function RegisterPage() {
           cvUrl: cvUrl || undefined,
           linkedinUrl: linkedinUrl || undefined,
           portafolioUrl: portafolioUrl || undefined,
-          // Experiencias (filtrar vacías)
-          experiences: experiences.filter(
-            exp => exp.empresa && exp.puesto && exp.fechaInicio
-          ),
+          // Experiencias (filtrar vacías; el `id` es sólo de la UI)
+          experiences: experiences
+            .filter(exp => exp.empresa && exp.puesto && exp.fechaInicio)
+            .map(({ id: _idExp, ...exp }) => exp),
           // Documentos (filtrar sin URL)
           documents: documents
             .filter(doc => doc.name && doc.fileUrl)
@@ -480,22 +752,51 @@ export default function RegisterPage() {
         setTimeout(() => {
           window.location.href = '/talents';
         }, 1500);
-      } else {
-        if (data.errors) {
-          setErrors(data.errors);
-          setCurrentStep(1);
-          // Scroll hacia arriba para mostrar los errores
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          setGeneralError(data.error || 'Error al registrarse');
+        // AUTHUI-020: el botón NO se reactiva mientras se espera la redirección.
+        return;
+      }
+
+      // AUTHUI-019: data.errors viene de zod como Record<campo, string[]>; al
+      // guardarlo tal cual, dos mensajes se pintaban pegados sin separador.
+      const erroresNormalizados: FormErrors = {};
+      if (data?.errors && typeof data.errors === 'object') {
+        for (const [campo, valor] of Object.entries(data.errors as Record<string, unknown>)) {
+          const mensaje = Array.isArray(valor) ? valor[0] : valor;
+          if (typeof mensaje === 'string' && mensaje) erroresNormalizados[campo] = mensaje;
         }
+      }
+
+      if (response.status === 409 && data?.error) {
+        // AUTHUI-019: el email duplicado es el error más común; su campo vive en
+        // el paso 1, así que se muestra ahí de forma persistente en vez de en un
+        // toast que se autodescarta a los 8 s cinco pantallas más adelante.
+        setErrors({ email: data.error });
+        setCurrentStep(1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (Object.keys(erroresNormalizados).length > 0) {
+        setErrors(erroresNormalizados);
+        setCurrentStep(1);
+        // AUTHUI-019: si el servidor señala un campo que no se pinta en el paso 1
+        // (sexo, educacion, experiences, documents...), antes se saltaba al paso 1
+        // y no se veía NADA; se avisa además con el primer mensaje.
+        const sinUiEnPaso1 = Object.keys(erroresNormalizados).filter(
+          (campo) => !CAMPOS_CON_ERROR_EN_PASO_1.includes(campo)
+        );
+        if (sinUiEnPaso1.length > 0) {
+          setGeneralError(erroresNormalizados[sinUiEnPaso1[0]]);
+        }
+        // Scroll hacia arriba para mostrar los errores
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setGeneralError(data?.error || 'Error al registrarse');
       }
     } catch (error) {
       setGeneralError('Error al conectar con el servidor');
       console.error('Error registering:', error);
-    } finally {
-      setIsSubmitting(false);
     }
+
+    enviandoRef.current = false;
+    setIsSubmitting(false);
   };
 
   // Input class helper
@@ -607,10 +908,10 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Error general */}
+          {/* Error general: el aviso vive en el ErrorToast de arriba. */}
           {/* Mensaje de éxito */}
           {successMessage && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">
+            <div role="status" className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4">
               {successMessage}
             </div>
           )}
@@ -632,7 +933,7 @@ export default function RegisterPage() {
                           <User className="w-10 h-10 text-white/50" />
                         )}
                       </div>
-                      <label className="absolute bottom-0 right-0 w-8 h-8 bg-button-green rounded-full flex items-center justify-center cursor-pointer hover:bg-green-700 shadow-lg">
+                      <label className="absolute bottom-0 right-0 w-8 h-8 bg-button-green rounded-full flex items-center justify-center cursor-pointer hover:bg-green-700 shadow-lg focus-within:ring-2 focus-within:ring-white">
                         {fotoUploading ? (
                           <Loader2 className="w-4 h-4 text-white animate-spin" />
                         ) : (
@@ -641,9 +942,18 @@ export default function RegisterPage() {
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
+                          // AUTHUI-021: 'hidden' (display:none) sacaba los tres
+                          // inputs de archivo del orden de tabulación; con
+                          // sr-only siguen invisibles pero enfocables por teclado.
+                          className="sr-only"
+                          aria-label="Subir foto de perfil"
                           onChange={(e) => {
-                            const file = e.target.files?.[0];
+                            // AUTHUI-027: limpiar el input permite reintentar
+                            // con el MISMO archivo tras un fallo (sin esto el
+                            // navegador no vuelve a disparar 'change').
+                            const input = e.target;
+                            const file = input.files?.[0];
+                            input.value = '';
                             if (file) handleFotoUpload(file);
                           }}
                           disabled={fotoUploading}
@@ -651,7 +961,7 @@ export default function RegisterPage() {
                       </label>
                     </div>
                     {errors.fotoUrl && (
-                      <p className="text-red-300 text-xs mt-1">{errors.fotoUrl}</p>
+                      <p role="alert" className="text-red-300 text-xs mt-1">{errors.fotoUrl}</p>
                     )}
                     <p className="text-white/60 text-xs mt-1">JPG, PNG o WebP (máx 2MB)</p>
                   </div>
@@ -717,7 +1027,12 @@ export default function RegisterPage() {
                         onChange={(e) => setTelefono(e.target.value)}
                         className={inputClass('telefono')}
                         placeholder="81 1234 5678"
+                        inputMode="tel"
+                        autoComplete="tel"
                       />
+                      {errors.telefono && (
+                        <p role="alert" className="text-red-300 text-xs mt-1">{errors.telefono}</p>
+                      )}
                     </div>
                   </div>
 
@@ -742,7 +1057,12 @@ export default function RegisterPage() {
                         value={fechaNacimiento}
                         onChange={(e) => setFechaNacimiento(e.target.value)}
                         className={inputClass('fechaNacimiento')}
+                        min={FECHA_MIN_NACIMIENTO}
+                        max={FECHA_MAX_NACIMIENTO}
                       />
+                      {errors.fechaNacimiento && (
+                        <p role="alert" className="text-red-300 text-xs mt-1">{errors.fechaNacimiento}</p>
+                      )}
                     </div>
                   </div>
 
@@ -797,8 +1117,11 @@ export default function RegisterPage() {
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                          // AUTHUI-025: botón sólo-icono sin nombre accesible.
+                          aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          aria-pressed={showPassword}
                         >
-                          {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                          {showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
                         </button>
                       </div>
                       {errors.password && (
@@ -822,8 +1145,10 @@ export default function RegisterPage() {
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                          aria-label={showConfirmPassword ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
+                          aria-pressed={showConfirmPassword}
                         >
-                          {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                          {showConfirmPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
                         </button>
                       </div>
                       {errors.confirmPassword && (
@@ -864,8 +1189,9 @@ export default function RegisterPage() {
                               type="button"
                               onClick={() => removeEducation(index)}
                               className="text-red-300 hover:text-red-400 p-1"
+                              aria-label={`Eliminar educación ${index + 1}`}
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={18} aria-hidden="true" />
                             </button>
                           </div>
 
@@ -932,8 +1258,8 @@ export default function RegisterPage() {
                                 onChange={(e) => updateEducation(index, 'añoInicio', e.target.value ? parseInt(e.target.value) : null)}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-300"
                                 placeholder="2020"
-                                min="1950"
-                                max="2030"
+                                min={AÑO_MIN_EDUCACION}
+                                max={AÑO_MAX_EDUCACION}
                               />
                             </div>
                             <div>
@@ -944,11 +1270,17 @@ export default function RegisterPage() {
                                 onChange={(e) => updateEducation(index, 'añoFin', e.target.value ? parseInt(e.target.value) : null)}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-300"
                                 placeholder="2024"
-                                min="1950"
-                                max="2030"
+                                min={AÑO_MIN_EDUCACION}
+                                max={AÑO_MAX_EDUCACION}
                               />
                             </div>
                           </div>
+
+                          {errors[`edu-${edu.id}`] && (
+                            <p role="alert" className="text-red-300 text-xs mt-2">
+                              {errors[`edu-${edu.id}`]}
+                            </p>
+                          )}
                         </div>
                       ))}
 
@@ -981,14 +1313,37 @@ export default function RegisterPage() {
                         setSubcategory('');
                       }}
                       className={selectClass('profile')}
+                      disabled={specialtiesStatus !== 'ready'}
                     >
-                      <option value="">Seleccionar área</option>
+                      <option value="">
+                        {specialtiesStatus === 'loading'
+                          ? 'Cargando áreas...'
+                          : specialtiesStatus === 'error'
+                          ? 'No se pudieron cargar las áreas'
+                          : 'Seleccionar área'}
+                      </option>
                       {specialties.map((spec) => (
                         <option key={spec.id} value={spec.name}>
                           {spec.name}
                         </option>
                       ))}
                     </select>
+                    {/* AUTHUI-016: antes el fallo era invisible y el candidato
+                        terminaba el registro sin perfil (su campo de matching). */}
+                    {specialtiesStatus === 'error' && (
+                      <div role="alert" className="mt-2 flex items-center gap-3">
+                        <p className="text-red-300 text-xs">
+                          No pudimos cargar las áreas. Sin ellas no podrás declarar tu perfil.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={cargarEspecialidades}
+                          className="px-3 py-1 bg-button-green text-white text-xs rounded-lg hover:bg-green-700"
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {currentSubcategories.length > 0 && (
@@ -1050,15 +1405,16 @@ export default function RegisterPage() {
                   ) : (
                     <>
                       {experiences.map((exp, index) => (
-                        <div key={index} className="bg-white/10 rounded-lg p-4">
+                        <div key={exp.id} className="bg-white/10 rounded-lg p-4">
                           <div className="flex justify-between items-start mb-3">
                             <h4 className="font-semibold text-white">Experiencia {index + 1}</h4>
                             <button
                               type="button"
                               onClick={() => removeExperience(index)}
                               className="text-red-300 hover:text-red-400 p-1"
+                              aria-label={`Eliminar experiencia ${index + 1}`}
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={18} aria-hidden="true" />
                             </button>
                           </div>
 
@@ -1103,6 +1459,7 @@ export default function RegisterPage() {
                                 value={exp.fechaInicio}
                                 onChange={(e) => updateExperience(index, 'fechaInicio', e.target.value)}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-300"
+                                max={HOY_ISO}
                               />
                             </div>
                             <div>
@@ -1113,12 +1470,19 @@ export default function RegisterPage() {
                                 onChange={(e) => updateExperience(index, 'fechaFin', e.target.value)}
                                 disabled={exp.esActual}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 disabled:bg-gray-200"
+                                min={exp.fechaInicio || undefined}
+                                max={HOY_ISO}
                               />
                             </div>
                           </div>
 
-                          {expErrors[index] && (
-                            <p className="text-red-300 text-xs mt-1">{expErrors[index]}</p>
+                          {expErrors[exp.id] && (
+                            <p role="alert" className="text-red-300 text-xs mt-1">{expErrors[exp.id]}</p>
+                          )}
+                          {errors[`exp-${exp.id}`] && (
+                            <p role="alert" className="text-red-300 text-xs mt-1">
+                              {errors[`exp-${exp.id}`]}
+                            </p>
                           )}
 
                           <div className="mt-3">
@@ -1177,24 +1541,32 @@ export default function RegisterPage() {
                         placeholder="https://drive.google.com/... o sube un archivo"
                       />
                       <div className="flex items-center gap-2">
-                        <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg cursor-pointer hover:bg-white/30">
+                        <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg cursor-pointer hover:bg-white/30 focus-within:ring-2 focus-within:ring-white">
                           <Upload size={18} />
                           {cvUploading ? 'Subiendo...' : cvFile ? cvFile.name : 'Subir archivo'}
                           <input
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png"
-                            className="hidden"
+                            className="sr-only"
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
+                              // AUTHUI-027: permitir reintentar con el mismo archivo.
+                              const input = e.target;
+                              const file = input.files?.[0];
+                              input.value = '';
                               if (file) handleCvUpload(file);
                             }}
                             disabled={cvUploading}
                           />
                         </label>
                       </div>
+                      {/* AUTHUI-003: el fallo de la subida sólo pintaba el borde
+                          rojo del campo de URL, sin ningún texto. */}
+                      {errors.cvUrl && (
+                        <p role="alert" className="text-red-300 text-xs mt-1">{errors.cvUrl}</p>
+                      )}
                     </div>
                     <p className="text-white/60 text-xs mt-1">
-                      Puedes ingresar una URL o subir un archivo (PDF, JPG, PNG - máx 5MB)
+                      Puedes ingresar una URL o subir un archivo (PDF, JPG, PNG - máx {MAX_UPLOAD_MB}MB)
                     </p>
                   </div>
 
@@ -1250,15 +1622,16 @@ export default function RegisterPage() {
                   ) : (
                     <>
                       {documents.map((doc, index) => (
-                        <div key={index} className="bg-white/10 rounded-lg p-4">
+                        <div key={doc.id} className="bg-white/10 rounded-lg p-4">
                           <div className="flex justify-between items-start mb-3">
                             <h4 className="font-semibold text-white">Documento {index + 1}</h4>
                             <button
                               type="button"
-                              onClick={() => removeDocument(index)}
+                              onClick={() => removeDocument(doc.id)}
                               className="text-red-300 hover:text-red-400 p-1"
+                              aria-label={`Eliminar documento ${index + 1}`}
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={18} aria-hidden="true" />
                             </button>
                           </div>
 
@@ -1270,7 +1643,13 @@ export default function RegisterPage() {
                               <input
                                 type="text"
                                 value={doc.name}
-                                onChange={(e) => updateDocument(index, 'name', e.target.value)}
+                                onChange={(e) => updateDocument(doc.id, 'name', e.target.value)}
+                                onKeyDown={(e) => {
+                                  // AUTHUI-018: Enter aquí enviaba el registro
+                                  // completo y el documento a medio capturar se
+                                  // descartaba en el filtro.
+                                  if (e.key === 'Enter') e.preventDefault();
+                                }}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-300"
                                 placeholder="Ej: Título universitario, Certificación AWS..."
                               />
@@ -1278,7 +1657,7 @@ export default function RegisterPage() {
 
                             <div>
                               <label className="block text-white text-xs mb-1">Archivo *</label>
-                              <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg ${
+                              <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg focus-within:ring-2 focus-within:ring-white ${
                                 doc.uploading
                                   ? 'bg-teal-700/50 text-teal-200 cursor-wait'
                                   : doc.fileUrl
@@ -1304,16 +1683,28 @@ export default function RegisterPage() {
                                 <input
                                   type="file"
                                   accept=".pdf,.jpg,.jpeg,.png"
-                                  className="hidden"
+                                  className="sr-only"
                                   onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) updateDocument(index, 'file', file);
+                                    // AUTHUI-027: permitir reintentar con el mismo archivo.
+                                    const input = e.target;
+                                    const file = input.files?.[0];
+                                    input.value = '';
+                                    if (file) updateDocument(doc.id, 'file', file);
                                   }}
                                   disabled={doc.uploading}
                                 />
                               </label>
+                              {doc.error && (
+                                <p role="alert" className="text-red-300 text-xs mt-1">{doc.error}</p>
+                              )}
                             </div>
                           </div>
+
+                          {errors[`doc-${doc.id}`] && (
+                            <p role="alert" className="text-red-300 text-xs mt-2">
+                              {errors[`doc-${doc.id}`]}
+                            </p>
+                          )}
                         </div>
                       ))}
 
@@ -1359,7 +1750,8 @@ export default function RegisterPage() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={isSubmitting || stepTransitioning}
+                    // AUTHUI-007: con un archivo en vuelo, el payload saldría sin él.
+                    disabled={isSubmitting || stepTransitioning || hayArchivosSubiendo}
                     className="flex-1 py-3 bg-button-orange text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isSubmitting ? (
@@ -1376,6 +1768,13 @@ export default function RegisterPage() {
                   </button>
                 )}
               </div>
+
+              {/* AUTHUI-007: explicar por qué el botón está deshabilitado */}
+              {currentStep === 6 && hayArchivosSubiendo && (
+                <p role="status" className="w-full mt-3 text-white/80 text-sm text-center">
+                  Espera a que terminen de subir tus archivos
+                </p>
+              )}
 
               {/* Skip to end */}
               {currentStep < 6 && (
