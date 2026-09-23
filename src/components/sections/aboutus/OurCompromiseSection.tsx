@@ -13,6 +13,9 @@ const OurCompromiseSection = () => {
       className="bg-soft-green py-16 md:py-24"
     >
       <div className="container mx-auto px-4">
+        {/* La sección arrancaba en nivel 3 sin encabezado de nivel 2: rompía la
+            jerarquía para lectores de pantalla. Invisible en pantalla. */}
+        <h2 className="sr-only">Nuestro compromiso</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
           {/* Card: Evaluación profunda */}
           <div

@@ -2,13 +2,14 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { LogOut, User, ChevronDown, Menu, X, Bell } from 'lucide-react';
 import logo from '@/assets/images/logo/logo.png';
 import NotificationBell from '@/components/shared/NotificationBell';
+import { AUTH_REFRESH_EVENT } from '@/lib/auth-events';
 
 interface UserData {
   userId: number;
@@ -24,55 +25,117 @@ const Navbar = () => {
   const [user, setUser] = useState<UserData | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileButtonRef = useRef<HTMLButtonElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    // Verificar autenticación llamando al endpoint /api/auth/me
-    const checkAuth = async () => {
-      try {
-        const response = await fetch('/api/auth/me', {
-          method: 'GET',
-          credentials: 'include' // Importante: incluir cookies
-        });
+  // Verificar autenticación llamando al endpoint /api/auth/me.
+  // Se declara fuera del efecto porque la sesión se revalida desde varios
+  // disparadores, no sólo al cambiar de ruta.
+  const checkAuth = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include' // Importante: incluir cookies
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            // Mapear los datos del usuario al formato esperado
-            setUser({
-              userId: data.user.id,
-              email: data.user.email,
-              role: data.user.role,
-              nombre: data.user.nombre,
-              credits: data.user.credits || 0 // 💰 Incluir créditos
-            });
-          }
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          // Mapear los datos del usuario al formato esperado
+          setUser({
+            userId: data.user.id,
+            email: data.user.email,
+            role: data.user.role,
+            nombre: data.user.nombre,
+            credits: data.user.credits || 0 // 💰 Incluir créditos
+          });
         } else {
-          // Si no está autenticado, limpiar el estado
           setUser(null);
         }
-      } catch (error) {
-        console.error('Error checking auth:', error);
+      } else {
+        // Si no está autenticado, limpiar el estado
         setUser(null);
       }
+    } catch (error) {
+      console.error('Error checking auth:', error);
+      setUser(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [pathname, checkAuth]);
+
+  // Revalidar la sesión SIN cambiar de ruta: si no, publicar una vacante
+  // (descuenta créditos) o guardar el perfil dejaba el menú del avatar con el
+  // saldo y el nombre viejos. Cualquier pantalla puede avisar con
+  // notifyAuthChanged() de '@/lib/auth-events'. Al recuperar el foco también,
+  // para detectar sesiones caducadas con la pestaña abierta.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkAuth();
     };
 
-    checkAuth();
+    window.addEventListener(AUTH_REFRESH_EVENT, checkAuth);
+    window.addEventListener('focus', checkAuth);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener(AUTH_REFRESH_EVENT, checkAuth);
+      window.removeEventListener('focus', checkAuth);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [checkAuth]);
+
+  // Cerrar ambos menús al navegar (logo, botón atrás/adelante, redirecciones):
+  // antes el drawer móvil seguía desplegado sobre la página nueva.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setDropdownOpen(false);
   }, [pathname]);
 
-  // Cerrar dropdown al hacer click fuera
+  // Cerrar dropdown y drawer al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setDropdownOpen(false);
+      }
+
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(target) &&
+        !(mobileButtonRef.current?.contains(target) ?? false)
+      ) {
+        setMobileMenuOpen(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Escape cierra el menú abierto y devuelve el foco a su botón (a11y).
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+
+      setDropdownOpen((open) => {
+        if (open) userButtonRef.current?.focus();
+        return false;
+      });
+      setMobileMenuOpen((open) => {
+        if (open) mobileButtonRef.current?.focus();
+        return false;
+      });
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleLogout = async () => {
@@ -82,18 +145,28 @@ const Navbar = () => {
         method: 'POST',
         credentials: 'include'
       });
+
       if (!response.ok) {
+        // La cookie auth-token es httpOnly: si el servidor no la borró, el
+        // cliente NO puede hacerlo. Dar la sesión por cerrada dejaría la sesión
+        // viva en un equipo compartido, así que se avisa y no se redirige.
         console.error('Error logging out: response not ok');
+        setLogoutError('No se pudo cerrar la sesión. Inténtalo de nuevo.');
+        return;
       }
     } catch (error) {
       console.error('Error logging out:', error);
-    } finally {
-      // Limpiar estado local y redirigir
-      setUser(null);
-      setDropdownOpen(false);
-      router.push('/');
-      router.refresh();
+      setLogoutError('No se pudo cerrar la sesión. Revisa tu conexión.');
+      return;
     }
+
+    // Sólo si el servidor confirmó el cierre: limpiar estado local y redirigir
+    setLogoutError(null);
+    setUser(null);
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+    router.push('/');
+    router.refresh();
   };
 
   const getDashboardLink = () => {
@@ -112,6 +185,8 @@ const Navbar = () => {
         return '/candidate/applications';
       case 'user':
         return '/my-applications';
+      case 'vendor':
+        return '/vendor/dashboard';
       default:
         return '/';
     }
@@ -133,6 +208,8 @@ const Navbar = () => {
         return 'Mis Postulaciones';
       case 'user':
         return 'Mis Aplicaciones';
+      case 'vendor':
+        return 'Panel Vendedor';
       default:
         return 'Dashboard';
     }
@@ -141,15 +218,20 @@ const Navbar = () => {
   const getInitials = () => {
     if (!user) return 'U';
 
-    if (user.nombre) {
-      const names = user.nombre.split(' ');
-      if (names.length >= 2) {
-        return (names[0][0] + names[1][0]).toUpperCase();
-      }
-      return user.nombre.substring(0, 2).toUpperCase();
+    // Normalizar espacios: "Ana " o "Juan  Carlos" daban "AUNDEFINED" y un
+    // nombre de sólo espacios lanzaba TypeError en el render. Como el Navbar
+    // vive en el layout raíz, eso tumbaba la app entera para esa cuenta.
+    const partes = (user.nombre ?? '').trim().split(/\s+/).filter(Boolean);
+
+    if (partes.length >= 2) {
+      return (partes[0][0] + partes[1][0]).toUpperCase();
     }
 
-    return user.email.substring(0, 2).toUpperCase();
+    if (partes.length === 1) {
+      return partes[0].slice(0, 2).toUpperCase();
+    }
+
+    return (user.email || '').slice(0, 2).toUpperCase() || 'U';
   };
 
   const getRoleLabel = () => {
@@ -168,58 +250,92 @@ const Navbar = () => {
         return 'Candidato';
       case 'user':
         return 'Usuario';
+      case 'vendor':
+        return 'Vendedor';
       default:
         return '';
     }
   };
 
+  // Marca el enlace de la ruta actual para lectores de pantalla: antes la
+  // página activa sólo se distinguía por color (a11y).
+  const getAriaCurrent = (path: string): 'page' | undefined =>
+    pathname === path ? 'page' : undefined;
+
+  // whitespace-nowrap: la píldora es un <a> inline y, si el texto se partía en
+  // dos renglones, el fondo redondeado se fragmentaba.
   const getLinkClass = (path: string) => {
     return pathname === path
-      ? 'text-white bg-button-dark-green px-4 py-2 rounded-full cursor-default'
-      : 'px-4 py-2 rounded-full bg-transparent text-text-black hover:bg-button-dark-green hover:text-white transition-colors';
+      ? 'whitespace-nowrap text-white bg-button-dark-green px-4 py-2 rounded-full cursor-default'
+      : 'whitespace-nowrap px-4 py-2 rounded-full bg-transparent text-text-black hover:bg-button-dark-green hover:text-white transition-colors';
   };
 
   return (
     <nav className="fixed top-0 left-0 w-full bg-custom-beige py-2 z-50">
       <div className="container mx-auto flex justify-between items-center px-4">
         {/* Logo */}
-        <Link href="/">
+        <Link href="/" onClick={() => setMobileMenuOpen(false)}>
           <Image src={logo} alt="INAKAT" className="w-24 md:w-32" priority />
         </Link>
 
         {/* Mobile Menu Button */}
         <button
+          ref={mobileButtonRef}
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 text-title-dark"
-          aria-label="Toggle menu"
+          className="lg:hidden p-2 text-title-dark"
+          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="menu-movil"
         >
           {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
         </button>
 
-        {/* Desktop Menu */}
-        <ul className="hidden md:flex space-x-4 lg:space-x-6 items-center">
+        {/* Desktop Menu: desde lg, no md. Entre 768 y ~1000px los 6 enlaces y el
+            botón de sesión no cabían: se partían en dos renglones y el último
+            quedaba fuera de pantalla, sin scroll posible en un nav fijo. */}
+        <ul className="hidden lg:flex space-x-3 xl:space-x-6 items-center">
           <li>
-            <Link href="/" className={getLinkClass('/')}>
+            <Link
+              href="/"
+              className={getLinkClass('/')}
+              aria-current={getAriaCurrent('/')}
+            >
               INICIO
             </Link>
           </li>
           <li>
-            <Link href="/about" className={getLinkClass('/about')}>
+            <Link
+              href="/about"
+              className={getLinkClass('/about')}
+              aria-current={getAriaCurrent('/about')}
+            >
               SOBRE NOSOTROS
             </Link>
           </li>
           <li>
-            <Link href="/companies" className={getLinkClass('/companies')}>
+            <Link
+              href="/companies"
+              className={getLinkClass('/companies')}
+              aria-current={getAriaCurrent('/companies')}
+            >
               EMPRESAS
             </Link>
           </li>
           <li>
-            <Link href="/talents" className={getLinkClass('/talents')}>
+            <Link
+              href="/talents"
+              className={getLinkClass('/talents')}
+              aria-current={getAriaCurrent('/talents')}
+            >
               TALENTOS
             </Link>
           </li>
           <li>
-            <Link href="/contact" className={getLinkClass('/contact')}>
+            <Link
+              href="/contact"
+              className={getLinkClass('/contact')}
+              aria-current={getAriaCurrent('/contact')}
+            >
               CONTACTO
             </Link>
           </li>
@@ -237,10 +353,18 @@ const Navbar = () => {
               // User Dropdown
               <div className="relative" ref={dropdownRef}>
                 <button
+                  ref={userButtonRef}
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center gap-2 bg-button-orange text-white px-4 py-2 rounded-full hover:bg-opacity-90 transition-colors"
+                  aria-label={`Menú de cuenta de ${user.nombre || user.email}`}
+                  aria-haspopup="menu"
+                  aria-expanded={dropdownOpen}
+                  aria-controls="menu-cuenta"
                 >
-                  <div className="w-8 h-8 bg-white text-button-orange rounded-full flex items-center justify-center font-bold text-sm">
+                  <div
+                    className="w-8 h-8 bg-white text-button-orange rounded-full flex items-center justify-center font-bold text-sm"
+                    aria-hidden="true"
+                  >
                     {getInitials()}
                   </div>
                   <ChevronDown
@@ -252,7 +376,13 @@ const Navbar = () => {
 
                 {/* Dropdown Menu */}
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-[min(420px,90vw)] bg-white rounded-lg shadow-lg py-2 border border-gray-200">
+                  // max-h + scroll como en el drawer móvil: el menú de admin es
+                  // más alto que un viewport bajo y "Cerrar Sesión" quedaba
+                  // inalcanzable al colgar de un nav position:fixed.
+                  <div
+                    id="menu-cuenta"
+                    className="absolute right-0 mt-2 w-[min(420px,90vw)] bg-white rounded-lg shadow-lg py-2 border border-gray-200 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain"
+                  >
                     {/* User Info */}
                     <div className="px-4 py-2 border-b border-gray-200">
                       <p className="text-sm font-semibold text-gray-900">
@@ -330,8 +460,9 @@ const Navbar = () => {
                       Mi Perfil
                     </Link>
 
-                    {/* Panel Vendedor - Solo para admin y vendor */}
-                    {['admin', 'vendor'].includes(user.role) && (
+                    {/* Panel Vendedor - Sólo para admin: el vendor ya llega
+                        por su propio enlace de Dashboard (getDashboardLink) */}
+                    {user.role === 'admin' && (
                       <Link
                         href="/vendor/dashboard"
                         onClick={() => setDropdownOpen(false)}
@@ -501,6 +632,18 @@ const Navbar = () => {
                             </svg>
                             Especialidades
                           </Link>
+
+                          {/* PLAT-002: la bandeja de mensajes de contacto. */}
+                          <Link
+                            href="/admin/contact-messages"
+                            onClick={() => setDropdownOpen(false)}
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Mensajes de contacto
+                          </Link>
                         </div>
                       </>
                     )}
@@ -545,6 +688,18 @@ const Navbar = () => {
                           Mis Entrevistas
                         </Link>
 
+                        {/* Integraciones (API keys y webhooks del puente Worky2) */}
+                        <Link
+                          href="/company/integrations"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.5-1.5m4.5-4.5l1.5-1.5a4 4 0 115.656 5.656l-3 3a4 4 0 01-5.656 0" />
+                          </svg>
+                          Integraciones
+                        </Link>
+
                         {/* Comprar Créditos */}
                         <Link
                           href="/credits/purchase"
@@ -579,6 +734,15 @@ const Navbar = () => {
                       <LogOut className="w-4 h-4" />
                       Cerrar Sesión
                     </button>
+
+                    {logoutError && (
+                      <p
+                        role="alert"
+                        className="px-4 py-2 text-xs text-red-600 bg-red-50"
+                      >
+                        {logoutError}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -586,7 +750,7 @@ const Navbar = () => {
               // Login Button
               <Link
                 href="/login"
-                className="bg-button-orange text-white px-4 py-2 rounded-full hover:bg-opacity-90 transition-colors"
+                className="whitespace-nowrap bg-button-orange text-white px-4 py-2 rounded-full hover:bg-opacity-90 transition-colors"
               >
                 Iniciar Sesión
               </Link>
@@ -597,13 +761,18 @@ const Navbar = () => {
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-custom-beige shadow-lg border-t border-gray-200 max-h-[80vh] overflow-y-auto">
+        <div
+          id="menu-movil"
+          ref={mobileMenuRef}
+          className="lg:hidden absolute top-full left-0 w-full bg-custom-beige shadow-lg border-t border-gray-200 max-h-[80vh] overflow-y-auto"
+        >
           <div className="container mx-auto px-4 py-4">
             <ul className="flex flex-col space-y-2">
               <li>
                 <Link
                   href="/"
                   className={getLinkClass('/')}
+                  aria-current={getAriaCurrent('/')}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   INICIO
@@ -613,6 +782,7 @@ const Navbar = () => {
                 <Link
                   href="/about"
                   className={getLinkClass('/about')}
+                  aria-current={getAriaCurrent('/about')}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   SOBRE NOSOTROS
@@ -622,6 +792,7 @@ const Navbar = () => {
                 <Link
                   href="/companies"
                   className={getLinkClass('/companies')}
+                  aria-current={getAriaCurrent('/companies')}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   EMPRESAS
@@ -631,6 +802,7 @@ const Navbar = () => {
                 <Link
                   href="/talents"
                   className={getLinkClass('/talents')}
+                  aria-current={getAriaCurrent('/talents')}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   TALENTOS
@@ -640,6 +812,7 @@ const Navbar = () => {
                 <Link
                   href="/contact"
                   className={getLinkClass('/contact')}
+                  aria-current={getAriaCurrent('/contact')}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   CONTACTO
@@ -695,6 +868,19 @@ const Navbar = () => {
                     >
                       Mi Perfil
                     </Link>
+
+                    {/* Panel Vendedor (admin): el vendor ya llega por su propio
+                        enlace de Dashboard. En móvil no existía ninguna ruta
+                        hacia /vendor/dashboard. */}
+                    {user.role === 'admin' && (
+                      <Link
+                        href="/vendor/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        Panel Vendedor
+                      </Link>
+                    )}
 
                     {/* Admin specific links (mobile) */}
                     {user.role === 'admin' && (
@@ -755,6 +941,10 @@ const Navbar = () => {
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
                           Especialidades
                         </Link>
+                        <Link href="/admin/contact-messages" onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">
+                          Mensajes de contacto
+                        </Link>
                       </>
                     )}
 
@@ -767,6 +957,13 @@ const Navbar = () => {
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
                         >
                           Perfil de Empresa
+                        </Link>
+                        <Link
+                          href="/company/integrations"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                        >
+                          Integraciones
                         </Link>
                         <Link
                           href="/company/interviews"
@@ -785,17 +982,24 @@ const Navbar = () => {
                       </>
                     )}
 
-                    {/* Logout */}
+                    {/* Logout: el menú sólo se cierra si el servidor confirmó
+                        el cierre (lo hace handleLogout), no siempre. */}
                     <button
-                      onClick={() => {
-                        handleLogout();
-                        setMobileMenuOpen(false);
-                      }}
+                      onClick={handleLogout}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
                     >
                       <LogOut className="w-4 h-4" />
                       Cerrar Sesión
                     </button>
+
+                    {logoutError && (
+                      <p
+                        role="alert"
+                        className="px-4 py-2 text-xs text-red-600 bg-red-50 rounded-lg"
+                      >
+                        {logoutError}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <Link

@@ -5,6 +5,13 @@ export function useInView(threshold = 0.1) {
   const [isInView, setIsInView] = useState(false);
 
   useEffect(() => {
+    // Navegadores (o entornos de test) sin IntersectionObserver: mostrar el
+    // contenido de una vez en lugar de dejarlo invisible o lanzar ReferenceError.
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsInView(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

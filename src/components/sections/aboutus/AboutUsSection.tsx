@@ -19,21 +19,26 @@ const AboutUsSection = () => {
           <div
             className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
           >
+            {/* Es la imagen del primer pantallazo (candidata a LCP): con
+                loading="lazy" el navegador la posponía tras el layout. */}
             <Image
               src={aboutImage}
               alt="Equipo INAKAT"
               className="w-full rounded-2xl shadow-2xl"
-              loading="lazy"
+              sizes="(min-width: 768px) 50vw, 100vw"
+              priority
             />
           </div>
 
           {/* Text */}
           <div>
-            <h2
+            {/* Único h1 de /about: la página no tenía ninguno y la jerarquía
+                de encabezados empezaba en nivel 2. Mismas clases visuales. */}
+            <h1
               className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-4xl md:text-5xl font-bold text-title-dark mb-8`}
             >
               ¿Quiénes <span className="gradient-text">Somos</span>?
-            </h2>
+            </h1>
 
             <div className="space-y-4">
               {/* Callout principal: origen del nombre */}

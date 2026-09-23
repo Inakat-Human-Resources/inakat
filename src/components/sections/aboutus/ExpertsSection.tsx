@@ -1,7 +1,7 @@
 // RUTA: src/components/sections/aboutus/ExpertsSection.tsx
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Image, { StaticImageData } from 'next/image';
 import { useInView } from '@/hooks/useInView';
 import { X, Play } from 'lucide-react';
@@ -90,6 +90,33 @@ const experts: Expert[] = [
 const ExpertsSection = () => {
   const { ref, isInView } = useInView(0.1);
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
+  // Tarjeta que abrió el modal: al cerrar hay que devolverle el foco (a11y).
+  const tarjetaOrigenRef = useRef<HTMLButtonElement | null>(null);
+  const botonCerrarRef = useRef<HTMLButtonElement>(null);
+
+  const cerrarModal = useCallback(() => setSelectedExpert(null), []);
+
+  // Comportamiento de diálogo: Escape cierra, el foco entra al modal y vuelve
+  // a la tarjeta al cerrar, y el fondo no se desplaza mientras está abierto.
+  useEffect(() => {
+    if (!selectedExpert) return;
+
+    const handleKeyDown = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape') cerrarModal();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    botonCerrarRef.current?.focus();
+
+    const overflowPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = overflowPrevio;
+      tarjetaOrigenRef.current?.focus();
+    };
+  }, [selectedExpert, cerrarModal]);
 
   return (
     <>
@@ -115,30 +142,39 @@ const ExpertsSection = () => {
           {/* Experts grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 max-w-6xl mx-auto">
             {experts.map((expert, index) => (
-              <button
+              // El reveal vive en el envoltorio: cuando .animate-on-scroll.in-view
+              // se aplicaba al propio botón, su transform fijo anulaba el
+              // hover:-translate-y-1 y la tarjeta nunca se elevaba.
+              <div
                 key={index}
-                onClick={() => setSelectedExpert(expert)}
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-2xl p-6 md:p-7 shadow-sm hover:shadow-lg transition-all text-center cursor-pointer hover:-translate-y-1`}
+                className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
                 style={{ transitionDelay: `${index * 80}ms` }}
               >
-                <div className="w-28 h-28 md:w-36 md:h-36 lg:w-40 lg:h-40 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
-                  <Image
-                    src={expert.image}
-                    alt={expert.name}
-                    width={320}
-                    height={320}
-                    sizes="(min-width: 1024px) 160px, (min-width: 768px) 144px, 112px"
-                    quality={85}
-                    priority={index < 4}
-                    loading={index < 4 ? undefined : 'lazy'}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <h3 className="font-display font-bold text-title-dark text-base md:text-lg">
-                  {expert.name}
-                </h3>
-                <p className="text-button-green text-sm mt-1">{expert.role}</p>
-              </button>
+                <button
+                  // Guarda la tarjeta de origen para devolverle el foco al cerrar.
+                  onClick={(evento) => { tarjetaOrigenRef.current = evento.currentTarget; setSelectedExpert(expert); }}
+                  className="w-full h-full bg-white rounded-2xl p-6 md:p-7 shadow-sm hover:shadow-lg transition-all text-center cursor-pointer hover:-translate-y-1"
+                >
+                  <div className="w-28 h-28 md:w-36 md:h-36 lg:w-40 lg:h-40 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
+                    {/* Esta sección está muy por debajo del pliegue: con
+                        priority competía en el <head> con la imagen del hero. */}
+                    <Image
+                      src={expert.image}
+                      alt={expert.name}
+                      width={320}
+                      height={320}
+                      sizes="(min-width: 1024px) 160px, (min-width: 768px) 144px, 112px"
+                      quality={85}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="font-display font-bold text-title-dark text-base md:text-lg">
+                    {expert.name}
+                  </h3>
+                  <p className="text-button-green text-sm mt-1">{expert.role}</p>
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -148,15 +184,19 @@ const ExpertsSection = () => {
       {selectedExpert && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedExpert(null)}
+          onClick={cerrarModal}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="experto-nombre"
             className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto relative"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
             <button
-              onClick={() => setSelectedExpert(null)}
+              ref={botonCerrarRef}
+              onClick={cerrarModal}
               className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 transition-colors"
               aria-label="Cerrar"
             >
@@ -175,7 +215,10 @@ const ExpertsSection = () => {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <h3 className="font-display text-xl font-bold text-title-dark">
+              <h3
+                id="experto-nombre"
+                className="font-display text-xl font-bold text-title-dark"
+              >
                 {selectedExpert.name}
               </h3>
               <p className="text-button-green text-sm mt-1 mb-4">

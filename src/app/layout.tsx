@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit, DM_Sans } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/commons/Navbar";
+import { SITE_URL } from "@/lib/site-url";
+import { BASE_OPEN_GRAPH } from "@/lib/seo";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -16,16 +18,40 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "INAKAT - Talento Evaluado por Expertos Reales",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    // Cada página exporta su propio title; el resto hereda el default.
+    default: "INAKAT - Talento Evaluado por Expertos Reales",
+    template: "%s | INAKAT",
+  },
   description:
     "Contrata talento calificado con evaluación dual: psicólogos expertos + especialistas técnicos. IA como apoyo, personas que deciden. Presencia en toda la República Mexicana.",
+  // OJO: canonical y og:url se heredan. Toda página indexable debe declarar
+  // los suyos (alternates.canonical y openGraph.url) o quedaría canonizada a "/".
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/logo192.png",
+  },
   openGraph: {
+    ...BASE_OPEN_GRAPH,
     title: "INAKAT - Talento Evaluado por Expertos Reales",
     description:
       "Contrata talento calificado con evaluación dual: psicólogos expertos + especialistas técnicos. Presencia en toda la República Mexicana.",
-    type: "website",
-    locale: "es_MX",
+    url: "/",
   },
+  // Sin title/description propios: así cada página cae a su og:title en vez de
+  // repetir el título de la home en la tarjeta de X/Twitter.
+  twitter: {
+    card: "summary",
+    images: ["/logo512.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2b5d62",
 };
 
 export default function RootLayout({
@@ -34,8 +60,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${outfit.variable} ${dmSans.variable}`}>
+    // suppressHydrationWarning: el script de abajo añade la clase "js" al <html>
+    // antes de hidratar; sin esto React avisa de un className distinto.
+    <html
+      lang="es"
+      className={`${outfit.variable} ${dmSans.variable}`}
+      suppressHydrationWarning
+    >
       <body className="font-body antialiased pt-14">
+        {/* Marca que hay JavaScript ANTES de pintar: sólo entonces .animate-on-scroll
+            esconde el contenido. Sin JS (o con los chunks bloqueados) todo se ve. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "document.documentElement.classList.add('js');",
+          }}
+        />
         <Navbar />
         {children}
       </body>

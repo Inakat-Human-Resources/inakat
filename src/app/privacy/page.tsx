@@ -1,6 +1,17 @@
 // RUTA: src/app/privacy/page.tsx
 import Footer from '@/components/commons/Footer';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Política de Privacidad',
+  description:
+    'Política de privacidad y tratamiento de datos personales de INAKAT.',
+  // Página provisional ("se detallará próximamente"): no debe indexarse ni
+  // figurar en el sitemap hasta que exista el aviso de privacidad integral.
+  robots: { index: false, follow: true },
+  alternates: { canonical: '/privacy' },
+};
 
 export default function PrivacyPage() {
   return (

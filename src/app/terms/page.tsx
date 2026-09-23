@@ -1,6 +1,17 @@
 // RUTA: src/app/terms/page.tsx
 import Footer from '@/components/commons/Footer';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Términos y Condiciones',
+  description:
+    'Términos y condiciones de uso de la plataforma INAKAT.',
+  // Página provisional ("en construcción"): no debe indexarse ni figurar en el
+  // sitemap hasta que exista el texto legal definitivo. Quitar robots entonces.
+  robots: { index: false, follow: true },
+  alternates: { canonical: '/terms' },
+};
 
 export default function TermsPage() {
   return (

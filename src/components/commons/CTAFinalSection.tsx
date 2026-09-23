@@ -1,4 +1,8 @@
-// RUTA: src/components/sections/home/CTAFinalSection.tsx
+// RUTA: src/components/commons/CTAFinalSection.tsx
+//
+// CTA de cierre compartido. Vivía en sections/home pero su único consumidor es
+// /about: dejarlo dentro de la carpeta de la portada hacía que un rediseño de la
+// home pudiera romper el build de /about sin que nadie lo notara.
 'use client';
 
 import Link from 'next/link';
