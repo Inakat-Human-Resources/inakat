@@ -12,7 +12,7 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 ---
 
-## 📸 ESTADO AL 22/09/2026
+## 📸 ESTADO AL 23/09/2026
 
 *(Esta sección se reescribe completa en cada actualización.)*
 
@@ -20,8 +20,7 @@ propio en cookie · MercadoPago · Vercel Blob.
 - **La portada rediseñada está en producción** y verificada en vivo. Aguanta las
   condiciones que rompen este tipo de páginas: cinco anchos sin desbordes,
   `prefers-reduced-motion` con 0 animaciones corriendo, y **legible sin JavaScript**.
-- **El árbol está verde otra vez**: `tsc` 0 · `npm run lint` 0 errores · **1457 tests
-  pasan** · `next build` OK · **CI en verde en `main`** desde `c2e0fbc`.
+- **El árbol está verde otra vez**: `tsc` 0 · `npm run lint` 0 errores · **1778 tests pasan** · `next build` OK · **CI en verde en `main`** desde `c2e0fbc`.
 - **Dependencias: de 26 vulnerabilidades a 8**, ninguna crítica (next 15.5.10 → 15.5.25,
   prisma 6.6 → 6.19, nodemailer 8 → 10).
 - **Arreglado y desplegado, con test cada uno** (despliegue `inakat-kbmoiljye-izalith`):
@@ -41,18 +40,13 @@ propio en cookie · MercadoPago · Vercel Blob.
   `docs/auditoria-2026-09/`.
 
 **A medias**
-- **Quedan hallazgos de la auditoría sin tocar**, entre ellos varios altos ya
-  verificados: listas topadas a 20/30 registros en seis pantallas (los registros 21+
-  son inalcanzables), desactivar un usuario no le corta el acceso hasta que caduque su
-  JWT, el login exige 8 caracteres pero el admin puede crear cuentas con 6, y los
-  mensajes del formulario de contacto se guardan sin que nadie los lea ni reciba aviso.
-- **La verificación adversarial automática de la auditoría nunca corrió** (se agotó el
-  límite de gasto del modelo a mitad). Se verificaron a mano los 31 hallazgos más
-  graves —los 31 ciertos— y el resto quedó marcado como «sin verificar». Falta también
-  la cobertura de 4 barridos transversales que fallaron: integridad de datos, frontend,
-  validación de entrada y accesibilidad.
+- **Parte A cerrada**: de los 483 hallazgos quedan 277 saltados con motivo (decisiones de negocio, columnas que exigen migración, y bajos de a11y/ux que rehace la Parte B). Detalle en la entrada del 23/09.
+- **Parte B sin empezar**: sistema de diseño y rediseño de las 40 páginas (plan en `docs/PLAN-OPUS-2026-09.md`).
+- Migración `20260922000000` escrita pero sin aplicar a producción.
 
 **Bloqueado**
+- **En Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`** (desde siempre, descubierto el 23/09/2026). Depende de Memo.
+- **Bloqueo a empresas no aprobadas apagado** hasta que INAKAT apruebe a las legítimas.
 - **Tres decisiones esperan a INAKAT** (desde el 21/09/2026):
   1. La foto del hero es generada por IA. Ya no se presenta como el equipo real, pero
      está publicada; hace falta una fotografía de verdad.
