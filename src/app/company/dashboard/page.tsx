@@ -13,6 +13,7 @@ import {
 import CompanyJobsTable from '@/components/company/CompanyJobsTable';
 import JobDetailModal from '@/components/company/JobDetailModal';
 import CompanyLogo from '@/components/shared/CompanyLogo';
+import { notifyAuthChanged } from '@/lib/auth-events';
 
 interface Job {
   id: number;
@@ -41,6 +42,8 @@ interface DashboardData {
     userName: string;
     email: string;
     credits: number;
+    // Puede ser null: si un admin borra la CompanyRequest, el User de la
+    // empresa sobrevive y esta ruta responde companyInfo: null.
     companyInfo: {
       nombreEmpresa: string;
       correoEmpresa: string;
@@ -48,7 +51,9 @@ interface DashboardData {
       rfc: string;
       direccionEmpresa: string;
       logoUrl?: string | null; // FEAT-1b: Logo de empresa
-    };
+      status?: string;
+      rejectionReason?: string | null;
+    } | null;
   };
   stats: {
     jobs: {
@@ -171,6 +176,8 @@ export default function CompanyDashboard() {
       if (response.ok && result.success) {
         setNotification({ type: 'success', message: `¡Vacante publicada! Se descontaron ${result.creditCost} créditos.` });
         fetchDashboardData();
+        // UI-004: el saldo del menú del avatar (Navbar) también cambió.
+        notifyAuthChanged();
       } else {
         setNotification({ type: 'error', message: result.error || 'Error al publicar la vacante' });
       }
@@ -290,22 +297,29 @@ export default function CompanyDashboard() {
     );
   }
 
+  const companyInfo = data.company.companyInfo;
+  const nombreEmpresa = companyInfo?.nombreEmpresa || 'tu empresa';
+  const estadoSolicitud = companyInfo?.status;
+
   return (
     <div className="min-h-screen bg-custom-beige">
-      {/* Barra sticky */}
-      <div className="sticky top-0 z-30 bg-custom-beige border-b border-gray-200 shadow-sm">
+      {/* Barra sticky.
+          `top-0` la pegaba EXACTAMENTE debajo del Navbar fijo (z-50, alto 3.5rem
+          = el pt-14 del body en layout.tsx), que la tapaba casi entera y hacía
+          desaparecer el botón «Crear Vacante» al hacer scroll. */}
+      <div className="sticky top-14 z-30 bg-custom-beige border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           {/* Fila: izq = logo + título + créditos, der = botón */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <CompanyLogo
-                logoUrl={data.company.companyInfo.logoUrl}
-                companyName={data.company.companyInfo.nombreEmpresa}
+                logoUrl={companyInfo?.logoUrl}
+                companyName={nombreEmpresa}
                 size="lg"
               />
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-title-dark">
-                  Dashboard de {data.company.companyInfo.nombreEmpresa}
+                  Dashboard de {nombreEmpresa}
                 </h1>
                 <div className="flex items-center gap-3 mt-1">
                   <p className="text-gray-600 text-sm">Bienvenido, {data.company.userName}</p>
@@ -329,6 +343,31 @@ export default function CompanyDashboard() {
 
       {/* Contenido del dashboard */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Estado de la solicitud: el servidor bloquea publicar vacantes y ver
+            candidatos hasta que un admin apruebe la empresa, así que hay que
+            decirlo aquí en vez de dejar que el usuario choque con un 403. */}
+        {!companyInfo && (
+          <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-800 border border-red-300">
+            Tu empresa no tiene una solicitud asociada. Contacta a soporte para
+            reactivar tu cuenta.
+          </div>
+        )}
+        {estadoSolicitud === 'pending' && (
+          <div className="mb-6 p-4 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-300">
+            <strong>Cuenta en revisión.</strong> Publicar vacantes y ver candidatos
+            se habilitará cuando INAKAT apruebe tu empresa.
+          </div>
+        )}
+        {estadoSolicitud === 'rejected' && (
+          <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-800 border border-red-300">
+            <strong>Tu solicitud fue rechazada.</strong>{' '}
+            {companyInfo?.rejectionReason
+              ? `Motivo: ${companyInfo.rejectionReason}.`
+              : ''}{' '}
+            Contacta a soporte para más información.
+          </div>
+        )}
+
         {/* Notificación */}
         {notification.type && (
           <div
@@ -375,9 +414,12 @@ export default function CompanyDashboard() {
         </span>
       </button>
 
-      {/* Job Detail Modal */}
+      {/* Job Detail Modal.
+          El modal espera `job.logoUrl`, pero las vacantes de
+          /api/company/dashboard no traen ese campo: sin inyectarlo aquí el
+          encabezado mostraba siempre el icono genérico. */}
       <JobDetailModal
-        job={selectedJob}
+        job={selectedJob ? { ...selectedJob, logoUrl: companyInfo?.logoUrl } : null}
         isOpen={showJobModal}
         onClose={() => setShowJobModal(false)}
       />

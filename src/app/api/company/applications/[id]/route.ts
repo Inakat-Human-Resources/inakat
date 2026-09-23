@@ -1,9 +1,12 @@
 // RUTA: src/app/api/company/applications/[id]/route.ts
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { notifyAllAdmins } from '@/lib/notifications';
+import { notifyAllAdmins, runAfterResponse } from '@/lib/notifications';
 import { dispatchCandidateAccepted } from '@/lib/worky2-webhook';
+import { requireApprovedCompany } from '@/lib/auth';
+import { canCompanySeeApplication } from '@/lib/authz-applications';
+import { syncCandidateStatus } from '@/lib/candidate-status';
 
 // Status válidos para que la empresa actualice
 const COMPANY_ALLOWED_STATUSES = [
@@ -41,6 +44,17 @@ export async function PATCH(
       );
     }
 
+    // AUTORIZACIÓN: la cuenta 'company' se crea sola al registrarse y el
+    // rechazo del admin no la tocaba, así que una empresa sin aprobar (o ya
+    // rechazada) podía seguir operando sobre candidatos reales.
+    const aprobacion = await requireApprovedCompany(parseInt(userId), userRole);
+    if (aprobacion) {
+      return NextResponse.json(
+        { success: false, error: aprobacion.error, code: aprobacion.code },
+        { status: aprobacion.status }
+      );
+    }
+
     const { id } = await context.params;
     const applicationId = parseInt(id);
 
@@ -52,7 +66,11 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { status, notes, closeJob } = body;
+    // `notes` NO se lee del body a propósito: es el campo de notas INTERNAS de
+    // INAKAT (el mismo que #50/#51 dejó de mostrar a la empresa). Dejar que la
+    // empresa lo escribiera le permitía borrar lo que hubiera anotado el admin
+    // y además ese texto acaba viéndose en /my-applications del candidato.
+    const { status, closeJob } = body;
 
     if (!status) {
       return NextResponse.json(
@@ -150,14 +168,10 @@ export async function PATCH(
     }
 
     // Actualizar la aplicación
-    const updateData: { status: string; notes?: string; reviewedAt?: Date; updatedAt: Date } = {
+    const updateData: { status: string; reviewedAt?: Date; updatedAt: Date } = {
       status,
       updatedAt: new Date()
     };
-
-    if (notes !== undefined) {
-      updateData.notes = notes;
-    }
 
     // Si es una acción de revisión, marcar la fecha
     if (['company_interested', 'interviewed', 'rejected', 'accepted'].includes(status)) {
@@ -178,11 +192,17 @@ export async function PATCH(
       }
     });
 
+    // ADM-028: Candidate.status sigue a sus postulaciones (hired al aceptar,
+    // available si se cierran todas).
+    await syncCandidateStatus(updatedApplication.candidateEmail);
+
     // Integración Worky2: la Application acaba de pasar a 'accepted' →
-    // notificar candidate.accepted a los webhooks activos de la empresa
-    // (fire-and-forget: nunca bloquea ni rompe esta respuesta).
+    // notificar candidate.accepted a los webhooks activos de la empresa.
+    // Se usa `after()` (waitUntil en Vercel) y NO un `void` desnudo: la
+    // instancia se congela al devolver la respuesta y el evento —3 consultas
+    // más un fetch de hasta 5 s— se perdía sin dejar rastro.
     if (status === 'accepted') {
-      void dispatchCandidateAccepted(applicationId);
+      after(() => dispatchCandidateAccepted(applicationId));
     }
 
     // Si es 'accepted' y closeJob es true, cerrar la vacante
@@ -195,20 +215,25 @@ export async function PATCH(
       jobClosed = true;
     }
 
-    // Notificar a admins sobre la decisión de la empresa (fire-and-forget)
+    // Notificar a admins sobre la decisión de la empresa.
+    // FIABILIDAD: era `.catch(() => {})` sin await; la instancia podía
+    // congelarse antes del INSERT y ningún admin se enteraba de que la empresa
+    // había descartado o aceptado a alguien.
     const statusLabels: Record<string, string> = {
       company_interested: 'marcó como interesado',
       interviewed: 'marcó como entrevistado',
       rejected: 'descartó',
       accepted: 'aceptó para contratación',
     };
-    notifyAllAdmins({
-      type: 'application_status',
-      title: `Empresa actualizó candidato`,
-      message: `La empresa ${statusLabels[status] || 'actualizó'} a ${updatedApplication.candidateName} en "${updatedApplication.job.title}".`,
-      link: '/admin',
-      metadata: { applicationId, status, jobId: updatedApplication.job.id },
-    }).catch(() => {});
+    await runAfterResponse('NOTIF:company-application-status', () =>
+      notifyAllAdmins({
+        type: 'application_status',
+        title: `Empresa actualizó candidato`,
+        message: `La empresa ${statusLabels[status] || 'actualizó'} a ${updatedApplication.candidateName} en "${updatedApplication.job.title}".`,
+        link: '/admin',
+        metadata: { applicationId, status, jobId: updatedApplication.job.id },
+      })
+    );
 
     // Mensaje de éxito según la acción
     const statusMessages: Record<string, string> = {
@@ -262,6 +287,17 @@ export async function GET(
       );
     }
 
+    // AUTORIZACIÓN: esta ficha entrega nombre, correo, teléfono y CV del
+    // candidato; mismo requisito de empresa aprobada que el PATCH y que el
+    // listado de candidatos.
+    const aprobacion = await requireApprovedCompany(parseInt(userId), userRole);
+    if (aprobacion) {
+      return NextResponse.json(
+        { success: false, error: aprobacion.error, code: aprobacion.code },
+        { status: aprobacion.status }
+      );
+    }
+
     const { id } = await context.params;
     const applicationId = parseInt(id);
 
@@ -302,16 +338,10 @@ export async function GET(
       );
     }
 
-    // Verificar que la aplicación es visible para la empresa
-    const COMPANY_VISIBLE_STATUSES = [
-      'sent_to_company',
-      'company_interested',
-      'interviewed',
-      'rejected',
-      'accepted'
-    ];
-
-    if (!COMPANY_VISIBLE_STATUSES.includes(application.status)) {
+    // Verificar que la aplicación es visible para la empresa.
+    // La lista vive en src/lib/authz-applications.ts: estaba duplicada a mano
+    // en cuatro rutas y una de ellas no la comprobaba siquiera.
+    if (!canCompanySeeApplication(application.status)) {
       return NextResponse.json(
         { success: false, error: 'No tienes acceso a esta aplicación' },
         { status: 403 }

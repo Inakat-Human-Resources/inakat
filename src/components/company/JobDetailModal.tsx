@@ -52,14 +52,18 @@ export default function JobDetailModal({ job, isOpen, onClose }: JobDetailModalP
   };
 
   const getStatusBadge = (status: string) => {
+    // 'paused' faltaba en ambos mapas: al ver una vacante pausada el encabezado
+    // mostraba el valor crudo «paused» en gris.
     const badges: Record<string, string> = {
       active: 'bg-green-100 text-green-800',
+      paused: 'bg-yellow-100 text-yellow-800',
       closed: 'bg-gray-100 text-gray-800',
       draft: 'bg-yellow-100 text-yellow-800'
     };
 
     const labels: Record<string, string> = {
       active: 'Activa',
+      paused: 'En pausa',
       closed: 'Cerrada',
       draft: 'Borrador'
     };

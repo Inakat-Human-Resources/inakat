@@ -2,6 +2,8 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { COMPANY_VISIBLE_STATUSES } from '@/lib/authz-applications';
+import { requireApprovedCompany } from '@/lib/auth';
 
 /**
  * GET /api/company/jobs/[jobId]/candidates
@@ -43,6 +45,18 @@ export async function GET(
 
     const companyUserId = parseInt(userId);
 
+    // AUTORIZACIÓN: esta ruta entrega nombre, correo, teléfono y documentos de
+    // los candidatos. La cuenta de empresa se crea sola al registrarse, así que
+    // sin comprobar la aprobación del admin una empresa inventada (o ya
+    // rechazada) seguía cosechando datos personales.
+    const aprobacion = await requireApprovedCompany(companyUserId, userRole);
+    if (aprobacion) {
+      return NextResponse.json(
+        { success: false, error: aprobacion.error, code: aprobacion.code },
+        { status: aprobacion.status }
+      );
+    }
+
     // Buscar la vacante
     const job = await prisma.job.findUnique({
       where: { id: jobId },
@@ -78,62 +92,101 @@ export async function GET(
       );
     }
 
-    // Status de aplicaciones visibles para la empresa
-    const COMPANY_VISIBLE_STATUSES = [
-      'sent_to_company',
-      'company_interested',
-      'interviewed',
-      'accepted',
-      'rejected'
-    ];
-
-    // Obtener aplicaciones de la vacante
+    // Obtener aplicaciones de la vacante (COMPANY_VISIBLE_STATUSES vive en
+    // src/lib/authz-applications.ts; estaba duplicada a mano en cuatro rutas)
     const applications = await prisma.application.findMany({
       where: {
         jobId: jobId,
-        status: { in: COMPANY_VISIBLE_STATUSES }
+        status: { in: [...COMPANY_VISIBLE_STATUSES] }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    // Enriquecer aplicaciones con datos del candidato
-    const enrichedApplications = await Promise.all(
-      applications.map(async (app) => {
-        // Buscar candidato por email
-        const candidate = await prisma.candidate.findFirst({
-          where: { email: { equals: app.candidateEmail, mode: 'insensitive' } },
-          include: {
-            experiences: {
-              orderBy: { fechaInicio: 'desc' },
-              take: 3
-            },
-            documents: true
-          }
-        });
+    // =========================================================================
+    // RENDIMIENTO: esta ruta hermana se quedó con el patrón N+1 que el
+    // dashboard de empresa ya había eliminado: por cada postulación lanzaba un
+    // candidate.findFirst (con `mode: 'insensitive'`, que no usa el índice
+    // único de email → seq scan) y un evaluationNote.findMany, todos a la vez
+    // dentro de un Promise.all. Con 40 candidatos eran 80+ consultas
+    // simultáneas contra un pool serverless pequeño → P2024 y 500 en el flujo
+    // principal de la empresa. Ahora son 3 consultas y dos Maps en memoria.
+    // =========================================================================
+    const applicationIds = applications.map((app) => app.id);
+    const uniqueEmails = [
+      ...new Set(applications.map((app) => app.candidateEmail.toLowerCase()))
+    ];
 
-        // Obtener notas públicas de evaluación para esta aplicación
-        const publicNotes = await prisma.evaluationNote.findMany({
-          where: {
-            applicationId: app.id,
-            isPublic: true,
-          },
-          orderBy: { createdAt: 'desc' },
-          include: {
-            author: {
-              select: { nombre: true, apellidoPaterno: true }
+    const [candidates, publicNotes] = await Promise.all([
+      uniqueEmails.length > 0
+        ? prisma.candidate.findMany({
+            where: { email: { in: uniqueEmails, mode: 'insensitive' } },
+            include: {
+              experiences: {
+                orderBy: { fechaInicio: 'desc' },
+                take: 3
+              },
+              // `select` explícito: la empresa recibe la lista de documentos
+              // del candidato para poder abrirlos, pero no las marcas de
+              // tiempo ni el candidateId interno.
+              documents: {
+                select: { id: true, name: true, fileUrl: true, fileType: true }
+              }
             }
-          }
-        });
+          })
+        : Promise.resolve([]),
+      applicationIds.length > 0
+        ? prisma.evaluationNote.findMany({
+            where: {
+              applicationId: { in: applicationIds },
+              isPublic: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+              author: {
+                select: { nombre: true, apellidoPaterno: true }
+              }
+            }
+          })
+        : Promise.resolve([])
+    ]);
 
-        const publicEvaluationNotes = publicNotes.map(note => ({
-          id: note.id,
-          authorRole: note.authorRole,
-          authorName: `${note.author.nombre} ${note.author.apellidoPaterno || ''}`.trim(),
-          content: note.content,
-          documentUrl: note.documentUrl,
-          documentName: note.documentName,
-          createdAt: note.createdAt,
-        }));
+    const candidateMap = new Map(candidates.map((c) => [c.email.toLowerCase(), c]));
+
+    // Notas públicas ya mapeadas a la forma que se devuelve, agrupadas por
+    // aplicación: así el enriquecido de abajo no vuelve a recorrerlas todas.
+    interface NotaPublicaDTO {
+      id: number;
+      authorRole: string;
+      authorName: string;
+      content: string;
+      documentUrl: string | null;
+      documentName: string | null;
+      createdAt: Date;
+    }
+
+    const notesByApplication = new Map<number, NotaPublicaDTO[]>();
+    for (const note of publicNotes) {
+      const dto: NotaPublicaDTO = {
+        id: note.id,
+        authorRole: note.authorRole,
+        authorName: `${note.author.nombre} ${note.author.apellidoPaterno || ''}`.trim(),
+        content: note.content,
+        documentUrl: note.documentUrl,
+        documentName: note.documentName,
+        createdAt: note.createdAt,
+      };
+      const acumuladas = notesByApplication.get(note.applicationId);
+      if (acumuladas) {
+        acumuladas.push(dto);
+      } else {
+        notesByApplication.set(note.applicationId, [dto]);
+      }
+    }
+
+    // Enriquecer aplicaciones con datos del candidato (sin más consultas)
+    const enrichedApplications = applications.map((app) => {
+        const candidate = candidateMap.get(app.candidateEmail.toLowerCase());
+        const publicEvaluationNotes = notesByApplication.get(app.id) ?? [];
 
         return {
           id: app.id,
@@ -178,8 +231,7 @@ export async function GET(
               }
             : null
         };
-      })
-    );
+    });
 
     return NextResponse.json({
       success: true,

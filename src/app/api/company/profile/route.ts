@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { validate, companyProfileUpdateSchema } from '@/lib/validations';
 
 /**
  * GET /api/company/profile
@@ -154,6 +155,20 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
+
+    // VALIDACIÓN: antes se hacía `.trim()` sobre lo que llegara —un número o un
+    // objeto provocaba TypeError y 500—, nombre y dirección podían guardarse
+    // vacíos, latitud/longitud aceptaban cualquier valor y `logoUrl` se
+    // guardaba sin comprobar el esquema (un host externo rompe next/image en
+    // todas las vistas que pintan el logo).
+    const validation = validate(companyProfileUpdateSchema, body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: 'Datos inválidos', errors: validation.errors },
+        { status: 400 }
+      );
+    }
+
     const {
       // Datos del representante
       nombre,
@@ -166,51 +181,27 @@ export async function PUT(request: Request) {
       razonSocial,
       direccionEmpresa,
       latitud,
-      longitud
-    } = body;
-
-    // Validaciones básicas
-    if (nombreEmpresa !== undefined && !nombreEmpresa.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'El nombre de empresa no puede estar vacío' },
-        { status: 400 }
-      );
-    }
-
-    if (razonSocial !== undefined && !razonSocial.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'La razón social no puede estar vacía' },
-        { status: 400 }
-      );
-    }
-
-    if (correoEmpresa !== undefined) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(correoEmpresa)) {
-        return NextResponse.json(
-          { success: false, error: 'El correo de empresa no es válido' },
-          { status: 400 }
-        );
-      }
-    }
+      longitud,
+      logoUrl
+    } = validation.data;
 
     // Construir objeto de actualización solo con campos proporcionados
     const updateData: Record<string, string | number | null> = {};
 
-    if (nombre !== undefined) updateData.nombre = nombre.trim();
-    if (apellidoPaterno !== undefined) updateData.apellidoPaterno = apellidoPaterno.trim();
-    if (apellidoMaterno !== undefined) updateData.apellidoMaterno = apellidoMaterno.trim();
-    if (nombreEmpresa !== undefined) updateData.nombreEmpresa = nombreEmpresa.trim();
-    if (correoEmpresa !== undefined) updateData.correoEmpresa = correoEmpresa.trim();
-    if (sitioWeb !== undefined) updateData.sitioWeb = sitioWeb?.trim() || null;
-    if (razonSocial !== undefined) updateData.razonSocial = razonSocial.trim();
-    if (direccionEmpresa !== undefined) updateData.direccionEmpresa = direccionEmpresa.trim();
+    if (nombre !== undefined) updateData.nombre = nombre;
+    if (apellidoPaterno !== undefined) updateData.apellidoPaterno = apellidoPaterno;
+    if (apellidoMaterno !== undefined) updateData.apellidoMaterno = apellidoMaterno;
+    if (nombreEmpresa !== undefined) updateData.nombreEmpresa = nombreEmpresa;
+    if (correoEmpresa !== undefined) updateData.correoEmpresa = correoEmpresa;
+    if (body.sitioWeb !== undefined) updateData.sitioWeb = sitioWeb || null;
+    if (razonSocial !== undefined) updateData.razonSocial = razonSocial;
+    if (direccionEmpresa !== undefined) updateData.direccionEmpresa = direccionEmpresa;
     if (latitud !== undefined) updateData.latitud = latitud;
     if (longitud !== undefined) updateData.longitud = longitud;
 
     // FEAT-1b: Permitir actualizar logoUrl
     if (body.logoUrl !== undefined) {
-      updateData.logoUrl = body.logoUrl;
+      updateData.logoUrl = logoUrl || null;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -220,10 +211,31 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Actualizar en la base de datos
-    const updated = await prisma.companyRequest.update({
-      where: { id: user.companyRequest.id },
-      data: updateData
+    // Datos del representante que también viven en User: antes sólo se
+    // actualizaba la solicitud y el nombre de la cuenta (el que se ve en el
+    // menú y en los correos) se quedaba con el representante anterior.
+    const datosUsuario: { nombre?: string; apellidoPaterno?: string; apellidoMaterno?: string | null } = {};
+    if (nombre !== undefined) datosUsuario.nombre = nombre;
+    if (apellidoPaterno !== undefined) datosUsuario.apellidoPaterno = apellidoPaterno;
+    if (apellidoMaterno !== undefined) datosUsuario.apellidoMaterno = apellidoMaterno || null;
+
+    const companyRequestId = user.companyRequest.id;
+
+    // Actualizar en la base de datos (solicitud y cuenta, juntas o ninguna)
+    const updated = await prisma.$transaction(async (tx) => {
+      const solicitud = await tx.companyRequest.update({
+        where: { id: companyRequestId },
+        data: updateData
+      });
+
+      if (Object.keys(datosUsuario).length > 0) {
+        await tx.user.update({
+          where: { id: companyUserId },
+          data: datosUsuario
+        });
+      }
+
+      return solicitud;
     });
 
     return NextResponse.json({

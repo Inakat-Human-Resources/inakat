@@ -3,8 +3,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { notifyAllAdmins } from "@/lib/notifications";
-import { validate, companyRequestSchema } from "@/lib/validations";
+import { notifyAllAdmins, runAfterResponse } from "@/lib/notifications";
+import {
+  validate,
+  companyRequestSchema,
+  passwordRegistroSchema,
+} from "@/lib/validations";
+import { applyRateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
 
 // GET all company requests (for admin panel)
 export async function GET(request: Request) {
@@ -37,8 +42,19 @@ export async function GET(request: Request) {
 // POST new company request
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { password, logoUrl } = body; // password/logoUrl no están en el schema
+    // SEGURIDAD: este endpoint es una excepción PÚBLICA del middleware y cada
+    // llamada válida ejecuta bcrypt, crea un User activo y notifica a todos los
+    // admins. Sin límite servía además de oráculo de correos registrados (409).
+    const rateLimited = applyRateLimit(request, "company-request", REGISTER_RATE_LIMIT);
+    if (rateLimited) return rateLimited;
+
+    // Un cuerpo que no es JSON (o es `null`/un número) hacía que la
+    // desestructuración lanzara TypeError y el endpoint público respondiera 500.
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+    }
+    const { password, dryRun } = body; // password no está en el schema
 
     // SEGURIDAD (#9/#52): validar de verdad con zod (formato de email, RFC
     // mexicano, longitudes), no sólo presencia. Antes companyRequestSchema
@@ -51,9 +67,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!password || typeof password !== "string" || password.length < 8) {
+    // La política de contraseña era más débil aquí (sólo longitud) que en
+    // /api/auth/register y /api/auth/reset-password, y más débil que lo que el
+    // propio formulario de /companies dice exigir.
+    const passwordValidation = validate(passwordRegistroSchema, password);
+    if (!passwordValidation.success) {
       return NextResponse.json(
-        { error: "La contraseña debe tener al menos 8 caracteres" },
+        {
+          error: passwordValidation.errors[0]?.message || "Contraseña inválida",
+          errors: passwordValidation.errors.map((e) => ({
+            field: "password",
+            message: e.message,
+          })),
+        },
         { status: 400 }
       );
     }
@@ -70,6 +96,9 @@ export async function POST(request: Request) {
       direccionEmpresa,
       identificacionUrl,
       documentosConstitucionUrl,
+      logoUrl,
+      latitud,
+      longitud,
     } = validation.data;
 
     // Verificar si ya existe un usuario con ese email
@@ -84,6 +113,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // PRE-VALIDACIÓN: el formulario sube identificación y constancia fiscal a
+    // Blob (público, URL permanente) ANTES de llamar aquí; si esta llamada
+    // fallaba, esos documentos con PII quedaban huérfanos y sin forma de
+    // borrarlos. Con `dryRun` el cliente comprueba datos y correo duplicado
+    // antes de subir nada.
+    if (dryRun === true) {
+      return NextResponse.json(
+        { success: true, dryRun: true, message: "Datos válidos" },
+        { status: 200 }
+      );
+    }
+
     // Hashear la contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -94,13 +135,15 @@ export async function POST(request: Request) {
         data: {
           nombre,
           apellidoPaterno,
-          apellidoMaterno,
+          apellidoMaterno: apellidoMaterno || "",
           nombreEmpresa,
           correoEmpresa,
           sitioWeb: sitioWeb || null,
           razonSocial,
           rfc,
           direccionEmpresa,
+          latitud: latitud ?? null,
+          longitud: longitud ?? null,
           identificacionUrl: identificacionUrl || null,
           documentosConstitucionUrl: documentosConstitucionUrl || null,
           logoUrl: logoUrl || null, // FEAT-1b: Logo de empresa
@@ -113,9 +156,13 @@ export async function POST(request: Request) {
         data: {
           email: correoEmpresa.toLowerCase(),
           password: hashedPassword,
-          nombre: `${nombre} ${apellidoPaterno}`,
+          // `nombre` guarda SÓLO el nombre de pila: los apellidos tienen
+          // columna propia. Concatenar el paterno aquí hacía que cualquier
+          // pantalla que compone «nombre + apellidoPaterno» lo repitiera
+          // («Bienvenido, Juan Pérez Pérez»).
+          nombre,
           apellidoPaterno,
-          apellidoMaterno,
+          apellidoMaterno: apellidoMaterno || null,
           role: "company",
           isActive: true,
           companyRequest: {
@@ -127,14 +174,18 @@ export async function POST(request: Request) {
       return { companyRequest, user };
     });
 
-    // Notificar a admins (fire-and-forget)
-    notifyAllAdmins({
-      type: 'new_request',
-      title: 'Nueva solicitud de empresa',
-      message: `${nombreEmpresa} ha enviado una solicitud de registro.`,
-      link: '/admin/requests',
-      metadata: { requestId: result.companyRequest.id, nombreEmpresa },
-    }).catch(() => {});
+    // FIABILIDAD: antes era `.catch(() => {})` sin await, así que en serverless
+    // la instancia podía congelarse antes del INSERT y ningún admin se enteraba
+    // de la solicitud (y el catch vacío ni siquiera lo registraba).
+    await runAfterResponse('NOTIF:company-request', () =>
+      notifyAllAdmins({
+        type: 'new_request',
+        title: 'Nueva solicitud de empresa',
+        message: `${nombreEmpresa} ha enviado una solicitud de registro.`,
+        link: '/admin/requests',
+        metadata: { requestId: result.companyRequest.id, nombreEmpresa },
+      })
+    );
 
     return NextResponse.json(
       {

@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { COMPANY_VISIBLE_STATUSES } from '@/lib/authz-applications';
 
 /**
  * GET /api/company/dashboard
@@ -44,12 +45,21 @@ export async function GET(request: Request) {
         credits: true,
         companyRequest: {
           select: {
+            // Nombre del representante para el saludo (ver userName abajo).
+            nombre: true,
+            apellidoPaterno: true,
             nombreEmpresa: true,
             correoEmpresa: true,
             sitioWeb: true,
             rfc: true,
             direccionEmpresa: true,
-            logoUrl: true // FEAT-1b: Logo de empresa
+            logoUrl: true, // FEAT-1b: Logo de empresa
+            // El dashboard necesita saber si la cuenta está aprobada: las
+            // acciones (publicar, ver candidatos) se bloquean en el servidor
+            // hasta que un admin la apruebe, así que la UI tiene que avisarlo
+            // en vez de dejar que el usuario choque contra un 403.
+            status: true,
+            rejectionReason: true
           }
         }
       }
@@ -62,23 +72,19 @@ export async function GET(request: Request) {
       );
     }
 
-    // Status de aplicaciones visibles para la empresa
-    const COMPANY_VISIBLE_STATUSES = [
-      'sent_to_company',
-      'company_interested',
-      'interviewed',
-      'accepted',
-      'rejected'
-    ];
+    // Status de aplicaciones visibles para la empresa (lista compartida en
+    // src/lib/authz-applications.ts; aquí estaba duplicada a mano).
+    const estadosVisibles = [...COMPANY_VISIBLE_STATUSES];
 
-    // 2. Obtener todas las vacantes de la empresa con applications
+    // 2. Obtener todas las vacantes de la empresa.
+    //
+    // RENDIMIENTO/PRIVACIDAD (EMP-014): antes se hacía `include: { applications }`
+    // con las filas COMPLETAS (coverLetter, notes, cvUrl…) sólo para usar
+    // `.length`, y luego se volvían a traer las mismas aplicaciones en
+    // `allApplications`. El conteo por vacante sale ahora de esa segunda
+    // consulta (ver `conteosPorJob`), y `allJobs` ya no embebe las filas.
     const jobs = await prisma.job.findMany({
       where: { userId: companyUserId },
-      include: {
-        applications: {
-          where: { status: { in: COMPANY_VISIBLE_STATUSES } }
-        }
-      },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -101,7 +107,7 @@ export async function GET(request: Request) {
     const allApplications = await prisma.application.findMany({
       where: {
         jobId: { in: jobIds },
-        status: { in: COMPANY_VISIBLE_STATUSES }
+        status: { in: estadosVisibles }
       },
       include: {
         job: {
@@ -207,47 +213,74 @@ export async function GET(request: Request) {
     // 6. Aplicaciones recientes (últimas 5)
     const recentApplications = enrichedApplications.slice(0, 5);
 
-    // 7. Vacantes con más aplicaciones (top 5)
-    const jobsWithApplicationCount = jobs.map((job) => ({
-      id: job.id,
-      title: job.title,
-      location: job.location,
-      status: job.status,
-      applicationCount: job.applications.length,
-      salary: job.salary
+    // 7. Estadísticas por vacante
+    //
+    // RENDIMIENTO: antes se hacía un filter() sobre TODAS las aplicaciones por
+    // cada vacante (O(vacantes × aplicaciones): con 80 vacantes y 2.000
+    // candidatos son 160.000 comparaciones en cada carga del dashboard). Un
+    // único recorrido agrupando por jobId da lo mismo en O(aplicaciones).
+    const conteosPorJob = new Map<
+      number,
+      {
+        totalCandidates: number;
+        pendingReview: number;
+        interested: number;
+        interviewedCandidates: number;
+        acceptedCandidates: number;
+        rejectedCandidates: number;
+      }
+    >();
+
+    for (const job of jobs) {
+      conteosPorJob.set(job.id, {
+        totalCandidates: 0,
+        pendingReview: 0,
+        interested: 0,
+        interviewedCandidates: 0,
+        acceptedCandidates: 0,
+        rejectedCandidates: 0
+      });
+    }
+
+    for (const app of allApplications) {
+      const conteo = conteosPorJob.get(app.jobId);
+      if (!conteo) continue;
+      conteo.totalCandidates++;
+      if (app.status === 'sent_to_company') conteo.pendingReview++;
+      else if (app.status === 'company_interested') conteo.interested++;
+      else if (app.status === 'interviewed') conteo.interviewedCandidates++;
+      else if (app.status === 'accepted') conteo.acceptedCandidates++;
+      else if (app.status === 'rejected') conteo.rejectedCandidates++;
+    }
+
+    const jobStats = jobs.map((job) => ({
+      jobId: job.id,
+      jobTitle: job.title,
+      ...conteosPorJob.get(job.id)!
     }));
 
-    const topJobs = jobsWithApplicationCount
+    const candidatosDe = (jobId: number) => conteosPorJob.get(jobId)?.totalCandidates ?? 0;
+
+    // 8. Vacantes con más aplicaciones (top 5)
+    const topJobs = jobs
+      .map((job) => ({
+        id: job.id,
+        title: job.title,
+        location: job.location,
+        status: job.status,
+        applicationCount: candidatosDe(job.id),
+        salary: job.salary
+      }))
       .sort((a, b) => b.applicationCount - a.applicationCount)
       .slice(0, 5);
 
-    // 8. Estadísticas por vacante
-    const jobStats = jobs.map((job) => {
-      const jobApplications = allApplications.filter(
-        (app) => app.jobId === job.id
-      );
-
-      return {
-        jobId: job.id,
-        jobTitle: job.title,
-        totalCandidates: jobApplications.length,
-        pendingReview: jobApplications.filter(
-          (app) => app.status === 'sent_to_company'
-        ).length,
-        interested: jobApplications.filter(
-          (app) => app.status === 'company_interested'
-        ).length,
-        interviewedCandidates: jobApplications.filter(
-          (app) => app.status === 'interviewed'
-        ).length,
-        acceptedCandidates: jobApplications.filter(
-          (app) => app.status === 'accepted'
-        ).length,
-        rejectedCandidates: jobApplications.filter(
-          (app) => app.status === 'rejected'
-        ).length
-      };
-    });
+    // El saludo sale de la SOLICITUD (nombre de pila + apellido): en el alta
+    // viejo `User.nombre` ya llevaba el apellido paterno concatenado y se
+    // repetía («Bienvenido, Juan Pérez Pérez»), y además es lo que la empresa
+    // edita desde su perfil.
+    const representante = user.companyRequest
+      ? `${user.companyRequest.nombre} ${user.companyRequest.apellidoPaterno || ''}`
+      : `${user.nombre} ${user.apellidoPaterno || ''}`;
 
     // 9. Respuesta completa
     return NextResponse.json({
@@ -255,7 +288,7 @@ export async function GET(request: Request) {
       data: {
         company: {
           userId: user.id,
-          userName: `${user.nombre} ${user.apellidoPaterno || ''}`,
+          userName: representante.trim(),
           email: user.email,
           credits: user.credits,
           companyInfo: user.companyRequest
@@ -285,14 +318,13 @@ export async function GET(request: Request) {
         allJobs: jobs.map((job) => {
           // SEGURIDAD (#50/#51): notasInternas es información interna de INAKAT
           // ("no visible para candidatos"), no debe exponerse a la empresa.
-          const { notasInternas: _notasInternas, applications, ...jobPublic } = job;
+          const { notasInternas: _notasInternas, ...jobPublic } = job;
           return {
             ...jobPublic,
-            // PRIVACIDAD (#50/#51): estas applications venían del include
-            // completo y conservaban `notes` (notas internas). El filtro de
-            // arriba sólo cubría `enrichedApplications`, no éstas.
-            applications: applications.map(({ notes: _n, ...app }) => app),
-            applicationCount: applications.length
+            // PRIVACIDAD (#50/#51): las vacantes ya NO embeben sus
+            // applications. Venían del include completo y conservaban `notes`
+            // (notas internas); la página sólo necesita el conteo.
+            applicationCount: candidatosDe(job.id)
           };
         })
       }

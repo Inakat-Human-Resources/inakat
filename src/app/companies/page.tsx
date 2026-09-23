@@ -3,6 +3,22 @@ import CompaniesHeroSection from "@/components/sections/companies/CompaniesHeroS
 import CompanyBenefitsSection from "@/components/sections/companies/CompanyBenefitsSection";
 import FormRegisterForQuotationSection from "@/components/sections/companies/FormRegisterForQuotationSection";
 import Footer from "@/components/commons/Footer";
+import type { Metadata } from "next";
+import { BASE_OPEN_GRAPH } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Empresas",
+  description:
+    "Registra tu empresa en INAKAT y recibe candidatos evaluados por psicólogos organizacionales y especialistas técnicos de tu industria.",
+  alternates: { canonical: "/companies" },
+  openGraph: {
+    ...BASE_OPEN_GRAPH,
+    title: "Empresas | INAKAT",
+    description:
+      "Recibe candidatos evaluados por psicólogos organizacionales y especialistas técnicos de tu industria.",
+    url: "/companies",
+  },
+};
 
 export default function CompaniesPage() {
   return (

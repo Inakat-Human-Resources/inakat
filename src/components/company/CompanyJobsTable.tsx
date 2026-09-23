@@ -76,9 +76,14 @@ export default function CompanyJobsTable({
     return `${minutes}m para editar`;
   };
 
-  // Categorizar jobs
+  // Categorizar jobs.
+  //
+  // La pestaña 'Expiradas' está comentada (ver más abajo), así que 'Activas'
+  // NO puede excluir las expiradas: una vacante activa con expiresAt vencido
+  // no aparecía en ninguna pestaña aunque contara en el total, y la empresa no
+  // podía verla, pausarla ni cerrarla. El badge ya la marca como «Expirada».
   const categorizedJobs = {
-    active: jobs.filter(job => job.status === 'active' && !isExpired(job)),
+    active: jobs.filter(job => job.status === 'active'),
     paused: jobs.filter(job => job.status === 'paused'),
     expired: jobs.filter(job => isExpired(job)),
     draft: jobs.filter(job => job.status === 'draft'),

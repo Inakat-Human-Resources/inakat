@@ -37,7 +37,8 @@ interface InterviewRequest {
   scheduledEnd: string | null;
   location: string | null;
   meetingUrl: string | null;
-  adminNotes: string | null;
+  // PRIVACIDAD (#50/#51): `adminNotes` son «Notas internas del admin» y ya no
+  // se envían a la empresa; declararlas aquí sólo invitaba a volver a pintarlas.
   createdAt: string;
   application: {
     id: number;
@@ -287,6 +288,19 @@ export default function CompanyInterviewsPage() {
                     {interview.status === 'cancelled' && (
                       <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
                         <p className="text-sm text-red-700">Esta entrevista fue cancelada.</p>
+                      </div>
+                    )}
+
+                    {/* Rejected: sólo 'cancelled' tenía bloque, así que una
+                        solicitud rechazada se quedaba sin ninguna explicación
+                        en la tarjeta. */}
+                    {interview.status === 'rejected' && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                        <p className="text-sm text-red-700">
+                          INAKAT no pudo agendar esta entrevista con los horarios
+                          propuestos. Puedes enviar una nueva solicitud con otras
+                          opciones.
+                        </p>
                       </div>
                     )}
                   </div>

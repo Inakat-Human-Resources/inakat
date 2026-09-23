@@ -33,8 +33,8 @@ interface InterviewRequestModalProps {
   candidateName: string;
   jobTitle: string;
   candidatePhoto?: string | null;
-  companyName?: string;
-  companyEmail?: string;
+  // `companyName`/`companyEmail` se retiraron: ningún llamador las pasaba, así
+  // que la lista de participantes siempre arrancaba vacía igualmente.
   onSuccess: () => void;
 }
 
@@ -52,7 +52,12 @@ function getNextBusinessDays(count: number): { date: string; label: string; dayN
     const dayOfWeek = current.getDay();
     // Solo lunes a viernes (1-5)
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-      const dateStr = current.toISOString().split('T')[0];
+      // La etiqueta se calcula con métodos LOCALES, así que la fecha guardada
+      // también tiene que serlo. Con `toISOString()` (UTC) en UTC-6 cualquier
+      // hora a partir de las 18:00 devolvía el día siguiente: la empresa
+      // marcaba «Mar 22 sep» y se guardaba 2026-09-23, que el admin interpreta
+      // como fecha local y agenda un día tarde (incluso en sábado).
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
       days.push({
         date: dateStr,
         label: `${current.getDate()} ${monthNames[current.getMonth()]}`,
@@ -73,16 +78,11 @@ export default function InterviewRequestModal({
   candidateName,
   jobTitle,
   candidatePhoto,
-  companyName,
-  companyEmail,
   onSuccess
 }: InterviewRequestModalProps) {
   const [type, setType] = useState<'videocall' | 'presential'>('videocall');
   const [duration, setDuration] = useState(45);
-  const initialParticipants = companyName && companyEmail
-    ? [{ nombre: companyName, email: companyEmail }]
-    : [];
-  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [newParticipantName, setNewParticipantName] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [showAddParticipant, setShowAddParticipant] = useState(false);
@@ -109,6 +109,18 @@ export default function InterviewRequestModal({
 
   const addParticipant = () => {
     if (!newParticipantName.trim() || !newParticipantEmail.trim()) return;
+    // El input type=email no valida nada porque no hay submit de formulario, y
+    // el servidor rechaza la solicitud completa si un correo es inválido: mejor
+    // decirlo aquí, al añadirlo, que al final con todos los horarios marcados.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newParticipantEmail.trim())) {
+      setError('El correo del participante no es válido');
+      return;
+    }
+    if (participants.length >= 10) {
+      setError('Máximo 10 participantes');
+      return;
+    }
+    setError('');
     setParticipants(prev => [...prev, { nombre: newParticipantName.trim(), email: newParticipantEmail.trim() }]);
     setNewParticipantName('');
     setNewParticipantEmail('');
@@ -161,7 +173,7 @@ export default function InterviewRequestModal({
   const handleClose = () => {
     setType('videocall');
     setDuration(45);
-    setParticipants(initialParticipants);
+    setParticipants([]);
     setSelectedSlots([]);
     setMessage('');
     setError('');

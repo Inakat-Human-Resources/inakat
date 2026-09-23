@@ -3,6 +3,7 @@
 
 import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 import { Building2 } from 'lucide-react';
 import ErrorToast from '@/components/shared/ErrorToast';
@@ -42,6 +43,26 @@ interface Errors {
   [key: string]: string;
 }
 
+/**
+ * Compone el mensaje de error de la API.
+ *
+ * La API devuelve `errors: [{field, message}]`; mostrar sólo `data.error`
+ * dejaba a la empresa con un «Datos inválidos» genérico sin saber qué campo
+ * corregir, después de haber subido ya sus documentos.
+ */
+const mensajeDeError = (
+  data: { error?: string; errors?: unknown },
+  porDefecto: string
+): string => {
+  const detalle = Array.isArray(data?.errors)
+    ? (data.errors as Array<{ field?: string; message?: string }>)
+        .map((e) => (e?.field ? `${e.field}: ${e.message}` : e?.message))
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+  return detalle || data?.error || porDefecto;
+};
+
 const FormRegisterForQuotationSection = () => {
   const router = useRouter();
   const [loginCredentials, setLoginCredentials] = useState<{email: string, password: string} | null>(null);
@@ -76,6 +97,15 @@ const FormRegisterForQuotationSection = () => {
   const fileInputIdRef = useRef<HTMLInputElement>(null);
   const fileInputDocRef = useRef<HTMLInputElement>(null);
 
+  // URLs ya subidas a Blob en este intento. Se cachean para que un reintento
+  // (correo duplicado, validación del servidor) no vuelva a publicar el INE y
+  // la constancia fiscal ni gaste el límite de 15 uploads/hora por IP.
+  const urlsSubidasRef = useRef<{
+    identificacion: string | null;
+    documentosConstitucion: string | null;
+    logo: string | null;
+  }>({ identificacion: null, documentosConstitucion: null, logo: null });
+
   // FEAT-1b: Estados para logo de empresa
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -83,6 +113,9 @@ const FormRegisterForQuotationSection = () => {
   // Estados para Google Maps
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [markerPosition, setMarkerPosition] = useState(defaultCenter);
+  // El mapa arranca centrado en CDMX: sin esta marca no hay forma de distinguir
+  // «no eligió ubicación» de «su empresa está en el Zócalo».
+  const [ubicacionElegida, setUbicacionElegida] = useState(false);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   const { isLoaded, loadError } = useLoadScript({
@@ -103,8 +136,13 @@ const FormRegisterForQuotationSection = () => {
   }, []);
 
   // Validaciones mejoradas
+  //
+  // El patrón anterior (`/^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/`) rechazaba diéresis
+  // («Argüelles»), apóstrofos («D'Angelo»), guiones («María-José») y puntos
+  // («Ma. Fernanda»), y el error bloqueaba el envío: gente con nombre real no
+  // podía registrarse. Mismo patrón que el servidor (NOMBRE_PERSONA_REGEX).
   const validateName = (value: string) =>
-    /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/.test(value);
+    /^[\p{L}\p{M}'’.\- ]+$/u.test(value);
 
   const validateEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -137,6 +175,7 @@ const FormRegisterForQuotationSection = () => {
 
         setMapCenter({ lat, lng });
         setMarkerPosition({ lat, lng });
+        setUbicacionElegida(true);
 
         // Extraer componentes de la dirección
         const addressComponents = place.address_components || [];
@@ -183,6 +222,7 @@ const FormRegisterForQuotationSection = () => {
       const lat = e.latLng.lat();
       const lng = e.latLng.lng();
       setMarkerPosition({ lat, lng });
+      setUbicacionElegida(true);
 
       // Reverse geocoding para obtener la dirección
       const geocoder = new google.maps.Geocoder();
@@ -236,11 +276,20 @@ const FormRegisterForQuotationSection = () => {
     switch (name) {
       case 'nombre':
       case 'apellidoPaterno':
-      case 'apellidoMaterno':
         if (!validateName(value)) {
-          newErrors[name] = 'Solo se permiten letras';
+          newErrors[name] = 'Nombre inválido';
         } else {
           delete newErrors[name];
+        }
+        break;
+
+      // El apellido materno es OPCIONAL (igual que en el registro de
+      // candidatos): un representante con un solo apellido no podía registrarse.
+      case 'apellidoMaterno':
+        if (value && !validateName(value)) {
+          newErrors.apellidoMaterno = 'Apellido inválido';
+        } else {
+          delete newErrors.apellidoMaterno;
         }
         break;
 
@@ -305,6 +354,10 @@ const FormRegisterForQuotationSection = () => {
   ) => {
     const file = e.target.files?.[0] || null;
     setFormData((prev) => ({ ...prev, [fileType]: file }));
+    // El archivo cambió: la URL cacheada de un intento anterior ya no es la de
+    // este documento. Sin esto el reintento reutilizaba el archivo VIEJO y la
+    // solicitud se guardaba con el documento equivocado.
+    urlsSubidasRef.current[fileType] = null;
 
     if (file) {
       const newErrors = { ...errors };
@@ -315,6 +368,7 @@ const FormRegisterForQuotationSection = () => {
 
   const handleFileRemove = (fileType: 'identificacion' | 'documentosConstitucion') => {
     setFormData((prev) => ({ ...prev, [fileType]: null }));
+    urlsSubidasRef.current[fileType] = null;
 
     // Reset the file input so the same file can be selected again
     if (fileType === 'identificacion' && fileInputIdRef.current) {
@@ -358,78 +412,120 @@ const FormRegisterForQuotationSection = () => {
         throw new Error('Archivos requeridos no encontrados');
       }
 
-      // Validar tamaño de archivos (máximo 5MB)
-      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      // Validar tamaño de archivos (máximo 4MB, PERF-028: /api/upload y Vercel cortan antes)
+      const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
       if (formData.identificacion.size > MAX_FILE_SIZE) {
-        throw new Error('El archivo de identificación excede el tamaño máximo de 5MB');
+        throw new Error('El archivo de identificación excede el tamaño máximo de 4MB');
       }
       if (formData.documentosConstitucion.size > MAX_FILE_SIZE) {
-        throw new Error('Los documentos de constitución exceden el tamaño máximo de 5MB');
+        throw new Error('Los documentos de constitución exceden el tamaño máximo de 4MB');
       }
 
-      const idFormData = new FormData();
-      idFormData.append('file', formData.identificacion);
+      // Concatenar dirección para enviar al backend
+      const direccionCompleta = `${formData.calle}, ${formData.colonia}, ${formData.ciudad}, CP ${formData.codigoPostal}`;
 
-      const idUploadRes = await fetch('/api/upload', {
+      // Payload común de la pre-validación y del alta real.
+      const datosSolicitud = {
+        nombre: formData.nombre,
+        apellidoPaterno: formData.apellidoPaterno,
+        apellidoMaterno: formData.apellidoMaterno || null,
+        departamento: formData.departamento || null,
+        nombreEmpresa: formData.nombreEmpresa,
+        correoEmpresa: formData.correoEmpresa,
+        sitioWeb: formData.sitioWeb || null,
+        razonSocial: formData.razonSocial,
+        rfc: formData.rfc.toUpperCase(),
+        direccionEmpresa: direccionCompleta,
+        // La ubicación del mapa sólo se manda si el usuario la eligió: si no,
+        // se estaría guardando el centro por defecto (CDMX) como si fuera el
+        // domicilio real de la empresa.
+        latitud: ubicacionElegida ? markerPosition.lat : null,
+        longitud: ubicacionElegida ? markerPosition.lng : null,
+        password: formData.password
+      };
+
+      // INTEGRIDAD: PRE-VALIDAR antes de subir nada.
+      //
+      // Antes se subían identificación y constancia fiscal a Blob (acceso
+      // público, URL permanente) y sólo después se llamaba al alta: si ésta
+      // fallaba (correo duplicado, zod, 500), esos documentos con PII quedaban
+      // publicados sin ninguna fila que los referenciara ni forma de borrarlos,
+      // y cada reintento los volvía a subir hasta agotar el límite de 15
+      // uploads/hora.
+      const preValidacion = await fetch('/api/company-requests', {
         method: 'POST',
-        body: idFormData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...datosSolicitud,
+          // URLs de relleno: en dryRun no se guarda nada, sólo se valida.
+          identificacionUrl: null,
+          documentosConstitucionUrl: null,
+          dryRun: true
+        })
       });
 
-      if (!idUploadRes.ok) {
-        const idErrorData = await idUploadRes.json().catch(() => ({}));
-        throw new Error(idErrorData.error || 'Error al subir identificación. Verifica el formato y tamaño del archivo.');
+      const preData = await preValidacion.json().catch(() => ({}));
+      if (!preValidacion.ok || !preData.success) {
+        throw new Error(mensajeDeError(preData, 'No se pudo validar la solicitud'));
       }
-      const idData = await idUploadRes.json();
 
-      const docFormData = new FormData();
-      docFormData.append('file', formData.documentosConstitucion);
+      // Los documentos ya subidos se reutilizan en los reintentos: sin esto,
+      // cada intento dejaba una copia más del INE y la constancia en Blob.
+      if (!urlsSubidasRef.current.identificacion) {
+        const idFormData = new FormData();
+        idFormData.append('file', formData.identificacion);
 
-      const docUploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        body: docFormData
-      });
+        const idUploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: idFormData
+        });
 
-      if (!docUploadRes.ok) {
-        const docErrorData = await docUploadRes.json().catch(() => ({}));
-        throw new Error(docErrorData.error || 'Error al subir documentos. Verifica el formato y tamaño del archivo.');
+        if (!idUploadRes.ok) {
+          const idErrorData = await idUploadRes.json().catch(() => ({}));
+          throw new Error(idErrorData.error || 'Error al subir identificación. Verifica el formato y tamaño del archivo.');
+        }
+        const idData = await idUploadRes.json();
+        urlsSubidasRef.current.identificacion = idData.url;
       }
-      const docData = await docUploadRes.json();
+
+      if (!urlsSubidasRef.current.documentosConstitucion) {
+        const docFormData = new FormData();
+        docFormData.append('file', formData.documentosConstitucion);
+
+        const docUploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: docFormData
+        });
+
+        if (!docUploadRes.ok) {
+          const docErrorData = await docUploadRes.json().catch(() => ({}));
+          throw new Error(docErrorData.error || 'Error al subir documentos. Verifica el formato y tamaño del archivo.');
+        }
+        const docData = await docUploadRes.json();
+        urlsSubidasRef.current.documentosConstitucion = docData.url;
+      }
 
       // FEAT-1b: Subir logo si existe
-      let logoUrl = null;
-      if (logoFile) {
+      if (logoFile && !urlsSubidasRef.current.logo) {
         const logoFormData = new FormData();
         logoFormData.append('file', logoFile);
         const logoRes = await fetch('/api/upload', { method: 'POST', body: logoFormData });
         if (logoRes.ok) {
           const logoData = await logoRes.json();
           if (logoData.url) {
-            logoUrl = logoData.url;
+            urlsSubidasRef.current.logo = logoData.url;
           }
         }
       }
-
-      // Concatenar dirección para enviar al backend
-      const direccionCompleta = `${formData.calle}, ${formData.colonia}, ${formData.ciudad}, CP ${formData.codigoPostal}`;
 
       const response = await fetch('/api/company-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nombre: formData.nombre,
-          apellidoPaterno: formData.apellidoPaterno,
-          apellidoMaterno: formData.apellidoMaterno,
-          departamento: formData.departamento || null,
-          nombreEmpresa: formData.nombreEmpresa,
-          correoEmpresa: formData.correoEmpresa,
-          sitioWeb: formData.sitioWeb || null,
-          razonSocial: formData.razonSocial,
-          rfc: formData.rfc.toUpperCase(),
-          direccionEmpresa: direccionCompleta,
-          identificacionUrl: idData.url,
-          documentosConstitucionUrl: docData.url,
-          logoUrl, // FEAT-1b: Logo de empresa
-          password: formData.password
+          ...datosSolicitud,
+          identificacionUrl: urlsSubidasRef.current.identificacion,
+          documentosConstitucionUrl: urlsSubidasRef.current.documentosConstitucion,
+          logoUrl: urlsSubidasRef.current.logo // FEAT-1b: Logo de empresa
         })
       });
 
@@ -463,11 +559,17 @@ const FormRegisterForQuotationSection = () => {
         // FEAT-1b: Limpiar logo
         setLogoFile(null);
         setLogoPreview(null);
+        setUbicacionElegida(false);
+        urlsSubidasRef.current = {
+          identificacion: null,
+          documentosConstitucion: null,
+          logo: null
+        };
 
         // Mostrar modal de éxito
         setShowSuccessModal(true);
       } else {
-        throw new Error(data.error || 'Error al enviar solicitud');
+        throw new Error(mensajeDeError(data, 'Error al enviar solicitud'));
       }
     } catch (error) {
       setSubmitStatus({
@@ -561,11 +663,10 @@ const FormRegisterForQuotationSection = () => {
                         name="apellidoMaterno"
                         value={formData.apellidoMaterno}
                         onChange={handleInputChange}
-                        aria-label="Apellido Materno *"
-                        placeholder="Apellido Materno *"
+                        aria-label="Apellido Materno (opcional)"
+                        placeholder="Apellido Materno (opcional)"
                         className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
                         autoComplete="off"
-                        required
                       />
                       {errors.apellidoMaterno && (
                         <span className="text-red-600 text-sm font-semibold block mt-1">
@@ -719,6 +820,8 @@ const FormRegisterForQuotationSection = () => {
                                 }
                                 setLogoFile(file);
                                 setLogoPreview(URL.createObjectURL(file));
+                                // Logo nuevo: no reutilizar el subido en un intento anterior.
+                                urlsSubidasRef.current.logo = null;
                               }
                             }}
                           />
@@ -987,8 +1090,24 @@ const FormRegisterForQuotationSection = () => {
               >
                 {isSubmitting ? 'ENVIANDO...' : 'ENVIAR →'}
               </button>
+              {/* El aviso declaraba una aceptación sin poner los documentos a
+                  disposición: ahora son enlaces reales. */}
               <p className="text-xs mt-2 text-gray-700">
-                *Al dar click, aceptas términos y condiciones.
+                *Al dar click, aceptas los{' '}
+                <Link
+                  href="/terms"
+                  className="underline hover:text-button-dark-green"
+                >
+                  términos y condiciones
+                </Link>{' '}
+                y la{' '}
+                <Link
+                  href="/privacy"
+                  className="underline hover:text-button-dark-green"
+                >
+                  política de privacidad
+                </Link>
+                .
               </p>
             </div>
           </form>
@@ -1022,9 +1141,13 @@ const FormRegisterForQuotationSection = () => {
               ¡Solicitud enviada exitosamente!
             </h3>
 
-            {/* Mensaje */}
+            {/* Mensaje.
+                El texto anterior («Ya puedes acceder a la plataforma») prometía
+                algo que el servidor no concede: publicar vacantes y ver
+                candidatos requiere que un admin apruebe la solicitud. */}
             <p className="text-gray-600 mb-8 text-lg">
-              Tu cuenta ha sido creada exitosamente. Ya puedes acceder a la plataforma.
+              Tu cuenta ha sido creada. Ya puedes entrar, pero publicar vacantes y
+              ver candidatos se habilitará cuando INAKAT apruebe tu empresa.
             </p>
 
             {/* Botón */}
