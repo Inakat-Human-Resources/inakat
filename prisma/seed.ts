@@ -1,34 +1,63 @@
 // RUTA: prisma/seed.ts
 //
-// Variables de entorno requeridas para el seed:
+// Variables de entorno del seed:
 // ─────────────────────────────────────────────────────────────────────────────
-// SEED_ADMIN_PASSWORD       - Contraseña del usuario admin principal
-// SEED_ADMIN2_PASSWORD      - Contraseña del segundo admin (Guillermo)
-// SEED_COMPANY_PASSWORD     - Contraseña para usuarios de empresa
-// SEED_RECRUITER_PASSWORD   - Contraseña para reclutadores
-// SEED_SPECIALIST_PASSWORD  - Contraseña para especialistas
-// SEED_CANDIDATE_PASSWORD   - Contraseña para candidatos con cuenta
-// SEED_USER_PASSWORD        - Contraseña para usuarios normales
-// SEED_STAFF_PASSWORD       - Contraseña para staff (especialistas/reclutadores adicionales)
+// SEED_ADMIN_PASSWORD       - Contraseña del admin principal (SIEMPRE requerida)
+//
+// Datos demo (solo si NO se usa SEED_ONLY_CATALOGS=1):
+// SEED_COMPANY_PASSWORD     - Contraseña para usuarios de empresa demo
+// SEED_RECRUITER_PASSWORD   - Contraseña para reclutadores demo
+// SEED_SPECIALIST_PASSWORD  - Contraseña para especialistas demo
+// SEED_CANDIDATE_PASSWORD   - Contraseña para el candidato demo
+// SEED_USER_PASSWORD        - Contraseña para usuarios normales demo
+//
+// Opcionales (cada una habilita su bloque):
+// ADMIN2_EMAIL              - Correo de un segundo admin (antes estaba hardcodeado)
+// SEED_ADMIN2_PASSWORD      - Requerida solo si se define ADMIN2_EMAIL
+// SEED_STAFF_ACCOUNTS=1     - Crea las cuentas del staff real @inakat.com
+// SEED_STAFF_PASSWORD       - Requerida solo si SEED_STAFF_ACCOUNTS=1
+// SEED_ONLY_CATALOGS=1      - Siembra solo catálogos (especialidades, precios,
+//                             paquetes) y el admin: nada de datos demo
+// SEED_FORCE_RESET=1        - Permite que el seed SOBRESCRIBA lo que el admin
+//                             editó (precios de paquetes, especialidades)
+// SEED_ALLOW_REMOTE=1       - Autoriza correr el seed contra una BD que no es local
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import {
+  LONGITUD_MINIMA_PASSWORD,
+  esBaseLocal,
+  esPasswordInvalida,
+  hostDeBaseDeDatos,
+  motivoParaBloquearSeed,
+  normalizarEmail
+} from './seed-guards';
 
 const prisma = new PrismaClient();
 
-// Validar que todas las variables de entorno requeridas existen
+// Solo catálogos: sin empresas, vacantes, candidatos ni postulaciones de ejemplo
+const soloCatalogos = process.env.SEED_ONLY_CATALOGS === '1';
+// Sobrescribir configuración que el admin administra desde el panel
+const forzarReset = process.env.SEED_FORCE_RESET === '1';
+// Crear las cuentas del staff real (@inakat.com) con contraseña compartida
+const sembrarStaff = process.env.SEED_STAFF_ACCOUNTS === '1';
+
+// Validar que las variables de entorno requeridas existen Y tienen un valor real
 function validateEnvVars(): void {
-  const requiredVars = [
-    'SEED_ADMIN_PASSWORD',
-    'SEED_ADMIN2_PASSWORD',
-    'SEED_COMPANY_PASSWORD',
-    'SEED_RECRUITER_PASSWORD',
-    'SEED_SPECIALIST_PASSWORD',
-    'SEED_CANDIDATE_PASSWORD',
-    'SEED_USER_PASSWORD',
-    'SEED_STAFF_PASSWORD'
-  ];
+  const requiredVars = ['SEED_ADMIN_PASSWORD'];
+
+  if (!soloCatalogos) {
+    requiredVars.push(
+      'SEED_COMPANY_PASSWORD',
+      'SEED_RECRUITER_PASSWORD',
+      'SEED_SPECIALIST_PASSWORD',
+      'SEED_CANDIDATE_PASSWORD',
+      'SEED_USER_PASSWORD'
+    );
+  }
+  if (process.env.ADMIN2_EMAIL) requiredVars.push('SEED_ADMIN2_PASSWORD');
+  if (sembrarStaff) requiredVars.push('SEED_STAFF_PASSWORD');
 
   const missing = requiredVars.filter(v => !process.env[v]);
 
@@ -39,31 +68,88 @@ function validateEnvVars(): void {
     console.error('   Consulta .env.example para más información.\n');
     process.exit(1);
   }
+
+  // Rechazar los placeholders de .env.example y las contraseñas demasiado cortas:
+  // con solo comprobar presencia, un 'CHANGE_ME_...' copiado tal cual quedaba
+  // como contraseña real del admin.
+  const invalid = requiredVars.filter(v => esPasswordInvalida(process.env[v]));
+
+  if (invalid.length > 0) {
+    console.error('❌ ERROR: Estas variables tienen un valor de ejemplo o demasiado corto:\n');
+    invalid.forEach(v => console.error(`   • ${v}`));
+    console.error(
+      `\n📝 Usa contraseñas propias de al menos ${LONGITUD_MINIMA_PASSWORD} caracteres,` +
+      ' no los placeholders de .env.example.\n'
+    );
+    process.exit(1);
+  }
+}
+
+// El seed crea usuarios, vacantes y postulaciones de ejemplo: no debe poder
+// ejecutarse por accidente contra producción (o cualquier BD remota compartida).
+function validateEntorno(): void {
+  const host = hostDeBaseDeDatos(process.env.DATABASE_URL);
+  console.log(`🔌 Base de datos: ${host || '(host desconocido)'}`);
+
+  const motivo = motivoParaBloquearSeed({
+    NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
+    SEED_ALLOW_REMOTE: process.env.SEED_ALLOW_REMOTE
+  });
+
+  if (motivo === 'produccion') {
+    console.error('\n❌ ERROR: NODE_ENV=production. El seed no corre contra producción.');
+    console.error('   Si de verdad lo necesitas, exporta SEED_ALLOW_REMOTE=1.\n');
+    process.exit(1);
+  }
+
+  if (motivo === 'host-remoto') {
+    console.error(`\n❌ ERROR: DATABASE_URL apunta a "${host || 'un host desconocido'}", que no es local.`);
+    console.error('   El seed crea datos de ejemplo y sobrescribiría una base compartida.');
+    console.error('   Si de verdad lo necesitas, exporta SEED_ALLOW_REMOTE=1.\n');
+    process.exit(1);
+  }
+
+  if (!esBaseLocal(host)) {
+    console.log('⚠️  SEED_ALLOW_REMOTE=1: sembrando contra una base NO local.');
+  }
 }
 
 async function main() {
-  // Validar variables de entorno antes de continuar
+  // Validar entorno y variables antes de escribir nada
+  validateEntorno();
   validateEnvVars();
 
   console.log('🌱 Iniciando seed híbrido completo...\n');
+  if (soloCatalogos) {
+    console.log('📚 SEED_ONLY_CATALOGS=1: solo admin y catálogos, sin datos demo.\n');
+  }
 
   // =============================================
   // 1. CREAR USUARIOS ADMIN
   // =============================================
   console.log('👤 Creando usuarios admin...');
 
+  // El correo se normaliza a minúsculas porque el login busca email.toLowerCase()
+  // y el unique de Postgres distingue mayúsculas: un ADMIN_EMAIL con mayúsculas
+  // creaba un admin que nunca podía iniciar sesión.
   const admins = [
     {
-      email: process.env.ADMIN_EMAIL || 'admin@inakat.com',
+      email: normalizarEmail(process.env.ADMIN_EMAIL || 'admin@inakat.com'),
       password: process.env.SEED_ADMIN_PASSWORD!,
       nombre: process.env.ADMIN_NOMBRE || 'Administrador'
-    },
-    {
-      email: 'guillermo.sanchezy@gmail.com',
-      password: process.env.SEED_ADMIN2_PASSWORD!,
-      nombre: 'Guillermo Sánchez'
     }
   ];
+
+  // Segundo admin opcional: antes era un correo personal hardcodeado en el
+  // código versionado, que se creaba en cualquier base donde corriera el seed.
+  if (process.env.ADMIN2_EMAIL) {
+    admins.push({
+      email: normalizarEmail(process.env.ADMIN2_EMAIL),
+      password: process.env.SEED_ADMIN2_PASSWORD!,
+      nombre: process.env.ADMIN2_NOMBRE || 'Administrador 2'
+    });
+  }
 
   for (const adminData of admins) {
     const existingAdmin = await prisma.user.findUnique({
@@ -91,6 +177,21 @@ async function main() {
     console.log(`✅ Usuario admin creado: ${admin.email}`);
     console.log(`   📧 Email: ${adminData.email}`);
     console.log(`   🔑 Password: ********** (ver variables de entorno)\n`);
+  }
+
+  // =============================================
+  // 1.5 CATÁLOGOS (especialidades, precios, paquetes y staff)
+  // =============================================
+  // Van antes que los datos demo para que SEED_ONLY_CATALOGS=1 pueda cortar
+  // aquí: sembrar catálogos no debe arrastrar empresas y vacantes de ejemplo.
+  await seedSpecialties();
+  await seedPricingMatrix();
+  await seedCreditPackages();
+  await seedStaff();
+
+  if (soloCatalogos) {
+    console.log('\n✨ Catálogos sembrados. Se omiten los datos demo (SEED_ONLY_CATALOGS=1).\n');
+    return;
   }
 
   // =============================================
@@ -333,10 +434,10 @@ async function main() {
   const candidatePassword = await bcrypt.hash(process.env.SEED_CANDIDATE_PASSWORD!, 10);
 
   const candidateUser = await prisma.user.upsert({
-    where: { email: 'candidato.test@gmail.com' },
+    where: { email: 'candidato.test@example.com' },
     update: {},
     create: {
-      email: 'candidato.test@gmail.com',
+      email: 'candidato.test@example.com',
       password: candidatePassword,
       nombre: 'Roberto',
       apellidoPaterno: 'Sánchez',
@@ -349,13 +450,13 @@ async function main() {
 
   // Crear el Candidate vinculado
   await prisma.candidate.upsert({
-    where: { email: 'candidato.test@gmail.com' },
+    where: { email: 'candidato.test@example.com' },
     update: { userId: candidateUser.id },
     create: {
       nombre: 'Roberto',
       apellidoPaterno: 'Sánchez',
       apellidoMaterno: 'Gómez',
-      email: 'candidato.test@gmail.com',
+      email: 'candidato.test@example.com',
       telefono: '5512345678',
       sexo: 'M',
       universidad: 'UNAM',
@@ -379,7 +480,7 @@ async function main() {
 
   const normalUsers = [
     {
-      email: 'carlos.dev@gmail.com',
+      email: 'carlos.dev@example.com',
       password: userPassword,
       nombre: 'Carlos',
       apellidoPaterno: 'Ramírez',
@@ -387,7 +488,7 @@ async function main() {
       role: 'user'
     },
     {
-      email: 'ana.designer@gmail.com',
+      email: 'ana.designer@example.com',
       password: userPassword,
       nombre: 'Ana',
       apellidoPaterno: 'Martínez',
@@ -395,7 +496,7 @@ async function main() {
       role: 'user'
     },
     {
-      email: 'luis.marketing@gmail.com',
+      email: 'luis.marketing@example.com',
       password: userPassword,
       nombre: 'Luis',
       apellidoPaterno: 'González',
@@ -403,7 +504,7 @@ async function main() {
       role: 'user'
     },
     {
-      email: 'maria.rh@gmail.com',
+      email: 'maria.rh@example.com',
       password: userPassword,
       nombre: 'María',
       apellidoPaterno: 'Sánchez',
@@ -411,7 +512,7 @@ async function main() {
       role: 'user'
     },
     {
-      email: 'pedro.junior@gmail.com',
+      email: 'pedro.junior@example.com',
       password: userPassword,
       nombre: 'Pedro',
       apellidoPaterno: 'Jiménez',
@@ -443,25 +544,7 @@ async function main() {
 
   console.log(`✅ ${usersCreated} usuarios normales creados`);
 
-  // =============================================
-  // 2.75 POBLAR MATRIZ DE PRECIOS
-  // =============================================
-  await seedPricingMatrix();
-
-  // =============================================
-  // 2.8 POBLAR ESPECIALIDADES
-  // =============================================
-  await seedSpecialties();
-
-  // =============================================
-  // 2.9 POBLAR STAFF
-  // =============================================
-  await seedStaff();
-
-  // =============================================
-  // 2.95 POBLAR PAQUETES DE CRÉDITOS
-  // =============================================
-  await seedCreditPackages();
+  // (Los catálogos y el staff ya se sembraron en el paso 1.5)
 
   // =============================================
   // 3. CREAR VACANTES (DISTRIBUIDAS ENTRE EMPRESAS)
@@ -480,7 +563,6 @@ async function main() {
       profile: 'Tecnología', // ← NUEVO
       seniority: 'Middle', // ← NUEVO
       creditCost: 8, // ← NUEVO
-      companyRating: 4.5,
       userId: company1.id,
       description: `Estamos buscando un desarrollador full stack apasionado para unirse a nuestro equipo dinámico.
 
@@ -513,7 +595,6 @@ Ofrecemos:
       profile: 'Tecnología',
       seniority: 'Sr',
       creditCost: 14,
-      companyRating: 4.7,
       userId: company1.id,
       description: `Únete a nuestro equipo de infraestructura cloud como Ingeniero DevOps.
 
@@ -540,7 +621,6 @@ Responsabilidades:
       profile: 'Tecnología',
       seniority: 'Middle',
       creditCost: 10,
-      companyRating: 4.3,
       userId: company1.id,
       description: `Protege la infraestructura digital de empresas líderes.
 
@@ -564,10 +644,9 @@ Responsabilidades:
       salary: '$22,000 - $32,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Jr',
       creditCost: 5,
-      companyRating: 4.4,
       userId: company1.id,
       description: `Conecta talento tech con las mejores oportunidades.
 
@@ -594,7 +673,6 @@ Responsabilidades:
       profile: 'Tecnología',
       seniority: 'Jr',
       creditCost: 5,
-      companyRating: 4.4,
       userId: company1.id,
       description: `Proyectos web para clientes internacionales.
 
@@ -619,10 +697,9 @@ Tecnologías: React, Next.js, Vue.js`,
       salary: '$22,000 - $32,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'remote',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Jr',
       creditCost: 4,
-      companyRating: 4.7,
       userId: company1.id,
       description: `Asegura el éxito de clientes en plataforma SaaS.
 
@@ -651,7 +728,6 @@ Responsabilidades:
       profile: 'Diseño Gráfico',
       seniority: 'Sr',
       creditCost: 11,
-      companyRating: 4.6,
       userId: company2.id,
       description: `Crea experiencias digitales excepcionales para marcas reconocidas.
 
@@ -675,10 +751,9 @@ Responsabilidades:
       salary: '$25,000 - $35,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       creditCost: 7,
-      companyRating: 4.2,
       userId: company2.id,
       description: `Impulsa estrategias digitales para clientes B2B y B2C.
 
@@ -705,7 +780,6 @@ Responsabilidades:
       profile: 'Diseño Gráfico',
       seniority: 'Jr',
       creditCost: 5,
-      companyRating: 4.0,
       userId: company2.id,
       description: `Gestiona la presencia digital de marcas en redes sociales.
 
@@ -732,7 +806,6 @@ Responsabilidades:
       profile: 'Educación',
       seniority: 'Middle',
       creditCost: 6,
-      companyRating: 4.3,
       userId: company2.id,
       description: `Desarrolla talento y mejora clima organizacional.
 
@@ -759,7 +832,6 @@ Responsabilidades:
       profile: 'Educación',
       seniority: 'Middle',
       creditCost: 5,
-      companyRating: 4.5,
       userId: company2.id,
       description: `Crea experiencias de aprendizaje digital innovadoras.
 
@@ -783,10 +855,9 @@ Responsabilidades:
       salary: '$20,000 - $30,000 + comisiones',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       creditCost: 7,
-      companyRating: 4.3,
       userId: company2.id,
       description: `Vende soluciones de software empresarial.
 
@@ -814,10 +885,9 @@ Comisiones sin techo + prestaciones superiores`,
       salary: '$25,000 - $35,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'presential',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       creditCost: 7,
-      companyRating: 4.1,
       userId: company3.id,
       description: `Apoya todas las funciones de RRHH en empresa manufacturera.
 
@@ -844,7 +914,6 @@ Responsabilidades:
       profile: 'Finanzas',
       seniority: 'Middle',
       creditCost: 7,
-      companyRating: 4.6,
       userId: company3.id,
       description: `Analiza inversiones y proyecciones financieras.
 
@@ -868,10 +937,9 @@ Responsabilidades:
       salary: '$40,000 - $55,000 / mes',
       jobType: 'Tiempo Completo',
       workMode: 'hybrid',
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Sr',
       creditCost: 10,
-      companyRating: 4.4,
       userId: company3.id,
       description: `Lidera proyectos estratégicos de transformación digital.
 
@@ -898,7 +966,6 @@ Responsabilidades:
       profile: 'Finanzas',
       seniority: 'Middle',
       creditCost: 7,
-      companyRating: 4.0,
       userId: company3.id,
       description: `Gestiona contabilidad general de grupo empresarial.
 
@@ -925,7 +992,6 @@ Responsabilidades:
       profile: 'Tecnología',
       seniority: 'Middle',
       creditCost: 10,
-      companyRating: 4.5,
       userId: company3.id,
       description: `Desarrolla soluciones de automatización industrial.
 
@@ -952,7 +1018,6 @@ Responsabilidades:
       profile: 'Tecnología',
       seniority: 'Jr',
       creditCost: 6,
-      companyRating: 4.2,
       userId: company3.id,
       description: `Asegura estándares de calidad en producción automotriz.
 
@@ -972,21 +1037,29 @@ Responsabilidades:
   ];
 
   let jobsCreated = 0;
+  // Ids de las vacantes del seed, en el mismo orden que sampleJobs. Las
+  // postulaciones de ejemplo se cuelgan de estos ids y nunca de "las primeras
+  // 18 vacantes de la base", que en staging/producción son vacantes reales.
+  const idsVacantesDelSeed: number[] = [];
+
   for (const job of sampleJobs) {
     const existing = await prisma.job.findFirst({
       where: {
         title: job.title,
-        company: job.company
+        company: job.company,
+        userId: job.userId
       }
     });
 
     if (!existing) {
       const created = await prisma.job.create({ data: job });
+      idsVacantesDelSeed.push(created.id);
       console.log(
         `✅ ${created.title} - ${created.company} (${created.creditCost} créditos)`
       );
       jobsCreated++;
     } else {
+      idsVacantesDelSeed.push(existing.id);
       console.log(`⏭️  Ya existe: ${job.title}`);
     }
   }
@@ -994,7 +1067,7 @@ Responsabilidades:
   // =============================================
   // 4. CREAR APLICACIONES
   // =============================================
-  await createSampleApplications();
+  await createSampleApplications(idsVacantesDelSeed);
 
   // =============================================
   // 5. CREAR SOLICITUDES PENDIENTES
@@ -1047,27 +1120,24 @@ Responsabilidades:
   // =============================================
   console.log('\n✨ ¡Seed híbrido completado exitosamente!\n');
   console.log('📊 RESUMEN:');
-  console.log(
-    `  • Usuarios admin: 2 (admin@inakat.com, guillermo.sanchezy@gmail.com)`
-  );
+  console.log(`  • Usuarios admin: ${admins.length} (${admins.map(a => a.email).join(', ')})`);
   console.log(`  • Empresas: 3 (cada una con 50 créditos de prueba)`);
   console.log(`  • Usuarios normales: ${usersCreated}`);
   console.log(
     `  • Vacantes: ${jobsCreated} nuevas creadas (18 total distribuidas)`
   );
-  console.log(`  • Matriz de precios: 105 combinaciones`);
+  console.log(`  • Matriz de precios: ver detalles arriba`);
   console.log(`  • Paquetes de créditos: 4 (1, 10, 15, 20 créditos)`);
   console.log(`  • Aplicaciones: Ver detalles arriba`);
   console.log(`  • Solicitudes pendientes: ${requestsCreated}`);
 
   console.log('\n🔐 CREDENCIALES DE PRUEBA:');
   console.log('   (Las contraseñas se leen de variables de entorno SEED_*)\n');
-  console.log('  👤 ADMIN 1:');
-  console.log('     Email: admin@inakat.com');
-  console.log('     Password: $SEED_ADMIN_PASSWORD');
-  console.log('\n  👤 ADMIN 2 (Guillermo):');
-  console.log('     Email: guillermo.sanchezy@gmail.com');
-  console.log('     Password: $SEED_ADMIN2_PASSWORD');
+  admins.forEach((a, i) => {
+    console.log(`  👤 ADMIN ${i + 1}:`);
+    console.log(`     Email: ${a.email}`);
+    console.log(`     Password: $${i === 0 ? 'SEED_ADMIN_PASSWORD' : 'SEED_ADMIN2_PASSWORD'}`);
+  });
   console.log('\n  🏢 EMPRESAS (Password: $SEED_COMPANY_PASSWORD):');
   console.log('     contact@techsolutions.mx - TechSolutions (50 créditos, 6 vacantes tech)');
   console.log('     rh@creativedigital.mx - Creative Digital (50 créditos, 6 vacantes diseño)');
@@ -1082,14 +1152,14 @@ Responsabilidades:
   console.log('     especialista.finanzas@inakat.com (Finanzas)');
 
   console.log('\n  🎯 CANDIDATO CON CUENTA (Password: $SEED_CANDIDATE_PASSWORD):');
-  console.log('     candidato.test@gmail.com');
+  console.log('     candidato.test@example.com');
 
   console.log('\n  👤 USUARIOS NORMALES (Password: $SEED_USER_PASSWORD):');
-  console.log('     carlos.dev@gmail.com - Desarrollador');
-  console.log('     ana.designer@gmail.com - Diseñadora');
-  console.log('     luis.marketing@gmail.com - Marketing');
-  console.log('     maria.rh@gmail.com - Recursos Humanos');
-  console.log('     pedro.junior@gmail.com - Recién Egresado');
+  console.log('     carlos.dev@example.com - Desarrollador');
+  console.log('     ana.designer@example.com - Diseñadora');
+  console.log('     luis.marketing@example.com - Marketing');
+  console.log('     maria.rh@example.com - Recursos Humanos');
+  console.log('     pedro.junior@example.com - Recién Egresado');
   console.log('\n🚀 Para probar:');
   console.log('   Admin: http://localhost:3000/admin/requests');
   console.log('   Empresa: http://localhost:3000/company/dashboard');
@@ -1098,31 +1168,34 @@ Responsabilidades:
   console.log('   Especialista: http://localhost:3000/specialist/dashboard\n');
 }
 
-async function createSampleApplications() {
+// Recibe los ids de las vacantes creadas por este mismo seed, en el orden de
+// sampleJobs. Antes hacía findMany({ take: 18 }) sin where ni orderBy: en una
+// base con vacantes reales les colgaba postulaciones inventadas.
+async function createSampleApplications(idsVacantesDelSeed: number[]) {
   console.log('\n📝 Creando aplicaciones de ejemplo...\n');
 
-  const jobs = await prisma.job.findMany({ take: 18 });
+  const jobs = idsVacantesDelSeed.map(id => ({ id }));
 
   if (jobs.length === 0) {
-    console.log('⚠️  No hay vacantes, saltando creación de aplicaciones.');
+    console.log('⚠️  No hay vacantes del seed, saltando creación de aplicaciones.');
     return;
   }
 
   // Obtener IDs de los usuarios registrados
   const carlos = await prisma.user.findUnique({
-    where: { email: 'carlos.dev@gmail.com' }
+    where: { email: 'carlos.dev@example.com' }
   });
   const ana = await prisma.user.findUnique({
-    where: { email: 'ana.designer@gmail.com' }
+    where: { email: 'ana.designer@example.com' }
   });
   const luis = await prisma.user.findUnique({
-    where: { email: 'luis.marketing@gmail.com' }
+    where: { email: 'luis.marketing@example.com' }
   });
   const maria = await prisma.user.findUnique({
-    where: { email: 'maria.rh@gmail.com' }
+    where: { email: 'maria.rh@example.com' }
   });
   const pedro = await prisma.user.findUnique({
-    where: { email: 'pedro.junior@gmail.com' }
+    where: { email: 'pedro.junior@example.com' }
   });
 
   const sampleApplications = [
@@ -1131,7 +1204,7 @@ async function createSampleApplications() {
       jobId: jobs[0]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
-      candidateEmail: 'carlos.dev@gmail.com',
+      candidateEmail: 'carlos.dev@example.com',
       candidatePhone: '+52 81 1234 5678',
       coverLetter:
         'Estimado equipo, como desarrollador con 3 años de experiencia en React y Node.js, me entusiasma la oportunidad de unirme a su equipo. He trabajado en proyectos similares y estoy seguro de que puedo aportar valor.',
@@ -1141,7 +1214,7 @@ async function createSampleApplications() {
       jobId: jobs[1]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
-      candidateEmail: 'carlos.dev@gmail.com',
+      candidateEmail: 'carlos.dev@example.com',
       candidatePhone: '+52 81 1234 5678',
       coverLetter:
         'Me interesa mucho esta posición de DevOps. Tengo experiencia con Docker y Kubernetes, y he gestionado infraestructura en AWS.',
@@ -1152,7 +1225,7 @@ async function createSampleApplications() {
       jobId: jobs[2]?.id,
       userId: carlos?.id,
       candidateName: 'Carlos Ramírez López',
-      candidateEmail: 'carlos.dev@gmail.com',
+      candidateEmail: 'carlos.dev@example.com',
       candidatePhone: '+52 81 1234 5678',
       coverLetter:
         'Aunque mi experiencia principal es en desarrollo, tengo gran interés en seguridad informática y estoy certificándome en ethical hacking.',
@@ -1166,7 +1239,7 @@ async function createSampleApplications() {
       jobId: jobs[6]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
-      candidateEmail: 'ana.designer@gmail.com',
+      candidateEmail: 'ana.designer@example.com',
       candidatePhone: '+52 55 9876 5432',
       coverLetter:
         'Como diseñadora UX/UI con más de 4 años de experiencia, he trabajado en proyectos para empresas como [empresas]. Domino Figma y tengo un portfolio que me encantaría compartir.',
@@ -1178,7 +1251,7 @@ async function createSampleApplications() {
       jobId: jobs[10]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
-      candidateEmail: 'ana.designer@gmail.com',
+      candidateEmail: 'ana.designer@example.com',
       candidatePhone: '+52 55 9876 5432',
       coverLetter:
         'Mi experiencia en UX/UI me ha dado una perspectiva única para el diseño instruccional. He creado experiencias de aprendizaje digitales intuitivas.',
@@ -1188,7 +1261,7 @@ async function createSampleApplications() {
       jobId: jobs[8]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
-      candidateEmail: 'ana.designer@gmail.com',
+      candidateEmail: 'ana.designer@example.com',
       candidatePhone: '+52 55 9876 5432',
       coverLetter:
         'Además de diseño, tengo experiencia gestionando redes sociales para marcas. Me apasiona la comunicación visual.',
@@ -1200,7 +1273,7 @@ async function createSampleApplications() {
       jobId: jobs[4]?.id,
       userId: ana?.id,
       candidateName: 'Ana Martínez García',
-      candidateEmail: 'ana.designer@gmail.com',
+      candidateEmail: 'ana.designer@example.com',
       candidatePhone: '+52 55 9876 5432',
       coverLetter:
         'Busco proyectos freelance que combinen diseño y desarrollo frontend. Manejo HTML/CSS/JS y frameworks modernos.',
@@ -1213,7 +1286,7 @@ async function createSampleApplications() {
       jobId: jobs[7]?.id,
       userId: luis?.id,
       candidateName: 'Luis González Hernández',
-      candidateEmail: 'luis.marketing@gmail.com',
+      candidateEmail: 'luis.marketing@example.com',
       candidatePhone: '+52 33 5555 6666',
       coverLetter:
         'Especialista en marketing digital con 3 años de experiencia gestionando campañas en Google Ads y Facebook Ads. He logrado aumentar el ROI en un 150% en mi último proyecto.',
@@ -1223,7 +1296,7 @@ async function createSampleApplications() {
       jobId: jobs[8]?.id,
       userId: luis?.id,
       candidateName: 'Luis González Hernández',
-      candidateEmail: 'luis.marketing@gmail.com',
+      candidateEmail: 'luis.marketing@example.com',
       candidatePhone: '+52 33 5555 6666',
       coverLetter:
         'Tengo experiencia gestionando comunidades de más de 50k seguidores. Me apasiona crear contenido que conecte con la audiencia.',
@@ -1236,7 +1309,7 @@ async function createSampleApplications() {
       jobId: jobs[12]?.id,
       userId: maria?.id,
       candidateName: 'María Sánchez Torres',
-      candidateEmail: 'maria.rh@gmail.com',
+      candidateEmail: 'maria.rh@example.com',
       candidatePhone: '+52 442 777 8888',
       coverLetter:
         'Psicóloga organizacional con 4 años de experiencia en todas las áreas de RRHH. He implementado sistemas de evaluación del desempeño y clima laboral.',
@@ -1248,7 +1321,7 @@ async function createSampleApplications() {
       jobId: jobs[9]?.id,
       userId: maria?.id,
       candidateName: 'María Sánchez Torres',
-      candidateEmail: 'maria.rh@gmail.com',
+      candidateEmail: 'maria.rh@example.com',
       candidatePhone: '+52 442 777 8888',
       coverLetter:
         'Mi especialidad es psicología organizacional. He diseñado programas de desarrollo de talento y coaching ejecutivo.',
@@ -1260,7 +1333,7 @@ async function createSampleApplications() {
       jobId: jobs[5]?.id,
       userId: pedro?.id,
       candidateName: 'Pedro Jiménez Ruiz',
-      candidateEmail: 'pedro.junior@gmail.com',
+      candidateEmail: 'pedro.junior@example.com',
       candidatePhone: '+52 55 3333 4444',
       coverLetter:
         'Recién egresado de la carrera de Administración. Busco mi primera oportunidad en atención a clientes. Soy muy responsable y aprendo rápido.',
@@ -1270,7 +1343,7 @@ async function createSampleApplications() {
       jobId: jobs[3]?.id,
       userId: pedro?.id,
       candidateName: 'Pedro Jiménez Ruiz',
-      candidateEmail: 'pedro.junior@gmail.com',
+      candidateEmail: 'pedro.junior@example.com',
       candidatePhone: '+52 55 3333 4444',
       coverLetter:
         'Me interesa el área de reclutamiento. Aunque no tengo experiencia formal, he participado en proyectos universitarios de selección de personal.',
@@ -1629,107 +1702,107 @@ async function seedPricingMatrix() {
       credits: 14
     },
 
-    // PROD AUDIOVISUAL (15 combinaciones - mismos precios que Diseño Gráfico)
+    // PRODUCCIÓN AUDIOVISUAL (15 combinaciones - mismos precios que Diseño Gráfico)
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Practicante',
       workMode: 'remote',
       location: null,
       credits: 4
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Practicante',
       workMode: 'hybrid',
       location: null,
       credits: 5
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Practicante',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 5
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Jr',
       workMode: 'remote',
       location: null,
       credits: 5
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Jr',
       workMode: 'hybrid',
       location: null,
       credits: 6
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Jr',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 6
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Middle',
       workMode: 'remote',
       location: null,
       credits: 6
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Middle',
       workMode: 'hybrid',
       location: null,
       credits: 8
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Middle',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 8
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Sr',
       workMode: 'remote',
       location: null,
       credits: 9
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Sr',
       workMode: 'hybrid',
       location: null,
       credits: 11
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Sr',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 11
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Director',
       workMode: 'remote',
       location: null,
       credits: 12
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Director',
       workMode: 'hybrid',
       location: null,
       credits: 14
     },
     {
-      profile: 'Prod Audiovisual',
+      profile: 'Producción Audiovisual',
       seniority: 'Director',
       workMode: 'presential',
       location: 'Monterrey',
@@ -1843,114 +1916,114 @@ async function seedPricingMatrix() {
       credits: 12
     },
 
-    // ADMIN DE OFICINA (15 combinaciones)
+    // ADMINISTRACIÓN DE OFICINA (15 combinaciones)
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Practicante',
       workMode: 'remote',
       location: null,
       credits: 3
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Practicante',
       workMode: 'hybrid',
       location: null,
       credits: 4
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Practicante',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 4
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Jr',
       workMode: 'remote',
       location: null,
       credits: 4
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Jr',
       workMode: 'hybrid',
       location: null,
       credits: 5
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Jr',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 5
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       workMode: 'remote',
       location: null,
       credits: 5
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       workMode: 'hybrid',
       location: null,
       credits: 7
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Middle',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 7
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Sr',
       workMode: 'remote',
       location: null,
       credits: 7
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Sr',
       workMode: 'hybrid',
       location: null,
       credits: 10
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Sr',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 10
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Director',
       workMode: 'remote',
       location: null,
       credits: 11
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Director',
       workMode: 'hybrid',
       location: null,
       credits: 13
     },
     {
-      profile: 'Admin de Oficina',
+      profile: 'Administración de Oficina',
       seniority: 'Director',
       workMode: 'presential',
       location: 'Monterrey',
       credits: 13
     },
 
-    // FINANZAS (15 combinaciones - mismos precios que Admin de Oficina)
+    // FINANZAS (15 combinaciones - mismos precios que Administración de Oficina)
     {
       profile: 'Finanzas',
       seniority: 'Practicante',
@@ -2058,25 +2131,56 @@ async function seedPricingMatrix() {
     }
   ];
 
+  // Los perfiles de la matriz TIENEN que llamarse igual que las especialidades:
+  // calculateJobCreditCost busca por string exacto y, si no encuentra fila,
+  // cobra DEFAULT_CREDITS (5) en silencio.
+  const nombresCatalogo = specialtiesData.map(s => s.name);
+  const perfilesMatriz = [...new Set(baseMatrix.map(p => p.profile))];
+
+  const perfilesHuerfanos = perfilesMatriz.filter(p => !nombresCatalogo.includes(p));
+  if (perfilesHuerfanos.length > 0) {
+    console.warn(
+      `⚠️  Perfiles de la matriz que NO existen en el catálogo de especialidades: ${perfilesHuerfanos.join(', ')}`
+    );
+  }
+
+  const especialidadesSinPrecio = nombresCatalogo.filter(n => !perfilesMatriz.includes(n));
+  if (especialidadesSinPrecio.length > 0) {
+    console.warn(
+      `⚠️  Especialidades sin precio configurado (se cobrarían al valor por defecto): ${especialidadesSinPrecio.join(', ')}`
+    );
+  }
+
   let created = 0;
   let skipped = 0;
 
   for (const price of baseMatrix) {
-    try {
-      await prisma.pricingMatrix.create({
-        data: price
-      });
-      created++;
-    } catch (error) {
+    // Comprobación explícita en vez de un try/catch ciego: con location null el
+    // @@unique de Postgres no impide duplicados (NULL <> NULL), así que un
+    // create a ciegas no fallaba, duplicaba la fila.
+    const existing = await prisma.pricingMatrix.findFirst({
+      where: {
+        profile: price.profile,
+        seniority: price.seniority,
+        workMode: price.workMode,
+        location: price.location
+      }
+    });
+
+    if (existing) {
       skipped++;
+      continue;
     }
+
+    await prisma.pricingMatrix.create({ data: price });
+    created++;
   }
 
   console.log(`✨ Matriz de precios poblada:`);
   console.log(`   Creados: ${created}`);
-  console.log(`   Saltados: ${skipped}`);
+  console.log(`   Saltados (ya existían): ${skipped}`);
   console.log(
-    `   Total: 105 combinaciones (7 perfiles x 5 seniorities x 3 modalidades)\n`
+    `   Total sembrado: ${baseMatrix.length} combinaciones (${perfilesMatriz.length} perfiles x 5 seniorities x 3 modalidades)\n`
   );
 }
 
@@ -2256,13 +2360,23 @@ async function seedSpecialties() {
     });
 
     if (existing) {
-      console.log(
-        `  ⏭️  Specialty "${specialty.name}" already exists, updating...`
-      );
-      await prisma.specialty.update({
-        where: { name: specialty.name },
-        data: specialty
-      });
+      // Specialty la administra el admin desde /admin/specialties (subcategorías,
+      // color, orden...). Sobrescribirla en cada seed revertía sus cambios en
+      // silencio, y las vacantes que usaban las subcategorías nuevas dejaban de
+      // validar. Solo se pisa con SEED_FORCE_RESET=1.
+      if (forzarReset) {
+        console.log(
+          `  ♻️  Specialty "${specialty.name}" ya existe, SOBRESCRITA (SEED_FORCE_RESET=1)`
+        );
+        await prisma.specialty.update({
+          where: { name: specialty.name },
+          data: specialty
+        });
+      } else {
+        console.log(
+          `  ⏭️  Specialty "${specialty.name}" ya existe, se respeta lo que hay`
+        );
+      }
     } else {
       console.log(`  ✅ Creating specialty "${specialty.name}"`);
       await prisma.specialty.create({
@@ -2275,7 +2389,20 @@ async function seedSpecialties() {
 }
 
 async function seedStaff() {
-  console.log('🌱 Creando especialistas y reclutadores...\n');
+  // Estas son cuentas de personas reales (@inakat.com) y todas comparten la
+  // misma contraseña, así que no se crean por defecto: lo normal es darlas de
+  // alta desde /admin/users con contraseña individual + "olvidé mi contraseña".
+  if (!sembrarStaff) {
+    console.log(
+      '\n⏭️  Staff real no sembrado (usa SEED_STAFF_ACCOUNTS=1 si de verdad lo necesitas).'
+    );
+    console.log(
+      '   Recomendado: crear cada cuenta desde /admin/users con contraseña individual.\n'
+    );
+    return;
+  }
+
+  console.log('🌱 Creando especialistas...\n');
 
   const defaultPassword = await bcrypt.hash(process.env.SEED_STAFF_PASSWORD!, 10);
 
@@ -2322,7 +2449,9 @@ async function seedStaff() {
       email: 'lalo@inakat.com',
       nombre: 'Lalo',
       apellidoPaterno: 'Hernández',
-      specialty: 'Project Management',
+      // 'Project Management' no existe en el catálogo de especialidades: con ese
+      // valor la asignación avisaba siempre "la especialidad no coincide".
+      specialty: 'Administración de Oficina',
       role: 'specialist'
     },
     {
@@ -2350,16 +2479,11 @@ async function seedStaff() {
     });
 
     if (existing) {
-      // Actualizar rol y especialidad si ya existe
-      await prisma.user.update({
-        where: { email: data.email },
-        data: {
-          role: 'specialist',
-          specialty: data.specialty
-        }
-      });
+      // NO se toca el rol de un usuario que ya existe: el seed degradaba a
+      // 'specialist' a quien hubiera sido promovido a admin desde /admin/users,
+      // y recuperarlo exigía entrar a la base a mano.
       console.log(
-        `  ⏭️  ${data.nombre} ya existe, actualizado a especialista (${data.specialty})`
+        `  ⏭️  ${data.nombre} ya existe (rol actual: ${existing.role}), no se modifica`
       );
     } else {
       await prisma.user.create({
@@ -2379,54 +2503,9 @@ async function seedStaff() {
     }
   }
 
-  // =============================================
-  // RECLUTADORES DE EJEMPLO (Lalo buscará freelancers)
-  // =============================================
-  const recruiters = [
-    {
-      email: 'reclutador1@inakat.com',
-      nombre: 'Reclutador',
-      apellidoPaterno: 'Demo',
-      role: 'recruiter'
-    },
-    {
-      email: 'reclutador2@inakat.com',
-      nombre: 'Patricia',
-      apellidoPaterno: 'González',
-      role: 'recruiter'
-    }
-  ];
-
-  console.log('\n👥 Creando reclutadores de prueba...');
-
-  let recruitersCreated = 0;
-  for (const data of recruiters) {
-    const existing = await prisma.user.findUnique({
-      where: { email: data.email }
-    });
-
-    if (existing) {
-      await prisma.user.update({
-        where: { email: data.email },
-        data: { role: 'recruiter' }
-      });
-      console.log(`  ⏭️  ${data.nombre} ya existe, actualizado a reclutador`);
-    } else {
-      await prisma.user.create({
-        data: {
-          email: data.email,
-          password: defaultPassword,
-          nombre: data.nombre,
-          apellidoPaterno: data.apellidoPaterno,
-          role: 'recruiter',
-          isActive: true,
-          emailVerified: new Date()
-        }
-      });
-      recruitersCreated++;
-      console.log(`  ✅ ${data.nombre} ${data.apellidoPaterno}`);
-    }
-  }
+  // Los reclutadores de prueba (reclutador1/reclutador2@inakat.com) ya los crea
+  // la sección 2.5 con SEED_RECRUITER_PASSWORD. Aquí se volvían a escribir con
+  // otros nombres y otra contraseña, y el resumen mentía sobre cuál era.
 
   // =============================================
   // RESUMEN
@@ -2434,23 +2513,17 @@ async function seedStaff() {
   console.log('\n✨ ¡Staff creado exitosamente!\n');
   console.log('📊 RESUMEN:');
   console.log(`  • Especialistas: ${specialistsCreated} nuevos`);
-  console.log(`  • Reclutadores: ${recruitersCreated} nuevos`);
 
   console.log('\n🔐 CREDENCIALES:');
-  console.log('   Password para todos: $SEED_STAFF_PASSWORD\n');
+  console.log('   Especialistas nuevos: $SEED_STAFF_PASSWORD (compartida: cámbiala en cuanto entren)');
+  console.log('   Los que ya existían conservan su contraseña y su rol.\n');
 
   console.log('👨‍💻 ESPECIALISTAS:');
   specialists.forEach((s) => {
     console.log(`   • ${s.nombre} (${s.specialty}): ${s.email}`);
   });
 
-  console.log('\n👥 RECLUTADORES:');
-  recruiters.forEach((r) => {
-    console.log(`   • ${r.nombre}: ${r.email}`);
-  });
-
   console.log('\n🚀 Para probar:');
-  console.log('   Reclutador: http://localhost:3000/recruiter/dashboard');
   console.log('   Especialista: http://localhost:3000/specialist/dashboard');
   console.log('   Admin (asignar): http://localhost:3000/admin/assignments\n');
 }
@@ -2502,6 +2575,7 @@ async function seedCreditPackages() {
 
   let created = 0;
   let updated = 0;
+  let skippedPackages = 0;
 
   for (const pkg of packages) {
     const existing = await prisma.creditPackage.findFirst({
@@ -2509,12 +2583,20 @@ async function seedCreditPackages() {
     });
 
     if (existing) {
-      await prisma.creditPackage.update({
-        where: { id: existing.id },
-        data: pkg
-      });
-      updated++;
-      console.log(`  ⏭️  ${pkg.name} ya existe, actualizado`);
+      // Los paquetes los administra el admin desde /admin/credit-packages:
+      // reescribirlos en cada seed devolvía precios viejos y reactivaba
+      // paquetes desactivados, y la compra cobraba el precio revertido.
+      if (forzarReset) {
+        await prisma.creditPackage.update({
+          where: { id: existing.id },
+          data: pkg
+        });
+        updated++;
+        console.log(`  ♻️  ${pkg.name} ya existe, SOBRESCRITO (SEED_FORCE_RESET=1)`);
+      } else {
+        skippedPackages++;
+        console.log(`  ⏭️  ${pkg.name} ya existe, se respeta el precio actual`);
+      }
     } else {
       await prisma.creditPackage.create({
         data: pkg
@@ -2526,7 +2608,8 @@ async function seedCreditPackages() {
 
   console.log(`\n✨ Paquetes de créditos:`);
   console.log(`   Creados: ${created}`);
-  console.log(`   Actualizados: ${updated}\n`);
+  console.log(`   Actualizados: ${updated}`);
+  console.log(`   Respetados (ya existían): ${skippedPackages}\n`);
 }
 
 // =============================================

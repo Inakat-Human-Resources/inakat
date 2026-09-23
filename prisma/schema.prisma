@@ -183,7 +183,9 @@ model Job {
   requirements    String?   @db.Text
   status          String    @default("active") // "active", "paused", "closed", "draft"
   closedReason    String?   // 'success' (contratación exitosa), 'cancelled' (cancelada sin contratar)
-  companyRating   Float?    @default(5.0)
+  // NO tiene default: no existe sistema de reseñas que respalde una calificación.
+  // Mientras no exista, debe quedar en null y no mostrarse como reputación verificada.
+  companyRating   Float?
   
   // Sistema de Créditos
   creditCost      Int       @default(0) // Cuántos créditos costó publicar
@@ -244,6 +246,10 @@ model Application {
   user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Información del candidato
+  // OJO: la relación con Candidate se reconstruye comparando candidateEmail con
+  // Candidate.email (no hay candidateId). Quien cambie el correo de un candidato
+  // debe arrastrar también Application.candidateEmail y User.email en la misma
+  // transacción, como hace PUT /api/admin/candidates/[id].
   candidateName   String
   candidateEmail  String
   candidatePhone  String?
@@ -252,7 +258,8 @@ model Application {
   cvUrl           String?
   coverLetter     String?   @db.Text
 
-  // Estado
+  // Estado. Lista canónica: APPLICATION_STATUSES en src/lib/application-status.ts
+  // (no es enum de Postgres: validar con isValidApplicationStatus antes de escribir).
   status          String    @default("pending") // "pending", "reviewing", "evaluating", "sent_to_specialist", "sent_to_company", "company_interested", "interviewed", "rejected", "accepted", "injected_by_admin", "discarded", "archived"
   notes           String?   @db.Text
 
@@ -270,11 +277,17 @@ model Application {
   // Calificaciones de habilidades
   skillRatings      SkillRating[]
 
+  // Una postulación por vacante y correo: antes se deduplicaba solo en código
+  // (findFirst + create), que no es atómico con dos peticiones simultáneas.
+  // Si la base ya tiene duplicados, 'db push' se niega a crear este índice: hay
+  // que deduplicar antes (decisión de negocio: qué fila se conserva).
+  @@unique([jobId, candidateEmail])
   @@index([jobId])
   @@index([userId])
   @@index([status])
   @@index([candidateEmail])
   @@index([createdAt])
+  @@index([jobId, status])
 }
 
 // =============================================
@@ -300,6 +313,12 @@ model PricingMatrix {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
+  // OJO: en PostgreSQL los NULL son distintos entre sí dentro de un índice único,
+  // así que este @@unique NO restringe nada cuando location es null (que es el caso
+  // de todas las filas que genera el seed y el sync). El índice único parcial que sí
+  // lo impide se crea por SQL en la migración 20260922000000_baseline_drift_e_indices
+  // ("PricingMatrix_profile_seniority_workMode_null_location_key"), porque Prisma
+  // no sabe declarar índices parciales.
   @@unique([profile, seniority, workMode, location])
   @@index([profile])
   @@index([seniority])
@@ -341,11 +360,11 @@ model CreditPurchase {
   amount          Int      // Cantidad de créditos comprados
   pricePerCredit  Float    // Precio por crédito (en MXN)
   totalPrice      Float    // Precio total pagado
-  packageType     String?  // "single", "pack_10", "pack_15", "pack_20"
-  
-  // Información de pago (Conekta)
-  paymentStatus   String   @default("pending") // "pending", "paid", "failed", "refunded"
-  paymentId       String?  @unique // ID de Conekta
+  packageType     String?  // "pack_1", "pack_10", "pack_15", "pack_20" (lo que escribe /api/credits/purchases)
+
+  // Información de pago (MercadoPago)
+  paymentStatus   String   @default("pending") // "pending", "paid", "failed" ("refunded" documentado pero ningún código lo escribe todavía)
+  paymentId       String?  @unique // ID del pago en MercadoPago
   paymentMethod   String?  // "card", "oxxo", "spei"
   receiptUrl      String?  // URL del recibo
   
@@ -391,6 +410,8 @@ model CreditTransaction {
   @@index([type])
   @@index([createdAt])
   @@index([jobId])
+  @@index([purchaseId])
+  @@index([userId, createdAt])
 }
 
 // =============================================
@@ -443,7 +464,7 @@ model Candidate {
   fotoUrl         String?
 
   // Fuente del candidato
-  source          String    @default("manual") // "manual", "linkedin", "occ", "referido"
+  source          String    @default("manual") // "manual", "linkedin", "occ", "referido" (admin) o "registro" (autoregistro en /api/auth/register)
   
   // Notas del admin
   notas           String?   @db.Text
@@ -553,7 +574,7 @@ model Specialty {
   // Color para UI (hex)
   color         String?   @default("#2b5d62")
   
-  // Subcategorías (JSON array de strings)
+  // Subcategorías (array nativo de Postgres, NO es un JSON serializado)
   subcategories String[]  @default([])
   
   // Orden de aparición
@@ -577,7 +598,7 @@ model Specialty {
 
 // NOTA: Roles válidos en User:
 // role String @default("user")
-// Valores válidos: "admin", "company", "user", "recruiter", "specialist", "candidate"
+// Valores válidos: "admin", "company", "user", "recruiter", "specialist", "candidate", "vendor"
 
 // Asignación de vacante a Reclutador y Especialista
 model JobAssignment {
@@ -629,25 +650,6 @@ model JobAssignment {
 }
 
 // =============================================
-// AGREGAR AL MODELO User (relaciones):
-// =============================================
-// Agregar estos campos al modelo User existente:
-//
-// // Especialidad (para specialists)
-// specialty         String?
-// 
-// // Relaciones de asignaciones
-// recruiterAssignments   JobAssignment[] @relation("RecruiterAssignments")
-// specialistAssignments  JobAssignment[] @relation("SpecialistAssignments")
-
-// =============================================
-// AGREGAR AL MODELO Job (relación):
-// =============================================
-// Agregar este campo al modelo Job existente:
-//
-// assignment        JobAssignment?
-
-// =============================================
 // NOTAS DE EVALUACIÓN (Reclutadores y Especialistas)
 // =============================================
 model EvaluationNote {
@@ -689,6 +691,10 @@ model DiscountCode {
   code              String    @unique
 
   // Vendor que creó el código
+  // vendor/my-code y vendor/my-sales lo tratan como 1 código por vendor. La unicidad
+  // real la impone el índice "DiscountCode_userId_key" que crea por SQL la migración
+  // 20260922000000_baseline_drift_e_indices (no se declara aquí como @unique porque
+  // eso convertiría la relación en 1-1 y rompería User.discountCodes).
   userId            Int
   user              User      @relation("VendorCodes", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -870,6 +876,9 @@ model IntegrationWebhook {
   user        User      @relation("IntegrationWebhookOwner", fields: [userId], references: [id], onDelete: Cascade)
 
   // Endpoint receptor (lo provee Worky2 en su pantalla de Integraciones)
+  // Un doble alta de la misma URL duplicaría cada candidate.accepted: lo impide el
+  // índice único parcial "IntegrationWebhook_userId_url_active_key" (userId, url)
+  // WHERE isActive, creado por SQL en 20260922000000_baseline_drift_e_indices.
   url         String
 
   // Secreto compartido para firmar el payload
