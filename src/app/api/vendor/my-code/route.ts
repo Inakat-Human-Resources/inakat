@@ -1,7 +1,9 @@
 // RUTA: src/app/api/vendor/my-code/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/auth';
 
 // Validar formato de código: solo letras y números, 4-20 caracteres
 function validateCodeFormat(code: string): { valid: boolean; error?: string } {
@@ -22,22 +24,43 @@ function validateCodeFormat(code: string): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
-// Helper para obtener userId de los headers (agregados por middleware)
-function getUserIdFromHeaders(request: NextRequest): number | null {
-  const userId = request.headers.get('x-user-id');
-  return userId ? parseInt(userId) : null;
+/**
+ * DINERO (AUTH-004): estas rutas se autorizaban SÓLO con la cabecera x-user-id,
+ * y el middleware no exigía ningún rol para /api/vendor/*. Cualquier cuenta
+ * —por ejemplo un candidato recién autorregistrado con otro correo— podía
+ * crearse un DiscountCode con 10% de descuento y 10% de comisión y usarlo desde
+ * su cuenta de empresa: 10% permanente y comisión a cobrar a favor de sí mismo,
+ * saltándose el anti auto-referido con una segunda cuenta.
+ *
+ * El rol 'vendor' lo asigna el admin (POST /api/admin/vendors), nadie se lo da
+ * a sí mismo. `requireRole` consulta la base, así que además respeta la
+ * desactivación y el cambio de rol sin esperar a que caduque el JWT (AUTH-002).
+ */
+const ROLES_VENDEDOR = ['vendor', 'admin'];
+
+type AccesoVendedor = { userId: number } | { denegado: NextResponse };
+
+async function requireVendedor(): Promise<AccesoVendedor> {
+  const auth = await requireRole(ROLES_VENDEDOR);
+
+  if ('error' in auth) {
+    return {
+      denegado: NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status }
+      )
+    };
+  }
+
+  return { userId: auth.user.id };
 }
 
-// GET - Obtener el código del usuario logueado
-export async function GET(request: NextRequest) {
+// GET - Obtener el código del vendedor logueado
+export async function GET() {
   try {
-    const userId = getUserIdFromHeaders(request);
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
+    const acceso = await requireVendedor();
+    if ('denegado' in acceso) return acceso.denegado;
+    const { userId } = acceso;
 
     const discountCode = await prisma.discountCode.findFirst({
       where: { userId },
@@ -68,16 +91,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Crear código de descuento para el usuario
+// POST - Crear código de descuento para el vendedor
 export async function POST(request: NextRequest) {
   try {
-    const userId = getUserIdFromHeaders(request);
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
+    const acceso = await requireVendedor();
+    if ('denegado' in acceso) return acceso.denegado;
+    const { userId } = acceso;
 
     // Verificar si ya tiene un código
     const existingCode = await prisma.discountCode.findFirst({
@@ -86,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     if (existingCode) {
       return NextResponse.json(
-        { success: false, error: 'Ya tienes un código de descuento. Usa PUT para actualizarlo.' },
+        { success: false, error: 'Ya tienes un código de descuento; edítalo desde tu panel.' },
         { status: 409 }
       );
     }
@@ -117,24 +136,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear código
-    const discountCode = await prisma.discountCode.create({
-      data: {
-        code: normalizedCode,
-        userId,
-        discountPercent: 10,
-        commissionPercent: 10,
-        isActive: true
-      },
-      select: {
-        id: true,
-        code: true,
-        discountPercent: true,
-        commissionPercent: true,
-        isActive: true,
-        createdAt: true
+    // Crear código.
+    //
+    // FIABILIDAD (#PAGO): la unicidad se comprueba con findUnique justo arriba
+    // (check-then-act), así que dos POST simultáneos —doble clic, dos pestañas—
+    // pasaban los dos. Si el texto coincidía, el segundo `create` lanzaba P2002
+    // y el catch genérico respondía 500 "Error al crear código de descuento"
+    // aunque el código SÍ se hubiera creado. Se traduce a 409.
+    let discountCode;
+    try {
+      discountCode = await prisma.discountCode.create({
+        data: {
+          code: normalizedCode,
+          userId,
+          discountPercent: 10,
+          commissionPercent: 10,
+          isActive: true
+        },
+        select: {
+          id: true,
+          code: true,
+          discountPercent: true,
+          commissionPercent: true,
+          isActive: true,
+          createdAt: true
+        }
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return NextResponse.json(
+          { success: false, error: 'Este código ya está en uso. Elige otro.' },
+          { status: 409 }
+        );
       }
-    });
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
@@ -150,16 +189,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Actualizar código del usuario
+// PUT - Actualizar código del vendedor
 export async function PUT(request: NextRequest) {
   try {
-    const userId = getUserIdFromHeaders(request);
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
+    const acceso = await requireVendedor();
+    if ('denegado' in acceso) return acceso.denegado;
+    const { userId } = acceso;
 
     // Verificar que tenga un código
     const existingCode = await prisma.discountCode.findFirst({
@@ -208,8 +243,23 @@ export async function PUT(request: NextRequest) {
       updateData.code = normalizedCode;
     }
 
-    // Si se proporciona isActive, actualizar
+    // AUTHZ (#PAGO): el dueño del código puede DESACTIVARLO, nunca reactivarlo.
+    //
+    // El PUT aceptaba cualquier isActive del propio vendedor. Si se detectaba un
+    // abuso y se ponía isActive=false (a mano en la base o desde el panel), al
+    // vendedor le bastaba un PUT {"isActive":true} para volver a tener un código
+    // válido en /api/discount-codes/validate y en las compras. Reactivar es del
+    // admin: PATCH /api/admin/vendors/[id].
     if (typeof isActive === 'boolean') {
+      if (isActive && !existingCode.isActive) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Tu código está desactivado. Solo un administrador puede reactivarlo.'
+          },
+          { status: 403 }
+        );
+      }
       updateData.isActive = isActive;
     }
 
@@ -220,19 +270,34 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const updatedCode = await prisma.discountCode.update({
-      where: { id: existingCode.id },
-      data: updateData,
-      select: {
-        id: true,
-        code: true,
-        discountPercent: true,
-        commissionPercent: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true
+    let updatedCode;
+    try {
+      updatedCode = await prisma.discountCode.update({
+        where: { id: existingCode.id },
+        data: updateData,
+        select: {
+          id: true,
+          code: true,
+          discountPercent: true,
+          commissionPercent: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+    } catch (error) {
+      // Misma carrera que en el POST: el findFirst de unicidad no la cierra.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return NextResponse.json(
+          { success: false, error: 'Este código ya está en uso. Elige otro.' },
+          { status: 409 }
+        );
       }
-    });
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,

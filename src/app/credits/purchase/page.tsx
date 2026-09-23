@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { Loader2, AlertCircle, Tag, X, Check } from 'lucide-react';
+import { notifyAuthChanged } from '@/lib/auth-events';
 
 interface CreditPackage {
   id: number;
@@ -21,13 +22,6 @@ interface CreditPackage {
 interface DiscountInfo {
   code: string;
   discountPercent: number;
-  vendorName: string;
-  pricing?: {
-    originalPrice: number;
-    discountAmount: number;
-    finalPrice: number;
-    savings: number;
-  };
 }
 
 // DINERO (#PAGO): aquí había una lista de precios escrita a mano que se usaba
@@ -44,8 +38,13 @@ export default function PurchaseCreditsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingPackages, setLoadingPackages] = useState(true);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [mp, setMp] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  // PAGO-024: el SDK de Mercado Pago se descarga aparte. Hasta que no avisa que
+  // está listo no se puede montar el formulario de tarjeta; antes, si el
+  // comprador pulsaba "Continuar al Pago" antes de que cargara, el recuadro se
+  // quedaba vacío para siempre porque nada volvía a disparar el montaje.
+  const [sdkReady, setSdkReady] = useState(false);
+  const [sdkError, setSdkError] = useState(false);
 
   // Estado para código de descuento
   const [discountCodeInput, setDiscountCodeInput] = useState('');
@@ -93,10 +92,19 @@ export default function PurchaseCreditsPage() {
 
   const selectedPkg = packages.find((p) => p.id === selectedPackageId);
 
-  // Calcular precios con descuento
+  // Calcular precios con descuento.
+  // PAGO-023: antes el total salía de `pricing` que devolvía el servidor al
+  // validar el código, es decir, del paquete que estaba elegido EN ESE MOMENTO.
+  // Al cambiar de paquete se revalidaba, pero si esa llamada fallaba (el
+  // validador está limitado a 10 intentos por cuarto de hora) el precio viejo se
+  // quedaba pegado y el comprador veía un total distinto al que se le cobraba.
+  // Ahora el descuento se calcula aquí sobre el paquete elegido, con la misma
+  // fórmula que usa el servidor (porcentaje redondeado al peso).
   const originalPrice = selectedPkg?.price || 0;
-  const discountAmount = discountInfo?.pricing?.discountAmount || 0;
-  const finalPrice = discountInfo?.pricing?.finalPrice || originalPrice;
+  const discountAmount = discountInfo
+    ? Math.round(originalPrice * (discountInfo.discountPercent / 100))
+    : 0;
+  const finalPrice = originalPrice - discountAmount;
 
   // Validar código de descuento
   const handleValidateCode = async () => {
@@ -142,45 +150,15 @@ export default function PurchaseCreditsPage() {
     setDiscountError(null);
   };
 
-  // Revalidar código cuando cambia el paquete
-  useEffect(() => {
-    if (discountInfo && selectedPkg) {
-      // Recalcular descuento con nuevo precio
-      const revalidate = async () => {
-        try {
-          const response = await fetch('/api/discount-codes/validate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              code: discountInfo.code,
-              packagePrice: selectedPkg.price
-            })
-          });
-
-          const data = await response.json();
-
-          if (data.success && data.valid) {
-            setDiscountInfo(data.data);
-          }
-        } catch {
-          // Silent fail for revalidation
-        }
-      };
-
-      revalidate();
-    }
-  }, [selectedPackageId]);
+  // PAGO-023: aquí había un efecto que revalidaba el código contra el servidor
+  // cada vez que se cambiaba de paquete, sólo para recalcular el precio. Ya no
+  // hace falta (el descuento se calcula arriba) y además fallaba en silencio.
 
   useEffect(() => {
-    if (
-      showCheckout &&
-      selectedPkg &&
-      typeof window !== 'undefined' &&
-      (window as any).MercadoPago
-    ) {
+    if (showCheckout && selectedPkg && sdkReady) {
       initMercadoPago();
     }
-  }, [showCheckout, selectedPkg, discountInfo]);
+  }, [showCheckout, selectedPkg, discountInfo, sdkReady]);
 
   const initMercadoPago = async () => {
     try {
@@ -191,12 +169,14 @@ export default function PurchaseCreditsPage() {
         return;
       }
 
+      if (typeof window === 'undefined' || !(window as any).MercadoPago) {
+        return;
+      }
+
       // Inicializar Mercado Pago
       const mercadopago = new (window as any).MercadoPago(publicKey, {
         locale: 'es-MX'
       });
-
-      setMp(mercadopago);
 
       // Limpiar contenedor anterior si existe
       const container = document.getElementById('mp-checkout-container');
@@ -293,6 +273,9 @@ export default function PurchaseCreditsPage() {
           packageId: selectedPackageId,
           packageType: `pack_${selectedPkg?.credits}`,
           discountCode: discountInfo?.code || null, // Enviar código de descuento
+          // PAGO-006: el precio que el comprador tiene delante. El servidor
+          // debe rechazar el cobro si no coincide con el que calcula él.
+          expectedAmount: finalPrice,
           paymentData: {
             token: formData.token,
             payment_method_id: formData.payment_method_id,
@@ -312,6 +295,8 @@ export default function PurchaseCreditsPage() {
             message += ` Ahorraste $${data.discount.discountAmount.toLocaleString()} con tu código de descuento.`;
           }
           setNotification({ type: 'success', message });
+          // UI-004: el saldo del Navbar quedaba desfasado tras comprar.
+          notifyAuthChanged();
           setTimeout(() => router.push('/company/dashboard'), 1500);
         } else if (data.status === 'pending' || data.status === 'in_process') {
           setNotification({ type: 'success', message: 'Pago recibido. Los créditos se agregarán cuando se confirme el pago.' });
@@ -348,8 +333,10 @@ export default function PurchaseCreditsPage() {
       {/* Cargar SDK de Mercado Pago */}
       <Script
         src="https://sdk.mercadopago.com/js/v2"
-        strategy="lazyOnload"
-        onLoad={() => {}}
+        strategy="afterInteractive"
+        onLoad={() => { setSdkReady(true); setSdkError(false); }}
+        onReady={() => { setSdkReady(true); setSdkError(false); }}
+        onError={() => setSdkError(true)}
       />
 
       <div className="min-h-screen bg-custom-beige py-12 md:py-20">
@@ -373,6 +360,25 @@ export default function PurchaseCreditsPage() {
                 className="ml-4 hover:opacity-70 text-xl"
               >
                 ×
+              </button>
+            </div>
+          )}
+
+          {/* PAGO-006: si los paquetes no cargan hay que decirlo. Antes el
+              mensaje se guardaba en el estado pero no se pintaba en ninguna
+              parte, así que el comprador sólo veía "no hay paquetes". */}
+          {error && (
+            <div className="mb-6 p-4 rounded-lg border border-red-300 bg-red-50 text-red-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span className="text-sm">{error}</span>
+              </div>
+              <button
+                onClick={fetchPackages}
+                disabled={loadingPackages}
+                className="px-4 py-2 bg-button-orange text-white rounded-lg text-sm font-semibold hover:bg-opacity-90 disabled:opacity-50 self-start sm:self-auto"
+              >
+                Reintentar
               </button>
             </div>
           )}
@@ -536,24 +542,24 @@ export default function PurchaseCreditsPage() {
                         </button>
                       </div>
 
-                      {discountInfo.pricing && selectedPkg && (
+                      {selectedPkg && (
                         <div className="mt-4 pt-4 border-t border-green-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                           <div>
                             <p className="text-xs text-gray-500">Precio original</p>
                             <p className="text-lg line-through text-gray-400">
-                              {formatPrice(discountInfo.pricing.originalPrice)}
+                              {formatPrice(originalPrice)}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Tu descuento</p>
                             <p className="text-lg font-bold text-red-500">
-                              -{formatPrice(discountInfo.pricing.discountAmount)}
+                              -{formatPrice(discountAmount)}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Tu precio</p>
                             <p className="text-lg font-bold text-green-600">
-                              {formatPrice(discountInfo.pricing.finalPrice)}
+                              {formatPrice(finalPrice)}
                             </p>
                           </div>
                         </div>
@@ -668,6 +674,23 @@ export default function PurchaseCreditsPage() {
               {/* Contenedor del Brick de Mercado Pago */}
               <div className="bg-white rounded-xl p-6 shadow-lg">
                 <h2 className="text-2xl font-bold mb-4">Información de Pago</h2>
+
+                {/* PAGO-024: mientras el SDK no esté listo se avisa, en vez de
+                    dejar un hueco en blanco sin explicación. */}
+                {sdkError ? (
+                  <div className="p-4 rounded-lg border border-red-300 bg-red-50 text-red-800 flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm">
+                      No se pudo cargar el formulario de pago de Mercado Pago. Revisa tu
+                      conexión o desactiva el bloqueador de anuncios y recarga la página.
+                    </span>
+                  </div>
+                ) : !sdkReady ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="animate-spin text-button-orange" size={32} />
+                    <span className="ml-3 text-gray-600">Cargando formulario de pago...</span>
+                  </div>
+                ) : null}
 
                 {/* Aquí se renderiza el Brick */}
                 <div id="mp-checkout-container"></div>

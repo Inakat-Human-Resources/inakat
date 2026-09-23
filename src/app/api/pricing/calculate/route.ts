@@ -14,14 +14,20 @@ import { calculateJobCreditCost } from '@/lib/pricing';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { profile, seniority, workMode } = body;
+    const { profile, seniority, workMode } = body ?? {};
 
-    // Validar campos requeridos
-    if (!profile || !seniority || !workMode) {
+    // VALIDACIÓN (#PAGO): la ruta es pública y sólo comprobaba truthiness. Un
+    // {"profile":{"not":""}} es un filtro válido de Prisma y se ejecutaba tal
+    // cual: devolvía la primera fila de la matriz sin autenticar. Un número o un
+    // array daba 500. Se exige string con longitud razonable.
+    const esTextoValido = (valor: unknown): valor is string =>
+      typeof valor === 'string' && valor.trim().length > 0 && valor.length <= 200;
+
+    if (!esTextoValido(profile) || !esTextoValido(seniority) || !esTextoValido(workMode)) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Campos requeridos: profile, seniority, workMode'
+          error: 'Campos requeridos (texto): profile, seniority, workMode'
         },
         { status: 400 }
       );

@@ -63,6 +63,60 @@ interface Summary {
   paidCommission: number;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+}
+
+// La API devuelve 20 ventas por tanda; la página tiene que pedir el resto.
+const VENTAS_POR_PAGINA = 20;
+
+const PAGINACION_VACIA: Pagination = {
+  page: 1,
+  limit: VENTAS_POR_PAGINA,
+  totalCount: 0,
+  totalPages: 1
+};
+
+/** PAGO-026: Anterior / Siguiente para el historial de ventas. */
+function ControlesPaginacion({
+  pagination,
+  page,
+  onChange
+}: {
+  pagination: Pagination;
+  page: number;
+  onChange: (nuevaPagina: number) => void;
+}) {
+  if (pagination.totalPages <= 1) return null;
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 md:px-6 py-4 border-t">
+      <p className="text-sm text-gray-600">
+        Página {page} de {pagination.totalPages} · {pagination.totalCount} ventas
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onChange(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Anterior
+        </button>
+        <button
+          onClick={() => onChange(page + 1)}
+          disabled={page >= pagination.totalPages}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function VendorDashboardPage() {
   // Estado para código de descuento
   const [discountCode, setDiscountCode] = useState<DiscountCode | null>(null);
@@ -85,20 +139,41 @@ export default function VendorDashboardPage() {
     paidCommission: 0
   });
   const [loadingSales, setLoadingSales] = useState(true);
+  // PAGO-026: el resumen cuenta TODAS las ventas, pero la tabla sólo traía las
+  // 20 últimas y no había forma de llegar a las anteriores ni a sus comprobantes.
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPagination, setSalesPagination] = useState<Pagination>(PAGINACION_VACIA);
 
   // Cargar código al montar
   useEffect(() => {
     fetchDiscountCode();
-    fetchSales();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Cargar ventas al montar y al cambiar de página
+  useEffect(() => {
+    fetchSales();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salesPage]);
 
   const fetchDiscountCode = async () => {
     try {
       setLoadingCode(true);
       const res = await fetch('/api/vendor/my-code');
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (data.success && data.data) {
+      // PAGO-050: un 500 o una sesión caducada no pueden verse igual que "aún
+      // no tienes código"; el vendedor acababa intentando crear uno y recibía
+      // un mensaje para desarrolladores.
+      if (!res.ok || !data?.success) {
+        // El 404 sí significa de verdad que todavía no hay código.
+        if (res.status !== 404) {
+          setError(data?.error || 'No pudimos cargar tu código de descuento. Intenta recargar la página.');
+        }
+        return;
+      }
+
+      if (data.data) {
         setDiscountCode(data.data);
         setNewCode(data.data.code);
       }
@@ -113,18 +188,27 @@ export default function VendorDashboardPage() {
   const fetchSales = async () => {
     try {
       setLoadingSales(true);
-      const res = await fetch('/api/vendor/my-sales');
-      const data = await res.json();
+      const params = new URLSearchParams({
+        page: String(salesPage),
+        limit: String(VENTAS_POR_PAGINA)
+      });
+      const res = await fetch(`/api/vendor/my-sales?${params.toString()}`);
+      const data = await res.json().catch(() => null);
 
-      if (data.success) {
-        setSales(data.data.sales || []);
-        setSummary(data.data.summary || {
-          totalSales: 0,
-          totalCommission: 0,
-          pendingCommission: 0,
-          paidCommission: 0
-        });
+      if (!res.ok || !data?.success) {
+        setSales([]);
+        setError(data?.error || 'No pudimos cargar tus ventas. Intenta recargar la página.');
+        return;
       }
+
+      setSales(data.data.sales || []);
+      setSummary(data.data.summary || {
+        totalSales: 0,
+        totalCommission: 0,
+        pendingCommission: 0,
+        paidCommission: 0
+      });
+      setSalesPagination(data.data.pagination || PAGINACION_VACIA);
     } catch (error) {
       console.error('Error fetching sales:', error);
       setError('Error al cargar las ventas. Intenta recargar la página.');
@@ -581,6 +665,12 @@ export default function VendorDashboardPage() {
                   </tbody>
                 </table>
               </div>
+
+              <ControlesPaginacion
+                pagination={salesPagination}
+                page={salesPage}
+                onChange={setSalesPage}
+              />
             </>
           )}
         </div>

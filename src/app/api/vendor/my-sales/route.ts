@@ -2,25 +2,33 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getPaginationParams } from '@/lib/pagination';
+import { requireRole } from '@/lib/auth';
+import { etiquetaEstadoComision } from '@/lib/comisiones';
 
-// Helper para obtener userId de los headers (agregados por middleware)
-function getUserIdFromHeaders(request: NextRequest): number | null {
-  const userId = request.headers.get('x-user-id');
-  return userId ? parseInt(userId) : null;
-}
+/**
+ * DINERO (AUTH-004): el panel de ventas y comisiones se autorizaba sólo con la
+ * cabecera x-user-id y el middleware no exigía ningún rol en /api/vendor/*, así
+ * que lo abría cualquier cuenta registrada. El rol 'vendor' lo asigna el admin
+ * (POST /api/admin/vendors); `requireRole` lo comprueba contra la base y con él
+ * `isActive`, sin esperar a que caduque el JWT (AUTH-002).
+ */
+const ROLES_VENDEDOR = ['vendor', 'admin'];
 
-// GET - Listar ventas donde se usó el código del usuario
+// GET - Listar ventas donde se usó el código del vendedor
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserIdFromHeaders(request);
-    if (!userId) {
+    const auth = await requireRole(ROLES_VENDEDOR);
+    if ('error' in auth) {
       return NextResponse.json(
-        { success: false, error: 'No autorizado' },
-        { status: 401 }
+        { success: false, error: auth.error },
+        { status: auth.status }
       );
     }
 
-    // Obtener el código del usuario
+    const userId = auth.user.id;
+
+    // Obtener el código del vendedor
     const discountCode = await prisma.discountCode.findFirst({
       where: { userId }
     });
@@ -41,11 +49,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Obtener parámetros de paginación
+    // VALIDACIÓN (#PAGO): esta ruta la puede llamar cualquier usuario
+    // autenticado. Con `parseInt` directo, ?page=0 daba skip=-20 (Prisma lanza
+    // -> 500), ?limit=abc daba NaN (-> 500), ?limit=0 dejaba totalPages en
+    // Infinity y un limit enorme traía TODAS las ventas con joins de tres
+    // niveles en una sola respuesta. El helper acota a [1, 100].
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPaginationParams(searchParams, 20);
 
     // Obtener ventas con el código
     const [sales, totalCount, summaryData] = await Promise.all([
@@ -54,11 +64,15 @@ export async function GET(request: NextRequest) {
         include: {
           purchase: {
             include: {
+              // PRIVACIDAD (#PAGO): el vendedor sólo necesita saber QUÉ empresa
+              // compró. Antes se le devolvían también el id interno de User y el
+              // nombre de la persona que administra la cuenta, y el select traía
+              // el email (que no se devolvía, pero se cargaba en cada fila: a un
+              // descuido de filtrarse). Como cualquier usuario puede crear un
+              // código y difundirlo, eso convertía la ruta en una fuga de datos
+              // de contacto de las empresas que lo usaran.
               user: {
                 select: {
-                  id: true,
-                  nombre: true,
-                  email: true,
                   companyRequest: {
                     select: {
                       nombreEmpresa: true
@@ -91,7 +105,12 @@ export async function GET(request: NextRequest) {
         _sum: { commissionAmount: true }
       }),
       prisma.discountCodeUse.aggregate({
-        where: { codeId: discountCode.id, commissionStatus: 'paid' },
+        where: {
+          codeId: discountCode.id,
+          commissionStatus: 'paid',
+          // Este agregado se había quedado sin el filtro de compra pagada.
+          purchase: { paymentStatus: 'paid' }
+        },
         _sum: { commissionAmount: true }
       })
     ]);
@@ -100,8 +119,6 @@ export async function GET(request: NextRequest) {
     const formattedSales = sales.map(sale => ({
       id: sale.id,
       company: {
-        id: sale.purchase.user.id,
-        nombre: sale.purchase.user.nombre,
         nombreEmpresa: sale.purchase.user.companyRequest?.nombreEmpresa || 'N/A'
       },
       purchase: {
@@ -114,7 +131,7 @@ export async function GET(request: NextRequest) {
       commission: {
         amount: sale.commissionAmount,
         status: sale.commissionStatus,
-        statusLabel: sale.commissionStatus === 'paid' ? 'Pagada' : 'Pendiente',
+        statusLabel: etiquetaEstadoComision(sale.commissionStatus),
         paidAt: sale.commissionPaidAt,
         dueDate: sale.paymentDueDate,
         proofUrl: sale.paymentProofUrl
