@@ -124,16 +124,16 @@ npm install
 ### 5. Configurar Variables de Entorno
 
 ```bash
-cp .env.example .env.local
-# Editar .env.local con tus valores
+cp .env.example .env
+# Editar .env con tus valores (el CLI de Prisma no lee .env.local)
 ```
 
 ### 6. Configurar Base de Datos
 
 ```bash
 npx prisma generate
-npx prisma migrate dev
-npx prisma db seed
+npx prisma db push   # NO migrate dev: el historial aún no tiene baseline
+npx prisma db seed   # exige las 8 variables SEED_*_PASSWORD
 ```
 
 ### 7. Ejecutar en Desarrollo
@@ -184,8 +184,12 @@ git checkout -b docs/improve-api-documentation
 ### 3. Hacer tus Cambios
 
 ```bash
-# Hacer commits frecuentes y atómicos
-git add .
+# Hacer commits frecuentes y atómicos.
+# Revisa SIEMPRE qué estás agregando antes de commitear: si probaste subidas en
+# local sin token de Blob, los archivos se guardaron en public/uploads (CV, INE,
+# actas). Esa carpeta está ignorada, pero no uses `git add .` a ciegas.
+git status
+git add <archivos concretos>
 git commit -m "feat: add email notification system"
 
 # Push a tu fork

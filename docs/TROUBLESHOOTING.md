@@ -160,15 +160,19 @@ The table `public.User` does not exist
 **Solución:**
 
 ```bash
-# Ejecutar migraciones
-npx prisma migrate dev
-
-# Si no funciona, reset completo (⚠️ borra datos)
-npx prisma migrate reset
+# Sincronizar el esquema con la base
+npx prisma db push
 
 # Regenerar cliente
 npx prisma generate
 ```
+
+> ⚠️ **No uses `prisma migrate dev` ni `prisma migrate reset` en este proyecto.**
+> El historial de `prisma/migrations` todavía no tiene baseline: sólo cubre una
+> parte de los modelos y el resto se aplicó con `db push`. `migrate dev` detecta
+> *drift* y ofrece **resetear el esquema** (borra todos los datos; si tu
+> `DATABASE_URL` apunta a una base compartida, se los borra a todos).
+> Mientras el baseline siga pendiente, el camino soportado es `db push`.
 
 ---
 
@@ -586,7 +590,7 @@ Si ninguna solución funciona:
    # Reinstalar
    npm install
    npx prisma generate
-   npx prisma migrate dev
+   npx prisma db push
    
    # Reiniciar
    npm run dev
@@ -611,8 +615,11 @@ npm run clean      # (si existe el script)
 rm -rf node_modules .next
 npm install
 
-# Reset completo de BD (⚠️ borra datos)
-npx prisma migrate reset
+# Sincronizar el esquema con la base (desarrollo)
+npx prisma db push
+
+# NO uses `npx prisma migrate reset`: borra todos los datos y el historial de
+# migraciones de este proyecto aún no tiene baseline.
 
 # Ver info de Node/npm
 node --version
@@ -632,9 +639,9 @@ npx prisma db pull
 Cuando algo no funciona, revisa:
 
 - [ ] ¿Servidor corriendo? (`npm run dev`)
-- [ ] ¿Variables de entorno en `.env.local`?
+- [ ] ¿Variables de entorno en `.env`? (Prisma CLI no lee `.env.local`)
 - [ ] ¿Prisma client generado? (`npx prisma generate`)
-- [ ] ¿Migraciones ejecutadas? (`npx prisma migrate dev`)
+- [ ] ¿Esquema sincronizado? (`npx prisma db push`)
 - [ ] ¿Puerto 3000 libre?
 - [ ] ¿Conexión a internet OK?
 - [ ] ¿Supabase activo? (https://status.supabase.com)

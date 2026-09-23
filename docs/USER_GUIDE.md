@@ -83,7 +83,9 @@ La vacante seleccionada se resaltará y verás:
 | 🟢 Aceptado | ¡Felicidades! Fuiste contratado |
 | 🔴 Rechazado | No fuiste seleccionado esta vez |
 
-**Nota:** Actualmente no hay un panel para candidatos. Esta funcionalidad está planificada para Q1 2025.
+**Nota:** El panel de candidatos ya existe: con sesión iniciada, en
+`/my-applications` (y `/candidate/*` para las cuentas con rol candidato) puedes
+seguir el estado de cada postulación.
 
 ---
 
@@ -273,19 +275,15 @@ Click en el botón del estado deseado:
 
 ### 1. Iniciar Sesión como Admin
 
-**Credenciales por defecto:**
+**Credenciales:**
 
-```
-Email: admin@inakat.com
-Password: AdminInakat2024!
-```
+Las cuentas de administrador se crean con el seed. El email es el de la variable
+`ADMIN_EMAIL` y la contraseña la de `SEED_ADMIN_PASSWORD` (el segundo admin usa
+`SEED_ADMIN2_PASSWORD`). Están en el `.env` del entorno; **no se publican en la
+documentación**.
 
-O
-
-```
-Email: guillermo.sanchezy@gmail.com
-Password: Guillermo2024!
-```
+En producción, pide el acceso al responsable del sistema: no hay contraseñas
+"por defecto".
 
 ---
 

@@ -144,49 +144,50 @@ Install Command: npm install (auto-detectado)
 
 Agrega cada variable:
 
+La lista completa está en `.env.example`. Estas son las que **tienen que estar**
+en Vercel para que la aplicación funcione entera:
+
+| Variable | Obligatoria | Nota |
+| -------- | ----------- | ---- |
+| `DATABASE_URL` | Sí | Pooler en **modo transacción**: puerto **6543** con `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | Sí | Mismo host del pooler, puerto **5432** (modo sesión), para operaciones de esquema |
+| `JWT_SECRET` | Sí | Distinto al de desarrollo, mínimo 32 caracteres. La app **no arranca** sin él |
+| `JWT_EXPIRES_IN` | No | Por defecto `7d` |
+| `BLOB_READ_WRITE_TOKEN` | Sí | Sin él, las subidas intentan escribir en disco (no funciona en serverless) |
+| `ADMIN_EMAIL`, `ADMIN_NOMBRE` | Sólo si se siembra | `ADMIN_PASSWORD` ya no se usa |
+| `MERCADOPAGO_ACCESS_TOKEN` | Sí (cobros) | Sin él, el checkout responde "Error de configuración" |
+| `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY` | Sí (cobros) | **Con** el prefijo `NEXT_PUBLIC_`: sin él no llega al navegador |
+| `MERCADOPAGO_WEBHOOK_SECRET` | Sí (cobros) | En producción, sin él el webhook responde **500 "Webhook not configured"** y los pagos nunca se acreditan |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Sí | Sin SMTP, `sendEmail` devuelve false: los correos de reset se pierden en silencio |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Sí | Autocompletado de direcciones; restringir la key por dominio |
+| `NEXT_PUBLIC_APP_URL` | Sí | URL pública final (enlaces de los correos) |
+
 ```env
-# Base de datos
-DATABASE_URL
-Value: postgresql://postgres.xxx:[PASSWORD]@...pooler.supabase.com:5432/postgres
-Environment: Production
-
-DIRECT_URL  
-Value: postgresql://postgres.xxx:[PASSWORD]@...compute.amazonaws.com:5432/postgres
-Environment: Production
-
-# Autenticación (GENERAR NUEVO, diferente a dev!)
-JWT_SECRET
-Value: [nuevo secret generado con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"]
-Environment: Production
-
-# Blob Storage
-BLOB_READ_WRITE_TOKEN
-Value: vercel_blob_rw_xxxxx
-Environment: Production, Preview
-
-# Admin
-ADMIN_EMAIL
-Value: admin@inakat.com
-Environment: Production
-
-ADMIN_PASSWORD
-Value: [contraseña segura para producción]
-Environment: Production
-
-ADMIN_NOMBRE
-Value: Administrador
-Environment: Production
-
-# App URL (ACTUALIZAR después del deploy)
-NEXT_PUBLIC_APP_URL
-Value: https://inakat.vercel.app
-Environment: Production, Preview
+# Ejemplo de las dos URLs de base de datos
+DATABASE_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
 
 **Tips:**
 - Click "Add Another" para cada variable
-- Selecciona "Production" para variables de prod
-- Algunas variables (BLOB, NEXT_PUBLIC) pueden ir en Preview también
+- Las `NEXT_PUBLIC_*` y `BLOB_READ_WRITE_TOKEN` conviene ponerlas también en Preview
+- ⚠️ Con `DATABASE_URL` en el puerto 5432 (modo sesión), varias lambdas
+  concurrentes agotan las conexiones: *"max clients reached in session mode"*
+- Después de cambiar una variable hay que **redeployar**: Next incrusta las
+  `NEXT_PUBLIC_*` en el build
+
+---
+
+### Registrar el webhook de MercadoPago
+
+Además de las variables, hay un paso en el panel de MercadoPago que no se puede
+hacer desde Vercel:
+
+1. MercadoPago → Tu aplicación → **Webhooks**
+2. URL de notificación: `https://<tu-dominio>/api/webhooks/mercadopago`
+3. Evento: **Pagos** (`payment`)
+4. Copia la **clave secreta** que genera y ponla en `MERCADOPAGO_WEBHOOK_SECRET`
+5. Verifica con el botón de prueba: debe responder 200, no 500
 
 ---
 
@@ -223,56 +224,59 @@ Click en el link y verifica:
 
 ## 🗄️ Configurar Base de Datos en Producción
 
-### Ejecutar Migraciones
+### Aplicar el esquema
 
-**Opción 1: Desde local con producción DB**
+> ⚠️ **`prisma migrate deploy` NO funciona hoy en este proyecto.** El historial
+> de migraciones no tiene baseline: sólo cubre parte de las tablas y el resto se
+> creó con `db push`. `migrate deploy` fallaría con *"relation already exists"*.
+> Hasta que se genere la baseline (ver `docs/DATABASE_SCHEMA.md`), el esquema se
+> aplica con `db push` contra `DIRECT_URL`, **con respaldo previo**.
+
+**Desde local, apuntando a producción (con cuidado):**
 
 ```bash
-# Crear archivo .env.production
-DATABASE_URL="[tu URL de producción]"
-DIRECT_URL="[tu DIRECT URL de producción]"
-
-# Ejecutar migraciones
-DATABASE_URL=$DIRECT_URL npx prisma migrate deploy
-
-# O en Windows:
-set DATABASE_URL=[DIRECT_URL]
-npx prisma migrate deploy
-```
-
-**Opción 2: Desde Vercel (Recomendado)**
-
-1. Instala Vercel CLI:
-```bash
-npm i -g vercel
-```
-
-2. Login:
-```bash
-vercel login
-```
-
-3. Link proyecto:
-```bash
-vercel link
-```
-
-4. Ejecutar migraciones:
-```bash
+# 1. Respaldo de la base ANTES de tocar nada
+# 2. Traer las variables de producción
 vercel env pull .env.production
-npx prisma migrate deploy
+
+# 3. Revisar qué cambiaría (no aplica nada)
+npx dotenv -e .env.production -- prisma migrate diff \
+  --from-url "$DIRECT_URL" --to-schema-datamodel prisma/schema.prisma
+
+# 4. Antes de aplicar: comprobar que no hay postulaciones duplicadas.
+#    Si esta consulta devuelve filas, `db push` no puede crear
+#    @@unique([jobId, candidateEmail]) en Application: hay que deduplicarlas antes.
+#    SELECT "jobId", "candidateEmail", COUNT(*) FROM "Application"
+#    GROUP BY 1,2 HAVING COUNT(*) > 1;
+
+# 5. Aplicar (usa DIRECT_URL, no el pooler)
+npx dotenv -e .env.production -- prisma db push
+
+# 6. Reaplicar los índices únicos parciales (DB-009, DB-022). El schema no puede
+#    declararlos, así que `db push` puede borrarlos. El script es idempotente.
+npx dotenv -e .env.production -- prisma db execute   --file prisma/migrations/20260922000000_baseline_drift_e_indices/migration.sql   --schema prisma/schema.prisma
+```
+
+**Tras el deploy**, verifica que las tablas de la integración existen:
+
+```sql
+SELECT to_regclass('"IntegrationApiKey"'), to_regclass('"IntegrationWebhook"');
 ```
 
 ---
 
-### Poblar con Datos de Ejemplo (Opcional)
+### Catálogos en una base remota (sin datos de ejemplo)
+
+**No se siembran datos demo en producción.** El seed se niega a correr con
+`NODE_ENV=production` o contra un host que no sea local, salvo que se exporte
+`SEED_ALLOW_REMOTE=1` (DB-010).
+
+Para cargar **sólo el admin y los catálogos** (especialidades, matriz de
+precios, paquetes) en una base remota, hay que pedirlo de forma explícita:
 
 ```bash
-# Solo si quieres datos de ejemplo en producción
-npx prisma db seed
+SEED_ONLY_CATALOGS=1 SEED_ALLOW_REMOTE=1 npx prisma db seed
 ```
-
-**⚠️ Recomendación:** No usar seed en producción, crear datos manualmente
 
 ---
 

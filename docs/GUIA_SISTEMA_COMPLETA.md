@@ -40,7 +40,7 @@ INAKAT es una plataforma de reclutamiento integral para el mercado mexicano que 
 | Estilos | Tailwind CSS 3.4 |
 | Backend | Next.js API Routes |
 | Base de Datos | PostgreSQL (Supabase) |
-| ORM | Prisma 5.22 |
+| ORM | Prisma 6.6 |
 | Autenticacion | JWT + bcrypt |
 | Pagos | Mercado Pago |
 | Almacenamiento | Vercel Blob |
@@ -422,17 +422,19 @@ git clone [repo]
 npm install
 
 # Configurar variables de entorno
-cp .env.example .env.local
-# Editar .env.local con tus valores
+# (debe ser .env: el CLI de Prisma no lee .env.local)
+cp .env.example .env
+# Editar .env con tus valores
 
 # Generar cliente Prisma
 npx prisma generate
 
-# Ejecutar migraciones
-npx prisma migrate dev
+# Crear/actualizar las tablas
+# (NO usar migrate dev: el historial de migraciones aun no tiene baseline)
+npx prisma db push
 
-# Sembrar datos
-npm run seed
+# Sembrar datos (exige las 8 variables SEED_*_PASSWORD)
+npx prisma db seed
 
 # Iniciar desarrollo
 npm run dev
@@ -440,20 +442,33 @@ npm run dev
 
 ### Variables de Entorno
 
+La plantilla completa es `.env.example`. Resumen:
+
 ```env
 # Base de datos
-DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
+DATABASE_URL="postgresql://...:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://...:5432/postgres"
 
 # Auth
-JWT_SECRET="..."
+JWT_SECRET="..."          # minimo 32 caracteres
+JWT_EXPIRES_IN="7d"
 
 # Mercado Pago
 MERCADOPAGO_ACCESS_TOKEN="..."
-MERCADOPAGO_PUBLIC_KEY="..."
+NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY="..."   # con prefijo NEXT_PUBLIC_
+MERCADOPAGO_WEBHOOK_SECRET="..."
 
 # Vercel Blob
 BLOB_READ_WRITE_TOKEN="..."
+
+# Correo (sin esto, los correos se descartan en silencio)
+SMTP_HOST="..." ; SMTP_PORT="465" ; SMTP_USER="..." ; SMTP_PASS="..." ; SMTP_FROM="..."
+
+# Mapas
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="..."
+
+# Seed (8 variables, sin valores por defecto)
+SEED_ADMIN_PASSWORD="..." # ...y SEED_ADMIN2/COMPANY/RECRUITER/SPECIALIST/CANDIDATE/USER/STAFF
 
 # App
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
@@ -469,8 +484,8 @@ npm run start         # Servidor de produccion
 
 # Base de datos
 npx prisma studio     # GUI de BD
-npx prisma migrate dev # Nueva migracion
-npm run seed          # Sembrar datos
+npx prisma db push    # Sincronizar esquema (NO usar migrate dev: sin baseline)
+npx prisma db seed    # Sembrar datos
 
 # Tests
 npm test              # Ejecutar tests

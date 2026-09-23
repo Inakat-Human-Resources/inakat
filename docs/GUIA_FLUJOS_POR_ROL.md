@@ -266,7 +266,8 @@
 - [ ] GET /api/applications requiere admin
 - [ ] POST /api/company-requests funciona sin login
 - [ ] GET /api/company-requests requiere admin
-- [ ] POST /api/upload requiere login
+- [ ] POST /api/upload NO requiere login (excepcion publica para el registro de
+      empresa/candidato; el freno es el rate-limit por IP). GET /api/upload si.
 
 ### Validaciones de Negocio
 

@@ -10,7 +10,8 @@ Antes de comenzar, asegúrate de tener instalado:
 
 ### Software Requerido
 
-- **Node.js** v18.0.0 o superior
+- **Node.js** v22.0.0 o superior (hay dependencias, como `@vercel/blob`, que exigen >= 20;
+  CI y producción usan la major del `.nvmrc`)
   - Verifica: `node --version`
   - Descarga: https://nodejs.org/
 
@@ -57,10 +58,10 @@ npm install
 ```
 
 Esto instalará todas las dependencias listadas en `package.json`:
-- Next.js 14
-- React 18
-- Prisma
-- TypeScript
+- Next.js 15 (App Router)
+- React 19
+- Prisma 6
+- TypeScript 5
 - Tailwind CSS
 - Y más...
 
@@ -87,17 +88,21 @@ Esto instalará todas las dependencias listadas en `package.json`:
 2. Baja hasta "Connection string"
 3. Copia ambas URLs:
 
-**Connection Pooling (para Prisma):**
+**Connection Pooling — `DATABASE_URL` (la que usa la app, modo transacción):**
+```
+postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+```
+
+**Direct Connection — `DIRECT_URL` (la que usa Prisma para el esquema, modo sesión):**
 ```
 postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.pooler.supabase.com:5432/postgres
 ```
 
-**Direct Connection (para migraciones):**
-```
-postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.compute.amazonaws.com:5432/postgres
-```
-
 4. Reemplaza `[PASSWORD]` con tu contraseña de BD
+
+> El puerto **6543 con `pgbouncer=true`** es obligatorio para `DATABASE_URL` en
+> entornos serverless: con el puerto 5432 (modo sesión) varias lambdas agotan las
+> conexiones ("max clients reached in session mode").
 
 ---
 
@@ -123,52 +128,43 @@ postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.compute.amazonaws.com:5432/
 
 ### 5. Configurar Variables de Entorno
 
-Crea un archivo `.env.local` en la raíz del proyecto:
+La plantilla completa y **única fuente de verdad** es `.env.example`. Cópiala a
+`.env` (no a `.env.local`: el CLI de Prisma — `db push`, `db seed`, `studio` —
+sólo lee `.env`):
 
 ```bash
-touch .env.local
+cp .env.example .env
 ```
 
-Edita el archivo con tu editor favorito y agrega:
+Edita `.env` y rellena, como mínimo:
 
-```env
-# =============================================
-# BASE DE DATOS (Supabase)
-# =============================================
-DATABASE_URL="postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.pooler.supabase.com:5432/postgres"
-DIRECT_URL="postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.compute.amazonaws.com:5432/postgres"
-
-# =============================================
-# AUTENTICACIÓN
-# =============================================
-JWT_SECRET="genera-un-secret-super-largo-y-seguro-aqui-min-32-caracteres"
-
-# =============================================
-# ALMACENAMIENTO (Vercel Blob)
-# =============================================
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_xxxxxxxxx"
-
-# =============================================
-# ADMIN POR DEFECTO
-# =============================================
-ADMIN_EMAIL="admin@inakat.com"
-ADMIN_PASSWORD="AdminInakat2024!"
-ADMIN_NOMBRE="Administrador"
-
-# =============================================
-# APLICACIÓN
-# =============================================
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
+| Variable(s)                                                                 | Para qué                                              |
+| --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `DATABASE_URL`, `DIRECT_URL`                                                  | Base de datos (ver el paso anterior)                   |
+| `JWT_SECRET` (mínimo 32 caracteres), `JWT_EXPIRES_IN`                         | Autenticación                                          |
+| `BLOB_READ_WRITE_TOKEN`                                                       | Subida de archivos (sin él se escribe en `public/uploads`) |
+| `ADMIN_EMAIL`, `ADMIN_NOMBRE`                                                 | Datos del admin que crea el seed                       |
+| `SEED_ADMIN_PASSWORD`, `SEED_ADMIN2_PASSWORD`, `SEED_COMPANY_PASSWORD`, `SEED_RECRUITER_PASSWORD`, `SEED_SPECIALIST_PASSWORD`, `SEED_CANDIDATE_PASSWORD`, `SEED_USER_PASSWORD`, `SEED_STAFF_PASSWORD` | Contraseñas de las cuentas del seed (las 8 son obligatorias) |
+| `MERCADOPAGO_ACCESS_TOKEN`, `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY`, `MERCADOPAGO_WEBHOOK_SECRET` | Compra de créditos y webhook de pagos    |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`               | Correos (reset de contraseña, avisos)                  |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                             | Autocompletado de direcciones                          |
+| `NEXT_PUBLIC_APP_URL`                                                         | URL pública de la app                                  |
 
 **⚠️ IMPORTANTE:**
 
-- Reemplaza `[PASSWORD]` con tu contraseña de Supabase
+- `ADMIN_PASSWORD` ya **no se usa**: el seed lee `SEED_ADMIN_PASSWORD`.
 - Genera un `JWT_SECRET` seguro:
   ```bash
   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   ```
-- **NUNCA** comitees `.env.local` a Git
+- Genera contraseñas de seed fuertes y distintas por entorno:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(16).toString('base64'))"
+  ```
+- **NUNCA** comitees `.env` ni `.env.local` a Git, ni publiques estas
+  contraseñas en la documentación.
+- Si trabajas con `.env.local` para Next, ejecuta los comandos de Prisma con
+  `npx dotenv -e .env.local -- prisma ...`.
 
 ---
 
@@ -182,18 +178,19 @@ npx prisma generate
 
 Esto genera el cliente de Prisma basado en tu `schema.prisma`.
 
-#### B) Ejecutar Migraciones
+#### B) Crear las Tablas
 
 ```bash
-npx prisma migrate dev
+npx prisma db push
 ```
 
-Esto creará todas las tablas en tu base de datos.
+Esto crea en tu base de datos todas las tablas de `schema.prisma`.
 
-Cuando pregunte por el nombre de la migración, escribe:
-```
-initial_setup
-```
+> ⚠️ **No uses `prisma migrate dev` ni `prisma migrate reset`.** El historial de
+> `prisma/migrations` todavía no tiene baseline (sólo cubre una parte de los
+> modelos), así que `migrate dev` detecta *drift* y ofrece **borrar el esquema
+> completo**. Hasta que se genere la baseline, el camino soportado en desarrollo
+> es `db push`.
 
 #### C) Poblar con Datos de Ejemplo
 
@@ -201,19 +198,17 @@ initial_setup
 npx prisma db seed
 ```
 
+El seed aborta con la lista de variables faltantes si no están definidas las 8
+`SEED_*_PASSWORD`.
+
 Esto creará:
 - ✅ 2 usuarios admin
-- ✅ 18 vacantes de ejemplo
-- ✅ 12 aplicaciones de ejemplo
+- ✅ Empresas, reclutadores, especialistas y candidatos de ejemplo
+- ✅ Vacantes y aplicaciones de ejemplo
 
-**Credenciales de Admin:**
-```
-Email: admin@inakat.com
-Password: AdminInakat2024!
-
-Email: guillermo.sanchezy@gmail.com
-Password: Guillermo2024!
-```
+**Credenciales de Admin:** el email es el de `ADMIN_EMAIL` y la contraseña la que
+pusiste en `SEED_ADMIN_PASSWORD` (el segundo admin usa `SEED_ADMIN2_PASSWORD`).
+No se documentan contraseñas en este repositorio.
 
 ---
 
@@ -226,7 +221,7 @@ npm run dev
 Deberías ver:
 
 ```
-▲ Next.js 14.0.0
+▲ Next.js 15.x
 - Local:        http://localhost:3000
 - Network:      http://192.168.1.x:3000
 
@@ -256,7 +251,7 @@ Deberías ver 18 vacantes
 ```
 http://localhost:3000/login
 ```
-Usa: admin@inakat.com / AdminInakat2024!
+Usa el `ADMIN_EMAIL` y el `SEED_ADMIN_PASSWORD` de tu `.env`.
 
 **✅ Panel Admin**
 ```
@@ -342,22 +337,26 @@ PORT=3001 npm run dev
 # Regenerar cliente de Prisma
 npx prisma generate
 
-# Reset completo de BD (⚠️ borra todos los datos)
-npx prisma migrate reset
+# Sincronizar el esquema con la base (desarrollo)
+npx prisma db push
 ```
+
+> No ejecutes `prisma migrate reset` ni `prisma migrate dev` mientras el
+> historial de migraciones no tenga baseline: borran datos y generan
+> migraciones que luego fallan en producción con "relation already exists".
 
 ---
 
 ## ✅ Checklist de Instalación
 
-- [ ] Node.js 18+ instalado
+- [ ] Node.js 22+ instalado
 - [ ] Repositorio clonado
 - [ ] Dependencias instaladas
 - [ ] Proyecto Supabase creado
 - [ ] Vercel Blob configurado
-- [ ] `.env.local` creado y configurado
+- [ ] `.env` creado a partir de `.env.example` (incluidas las 8 `SEED_*_PASSWORD`)
 - [ ] Prisma client generado
-- [ ] Migraciones ejecutadas
+- [ ] Esquema sincronizado con `npx prisma db push`
 - [ ] Seed ejecutado
 - [ ] Servidor corriendo en http://localhost:3000
 - [ ] Home carga correctamente

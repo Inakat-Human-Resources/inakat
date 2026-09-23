@@ -63,63 +63,58 @@ const ALLOWED_TYPES = [
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 ```
 
-**✅ Almacenamiento Seguro**
-- Vercel Blob Storage
-- URLs firmadas con expiración
-- No acceso público directo
+**⚠️ Almacenamiento (estado real, INFRA-028)**
+- Vercel Blob Storage con `access: 'public'` (`src/app/api/upload/route.ts`).
+- Las URLs **no** están firmadas ni caducan: quien tenga la URL de un CV o de
+  un documento puede descargarlo sin autenticarse. La protección es sólo que
+  el nombre del archivo es aleatorio y no se lista en ningún sitio público.
+- Pasar a blobs privados servidos por una ruta autenticada es un pendiente
+  conocido (ver `docs/AUDITORIA-2026-06.md`, #56).
+- Sin `BLOB_READ_WRITE_TOKEN` (desarrollo) los archivos van a `public/uploads`,
+  que está en `.gitignore`.
 
 ---
 
 ### API Endpoints
 
 **✅ Validación de Inputs**
-- Zod schemas para validación
-- Sanitización de datos
+- Zod schemas para validación (`src/lib/validations.ts`)
+- Sanitización de datos (`src/lib/sanitize.ts`)
 - Validación de tipos
 
-**✅ Rate Limiting**
-- Planificado para Q1 2025
-- 100 requests/minuto por IP (endpoints públicos)
-- 1000 requests/minuto (autenticado)
+**✅ Rate Limiting (`src/lib/rate-limit.ts`)**
+- Implementado **en memoria por instancia**: en Vercel cada lambda lleva su
+  propio contador, así que el límite efectivo es aproximado.
+- Login: 7 intentos fallidos / 15 min por IP y 10 / 15 min por cuenta.
+- Registro, recuperación y cambio de contraseña, subidas (15 / h por IP),
+  contacto, postulaciones y validación de códigos de descuento tienen su propio
+  límite. Al superarlo se responde **429**.
 
-**✅ CORS**
-- Configurado para dominios específicos
-- Headers de seguridad
+**CORS**
+- No hay configuración CORS propia: se aplica la política same-origin del
+  navegador. La API de integración (`/api/integration/*`) se consume
+  servidor-a-servidor con `Authorization: Bearer` / `X-Api-Key`.
 
 ---
 
 ### Headers de Seguridad
 
-```javascript
-// next.config.js
-module.exports = {
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY'
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin'
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
-          }
-        ]
-      }
-    ];
-  }
-};
-```
+Definidas en `next.config.ts` (y comprobadas por
+`__tests__/config/next-config.test.ts`):
+
+| Cabecera | Valor |
+|----------|-------|
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(self), browsing-topics=()` |
+| `Content-Security-Policy-Report-Only` | política con los orígenes de Mercado Pago, Google Maps y Vercel Blob |
+
+La CSP está en modo **Report-Only** (avisa, no bloquea). Pasarla a
+`Content-Security-Policy` es una acción manual pendiente, tras recorrer en
+staging el checkout y los formularios con mapa sin violaciones. Además
+`poweredByHeader: false` quita `X-Powered-By`.
 
 ---
 
@@ -296,16 +291,15 @@ const user = jwt.decode(token);
 
 **✅ BIEN:**
 ```typescript
-// Token en httpOnly cookie
-res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Secure; SameSite=Strict`);
+// Token en cookie httpOnly (así lo hace src/app/api/auth/login/route.ts)
+response.cookies.set('auth-token', result.token, getAuthCookieOptions());
 
-// Verificar token
-import * as jose from 'jose';
-
-const { payload } = await jose.jwtVerify(
-  token,
-  new TextEncoder().encode(secret)
-);
+// Verificar token y estado vigente del usuario (src/lib/auth.ts, jsonwebtoken):
+// requireAuth/requireRole consultan la base y rechazan cuentas inactivas.
+const auth = await requireRole('admin');
+if ('error' in auth) {
+  return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+}
 ```
 
 ---
@@ -402,9 +396,19 @@ snyk monitor
 
 ### Versión Actual
 
-**Ninguna vulnerabilidad conocida actualmente.**
+Hay riesgos conocidos y aceptados temporalmente. La lista viva está en:
 
-Historial se mantendrá aquí conforme se descubran y resuelvan.
+- `docs/AUDITORIA-2026-06.md` — acciones manuales pendientes (entre ellas los
+  blobs públicos, #56, y la baseline de migraciones, #8).
+- `docs/AUDITORIA-2026-09.md` — auditoría en remediación.
+
+Resumen de los que afectan a datos personales:
+
+- Documentos subidos (CV, identificaciones, actas) accesibles por URL pública
+  sin autenticación (ver "Almacenamiento").
+- `POST /api/upload` es público para permitir el registro de empresas; su único
+  freno es el rate limit en memoria.
+- CSP todavía en modo Report-Only.
 
 ---
 
@@ -435,8 +439,11 @@ Historial se mantendrá aquí conforme se descubran y resuelvan.
 - ✅ Protección de rutas con middleware
 - ✅ Headers de seguridad configurados
 
-### Planificado Q1 2025
-- Rate limiting
+### 2026
+- ✅ Rate limiting en memoria (login, registro, subidas, contacto...)
+- ✅ Cabeceras de seguridad (#86) y CSP en Report-Only (INFRA-014)
+
+### Pendiente
 - 2FA (Two-Factor Authentication)
 - Logs de auditoría
 - Session management mejorado

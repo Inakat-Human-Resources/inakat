@@ -3,9 +3,9 @@
 **INAKAT** es una plataforma moderna de reclutamiento que conecta empresas con talento calificado en México. Combina evaluación humana (psicólogos y especialistas técnicos) con soporte de IA para ofrecer procesos de selección de alta calidad.
 
 > **Versión:** 1.0.0 MVP  
-> **Última actualización:** 14 de Diciembre 2024  
-> **Tests:** 258 pasando ✅  
-> **Estado:** MVP 98% Completo
+> **Última actualización:** 22 de Septiembre 2026  
+> **Tests:** `npm test` (el conteo exacto lo imprime jest; no se documenta aquí para no quedar desfasado)  
+> **Estado:** en producción · auditoría 2026-09 en remediación (ver `docs/AUDITORIA-2026-09.md`)
 
 ---
 
@@ -86,9 +86,9 @@
 
 ### Testing
 
-- **Jest 30** - Framework de testing
+- **Jest 30** - Framework de testing (unitarios y de API)
 - **Testing Library** - Testing de componentes
-- **258 tests** pasando ✅
+- **Playwright** - Pruebas end-to-end (`npm run test:e2e`)
 
 ---
 
@@ -102,6 +102,7 @@
 | **specialist** | Especialista técnico      | `/specialist/*`                    |
 | **candidate**  | Candidato con cuenta      | `/candidate/*`, `/my-applications` |
 | **user**       | Usuario general           | `/talents`, `/profile`             |
+| **vendor**     | Vendedor (comisiones)     | `/vendor/*`                        |
 
 ---
 
@@ -129,8 +130,8 @@ Empresa entrevista y decide
 
 ### Prerequisitos
 
-- Node.js 18+
-- npm o yarn
+- Node.js 22 o superior (`@vercel/blob` exige >= 20; producción y CI usan 22)
+- npm
 - Cuenta de Supabase
 - Cuenta de Vercel
 - Cuenta de MercadoPago (sandbox)
@@ -146,12 +147,13 @@ cd inakat
 npm install
 
 # Configurar variables de entorno
-cp .env.example .env.local
+# (debe ser .env: el CLI de Prisma NO lee .env.local)
+cp .env.example .env
 
 # Configurar base de datos
 npx prisma generate
-npx prisma db push
-npx prisma db seed
+npx prisma db push   # el historial de migraciones aún no tiene baseline: NO usar migrate dev
+npx prisma db seed   # requiere las 8 variables SEED_*_PASSWORD del .env
 
 # Ejecutar en desarrollo
 npm run dev
@@ -161,48 +163,50 @@ Abre [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 🔐 Credenciales de Prueba
+## 🔐 Cuentas de Prueba (seed local)
 
-| Rol              | Email                        | Password         |
-| ---------------- | ---------------------------- | ---------------- |
-| **Admin**        | admin@inakat.com             | AdminInakat2024! |
-| **Empresa**      | contact@techsolutions.mx     | Company123!      |
-| **Empresa**      | rh@creativedigital.mx        | Company123!      |
-| **Empresa**      | hr@grupofinanciero.mx        | Company123!      |
-| **Reclutador**   | reclutador1@inakat.com       | Recruiter2024!   |
-| **Reclutador**   | reclutador2@inakat.com       | Recruiter2024!   |
-| **Especialista** | especialista.tech@inakat.com | Specialist2024!  |
-| **Especialista** | ludim@inakat.com             | Staff2024!       |
-| **Candidato**    | candidato.test@gmail.com     | Candidate2024!   |
-| **Usuario**      | carlos.dev@gmail.com         | User123!         |
+⚠️ **Las contraseñas del seed NO se publican en la documentación.** Cada entorno
+define las suyas en `.env` mediante las variables `SEED_*_PASSWORD` (ver
+`.env.example`). El seed aborta si falta alguna.
+
+| Rol              | Email                        | Contraseña                   |
+| ---------------- | ---------------------------- | ---------------------------- |
+| **Admin**        | `ADMIN_EMAIL` (o `admin@inakat.com`) | `SEED_ADMIN_PASSWORD`  |
+| **Empresa**      | contact@techsolutions.mx     | `SEED_COMPANY_PASSWORD`      |
+| **Empresa**      | rh@creativedigital.mx        | `SEED_COMPANY_PASSWORD`      |
+| **Empresa**      | hr@grupofinanciero.mx        | `SEED_COMPANY_PASSWORD`      |
+| **Reclutador**   | reclutador1@inakat.com       | `SEED_RECRUITER_PASSWORD`    |
+| **Reclutador**   | reclutador2@inakat.com       | `SEED_RECRUITER_PASSWORD`    |
+| **Especialista** | especialista.tech@inakat.com | `SEED_SPECIALIST_PASSWORD`   |
+| **Especialista** | ludim@inakat.com             | `SEED_STAFF_PASSWORD`        |
+| **Candidato**    | candidato.test@example.com   | `SEED_CANDIDATE_PASSWORD`    |
+| **Usuario**      | carlos.dev@example.com       | `SEED_USER_PASSWORD`         |
+
+Estas cuentas son **sólo para entornos locales o de prueba**. Nunca siembres una
+base de producción con contraseñas compartidas.
 
 ---
 
 ## 🔐 Variables de Entorno
 
-```env
-# Base de datos (Supabase)
-DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
+La **única fuente de verdad** es [`.env.example`](./.env.example): cópialo a
+`.env` y rellena los valores. Resumen de los grupos que hay que definir:
 
-# Autenticación
-JWT_SECRET="tu-secret-key"
-JWT_EXPIRES_IN="7d"
+| Grupo             | Variables                                                                                                   | ¿Obligatorio?                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Base de datos     | `DATABASE_URL` (pooler 6543 + `pgbouncer=true`), `DIRECT_URL` (5432)                                          | Sí                                  |
+| Autenticación     | `JWT_SECRET` (mínimo 32 caracteres), `JWT_EXPIRES_IN`                                                          | Sí                                  |
+| Admin inicial     | `ADMIN_EMAIL`, `ADMIN_NOMBRE`                                                                                  | Sí para el seed                     |
+| Seed              | `SEED_ADMIN_PASSWORD`, `SEED_ADMIN2_PASSWORD`, `SEED_COMPANY_PASSWORD`, `SEED_RECRUITER_PASSWORD`, `SEED_SPECIALIST_PASSWORD`, `SEED_CANDIDATE_PASSWORD`, `SEED_USER_PASSWORD`, `SEED_STAFF_PASSWORD` | Sí para `prisma db seed` |
+| Archivos          | `BLOB_READ_WRITE_TOKEN`                                                                                        | Sí en producción                    |
+| Pagos             | `MERCADOPAGO_ACCESS_TOKEN`, `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY`, `MERCADOPAGO_WEBHOOK_SECRET`                  | Sí para créditos/checkout           |
+| Correo            | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`                                                | Sí en producción (si no, se descarta el correo en silencio) |
+| Mapas             | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                                                              | Sí para autocompletado de direcciones |
+| App               | `NEXT_PUBLIC_APP_URL`                                                                                          | Sí                                  |
 
-# Upload de archivos (Vercel Blob)
-BLOB_READ_WRITE_TOKEN="vercel_blob_..."
-
-# MercadoPago
-MERCADOPAGO_ACCESS_TOKEN="TEST-..."
-MERCADOPAGO_PUBLIC_KEY="TEST-..."
-
-# Admin
-ADMIN_EMAIL="admin@inakat.com"
-ADMIN_PASSWORD="AdminInakat2024!"
-
-# App
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
+> `MERCADOPAGO_PUBLIC_KEY` **no existe**: el navegador lee
+> `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY`. `ADMIN_PASSWORD` tampoco se usa ya: el
+> seed lee `SEED_ADMIN_PASSWORD`.
 
 ---
 
@@ -213,9 +217,11 @@ npm run dev          # Desarrollo
 npm run build        # Build de producción
 npm run start        # Servidor de producción
 npm run lint         # Linter
-npm test             # Ejecutar tests (258 tests)
+npm test             # Ejecutar tests de jest
 npm run test:watch   # Tests en modo watch
 npm run test:coverage # Tests con coverage
+npm run test:e2e     # Tests end-to-end (Playwright; requiere .env.e2e)
+npx prisma db seed   # Sembrar la base (requiere las variables SEED_*)
 ```
 
 ---
@@ -253,18 +259,21 @@ npm run test:coverage # Tests con coverage
 - Bandeja de aplicaciones directas
 - Status "Descartado" en todo el flujo
 - Empresa ve notas de evaluadores
-- 258 tests pasando
+- Correos automáticos con nodemailer/SMTP
+- "Olvidé mi contraseña" (reset por token)
+- Notificaciones en la aplicación
+- Solicitudes y agenda de entrevistas
+- Rol vendor (comisiones por venta de créditos)
+- Puente de integración Worky2 (`/api/integration/*`, API keys y webhooks firmados)
 
 ### 🚧 En Progreso
 
-- Emails automáticos (SendGrid/Resend)
-- "Olvidé mi contraseña"
+- Remediación de la auditoría 2026-09 (ver `docs/AUDITORIA-2026-09.md`)
+- Rediseño de las páginas públicas
 
 ### 📋 Planificado
 
-- Perfil completo de candidato con experiencia
 - Chat/mensajería
-- Calendario de entrevistas
 - IA para matching
 
 ---
@@ -272,13 +281,18 @@ npm run test:coverage # Tests con coverage
 ## 🧪 Testing
 
 ```bash
-# Ejecutar todos los tests
+# Ejecutar todos los tests de jest
 npm test
 
-# Output esperado:
-# Test Suites: 14 passed
-# Tests:       258 passed
+# Sólo los smoke tests
+npm run test:smoke
+
+# End-to-end (requiere .env.e2e y una base sembrada)
+npm run test:e2e
 ```
+
+El conteo de suites y de tests cambia en cada iteración: el número bueno es el
+que imprime jest, no el que esté escrito en un documento.
 
 ---
 
@@ -290,6 +304,8 @@ npm test
 - 🐛 [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - 🚀 [Guía de Deploy](./docs/DEPLOYMENT.md)
 - 💳 [Guía MercadoPago](./docs/GUIA-MERCADOPAGO.md)
+- 🔌 [Integración Worky2](./docs/WORKY2_INTEGRATION.md)
+- 🔍 [Auditoría 2026-09](./docs/AUDITORIA-2026-09.md)
 
 ---
 
@@ -311,4 +327,4 @@ npm test
 
 **Made with ❤️ in México**
 
-_Última actualización: 14 de Diciembre 2024_
+_Última actualización: 22 de Septiembre 2026_

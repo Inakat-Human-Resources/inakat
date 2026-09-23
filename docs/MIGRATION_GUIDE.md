@@ -1,5 +1,10 @@
 # Migration Guide: CRA to Next.js 15.5.5
 
+> ⚠️ **Documento histórico (migración de 2024).** No lo sigas para montar un
+> entorno: usa `docs/INSTALLATION.md`. En particular, **no ejecutes
+> `prisma migrate dev`** en este proyecto: sobre una base sincronizada con
+> `db push` detecta *drift* y ofrece borrar el esquema (INFRA-013).
+
 This guide will help you complete the migration from Create React App to Next.js with TypeScript.
 
 ## ✅ What's Already Done

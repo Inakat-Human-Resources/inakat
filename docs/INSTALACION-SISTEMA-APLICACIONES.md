@@ -1,5 +1,11 @@
 # 🚀 SISTEMA DE APLICACIONES - GUÍA DE INSTALACIÓN
 
+> ⚠️ **Documento histórico.** Describe cómo se incorporó el sistema de
+> aplicaciones en su día; hoy ya forma parte del código. No lo sigas para montar
+> un entorno (usa `docs/INSTALLATION.md`) y, en particular, **no ejecutes
+> `prisma migrate dev`**: sobre una base sincronizada con `db push` detecta
+> *drift* y ofrece borrar el esquema (INFRA-013).
+
 ## 📦 ARCHIVOS CREADOS
 
 ### APIs (Backend)

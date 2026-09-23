@@ -551,23 +551,42 @@ const stats = await prisma.application.groupBy({
 
 ## 🚀 Migraciones
 
-### Crear migración
+> ⚠️ **Estado actual: el historial de migraciones NO representa el esquema.**
+> `prisma/migrations` sólo crea una parte de las tablas; el resto se aplicó con
+> `db push`, también en producción. Hasta que se genere la migración *baseline*
+> y se marque como aplicada en producción, **no se usan los comandos
+> `migrate`**: ni `dev`, ni `reset`, ni `deploy`.
+
+### Cambiar el esquema (desarrollo)
 
 ```bash
-npx prisma migrate dev --name descripcion_del_cambio
+# 1. Editar prisma/schema.prisma
+# 2. Sincronizar la base
+npx prisma db push
+# 3. Regenerar el cliente
+npx prisma generate
 ```
 
 ### Aplicar en producción
 
+Hoy se hace con `db push` contra `DIRECT_URL`, igual que en desarrollo, y con
+respaldo previo. `migrate deploy` fallaría con *"relation already exists"*.
+
+### Pendiente: generar la baseline
+
 ```bash
-npx prisma migrate deploy
+# Genera el SQL del esquema completo contra una base vacía
+npx prisma migrate diff \
+  --from-empty \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/0_baseline/migration.sql
+
+# Marcarla como aplicada donde el esquema ya existe
+npx prisma migrate resolve --applied 0_baseline
 ```
 
-### Reset completo (⚠️ BORRA DATOS)
-
-```bash
-npx prisma migrate reset
-```
+Mientras eso no esté hecho y verificado, `migrate reset` **borra todos los
+datos** y `migrate dev` ofrece hacerlo por *drift*.
 
 ---
 

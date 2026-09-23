@@ -4,11 +4,24 @@ Puente que permite a Worky2 (sistema de RH multi-tenant) importar los
 candidatos que una empresa aceptó/contrató en INAKAT, y recibir el evento en
 tiempo real cuando eso ocurre.
 
-> **Nota para el merge:** los modelos `IntegrationApiKey` e
-> `IntegrationWebhook` ya están en `prisma/schema.prisma`, pero las tablas no
-> existen aún en la base. **El dueño del repo corre `npx prisma db push` (o la
-> migración equivalente) al mergear este branch.** Hasta entonces, las rutas
-> `/api/integration/*` fallarán con error de tabla inexistente.
+> **Tablas en la base (actualizado 2026-09-22, INFRA-013/INFRA-029):** los
+> modelos `IntegrationApiKey` e `IntegrationWebhook` tienen su migración
+> versionada, `prisma/migrations/20260713000000_add_worky2_integration_tables`.
+> El build de Vercel **no** aplica migraciones, así que antes de habilitar la
+> integración en un entorno hay que comprobar que las tablas existen:
+>
+> ```sql
+> SELECT to_regclass('"IntegrationApiKey"'), to_regclass('"IntegrationWebhook"');
+> ```
+>
+> Si alguna sale `NULL`, las rutas `/api/integration/*` responden 500 (P2021,
+> tabla inexistente) y `dispatchCandidateAccepted` falla en silencio. Cómo
+> crearlas depende del estado del historial de migraciones de ese entorno (ver
+> la sección de migraciones de `docs/DATABASE_SCHEMA.md`): mientras la base se
+> sincronice con `db push`, es `npx prisma db push`; si ya se sincroniza con
+> `migrate deploy`, la migración anterior se aplica sola. **No** mezcles los dos
+> caminos en la misma base sin marcar antes la migración como aplicada
+> (`npx prisma migrate resolve --applied 20260713000000_add_worky2_integration_tables`).
 
 ## Piezas
 
@@ -38,7 +51,7 @@ no las cubre, a propósito): cada ruta se autentica sola con los helpers de
   cvUrl?: string | null,
   evaluacionPsicologica?: string | null,  // notas públicas de recruiter
   evaluacionTecnica?: string | null,      // notas públicas de specialist + SkillRatings
-  notasAdicionales?: string | null,       // Application.notes
+  notasAdicionales?: string | null,       // SIEMPRE null: ver nota de privacidad
   puesto?: string | null,                 // Job.title
   universidad?: string | null,            // del perfil Candidate (match por email)
   carrera?: string | null,
@@ -51,10 +64,24 @@ no las cubre, a propósito): cada ruta se autentica sola con los helpers de
 Se consideran "aceptados/contratados" las Applications con status `accepted`
 (estado final de la máquina de estados) y, defensivamente, el legado `hired`.
 
+> **Privacidad — `notasAdicionales`.** El campo existe en el contrato pero
+> INAKAT emite siempre `null`. `Application.notes` son las notas INTERNAS de
+> INAKAT sobre el candidato («pide 20% más que la banda», «referencia negativa»),
+> y por eso el panel de la empresa tampoco las muestra (#50/#51). Si en algún
+> momento hay que mandar notas, serán las `EvaluationNote` marcadas como
+> públicas, que ya viajan en `evaluacionPsicologica` / `evaluacionTecnica`.
+
 ## 1. Crear una API key (empresa, sesión INAKAT)
 
-Autenticación: JWT de un usuario con `role="company"`, en la cookie
-`auth-token` (sesión web normal) o en `Authorization: Bearer <jwt>`.
+La forma soportada es la **pantalla de Integraciones de INAKAT**
+(`/company/integrations`, en el menú de la empresa): desde ahí se crean y
+revocan las keys y se dan de alta los webhooks. La sesión web usa la cookie
+`auth-token`, que es `httpOnly`: el JWT NO se puede copiar desde el navegador,
+así que los `curl` de abajo sólo sirven para un cliente que ya tenga un token
+emitido fuera del navegador.
+
+Autenticación: JWT de un usuario con `role="company"` y empresa **aprobada**, en
+la cookie `auth-token` (sesión web normal) o en `Authorization: Bearer <jwt>`.
 
 ```bash
 # Crear (la key en claro SOLO se muestra en esta respuesta)
@@ -78,15 +105,22 @@ Worky2. INAKAT guarda únicamente su hash SHA-256 (`keyHash`).
 ## 2. Consultar candidatos aceptados (Worky2 → INAKAT)
 
 ```bash
-curl "https://<inakat>/api/integration/candidates?status=accepted" \
+curl "https://<inakat>/api/integration/candidates?status=accepted&page=1&limit=50" \
   -H "X-Api-Key: inak_<32 hex>"
-# → { success: true, data: CandidatoInakat[] }
+# → { success: true, data: CandidatoInakat[], pagination: { page, limit, total, totalPages, hasNext, hasPrev } }
 ```
 
 - El único `status` soportado en v1 es `accepted` (default si se omite).
 - La key identifica a la empresa: solo devuelve Applications de **sus** Jobs.
 - Cada uso actualiza `lastUsedAt` de la key.
-- Rate limit: 60 requests/min por IP.
+- **Paginado obligatorio**: `page` (1 por defecto) y `limit` (50 por defecto,
+  máximo 100). Recorre las páginas mientras `pagination.hasNext` sea `true`.
+- **Sincronización incremental**: `?since=<ISO 8601>` filtra por `reviewedAt`,
+  para no volver a traer todo el histórico en cada poll.
+- Rate limits: 600 requests/min por IP (cortafuegos; Worky2 es multi-tenant y
+  llama desde pocas IPs) y **60 requests/min por API key**, que es la cuota
+  funcional de cada empresa.
+- La key deja de funcionar en cuanto la empresa dueña se desactiva en INAKAT.
 
 ## 3. Registrar el webhook (empresa, con datos que da Worky2)
 
@@ -104,20 +138,43 @@ curl https://<inakat>/api/integration/webhooks -H "Authorization: Bearer <jwt>"
 curl -X DELETE "https://<inakat>/api/integration/webhooks?id=45" -H "Authorization: Bearer <jwt>"
 ```
 
+Requisitos de la URL receptora (el cuerpo lleva la PII completa del candidato):
+
+- **`https://` obligatorio en producción** (`http://` sólo se admite fuera de
+  producción, para pruebas locales).
+- Sin credenciales embebidas (`https://user:pass@…`) y sólo puertos 80/443.
+- El host no puede resolver a loopback, red privada, link-local
+  (`169.254.169.254`) ni rangos reservados. Se comprueba al registrar **y otra
+  vez justo antes de cada entrega**, por si el DNS cambia después.
+- Máximo 5 webhooks activos por empresa; máximo 10 API keys activas.
+- Alta y baja limitadas a 20 operaciones por hora y por IP.
+
 ## 4. Evento saliente `candidate.accepted`
 
 Cuando una Application pasa a `accepted` (desde el panel de empresa o desde el
-panel admin), INAKAT hace POST a cada webhook activo de la empresa
-(fire-and-forget, timeout 5 s, sin reintentos en v1):
+panel admin), INAKAT hace POST a cada webhook activo de la empresa. La entrega
+se ejecuta con `after()` de Next (waitUntil), así que la función serverless
+sigue viva hasta terminarla; timeout de 5 s, sin reintentos en v1, y las
+redirecciones 3xx se tratan como fallo (reenviar el cuerpo y la firma a otro
+host sería filtrar la PII):
 
 ```
 POST <webhook.url>
 Content-Type: application/json
 X-Inakat-Timestamp: <epoch en segundos>
+X-Inakat-Delivery: <uuid de la entrega>
 X-Inakat-Signature: v1=<hex>
 
-{ "event": "candidate.accepted", "candidate": CandidatoInakat }
+{
+  "event": "candidate.accepted",
+  "id": "<uuid de la entrega>",
+  "createdAt": "<ISO 8601>",
+  "candidate": CandidatoInakat
+}
 ```
+
+`id` / `X-Inakat-Delivery` sirven para deduplicar en el receptor si llega dos
+veces el mismo evento.
 
 Verificación de la firma (lado Worky2):
 

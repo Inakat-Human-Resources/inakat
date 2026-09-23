@@ -8,16 +8,40 @@ API REST de INAKAT construida con Next.js API Routes.
 
 ## 🔐 Autenticación
 
-La mayoría de endpoints requieren autenticación JWT.
+La mayoría de endpoints requieren sesión. La sesión **no** viaja en una cabecera
+`Authorization`: `POST /api/auth/login` responde con una **cookie httpOnly**
+llamada `auth-token` y es esa cookie la que lee `src/middleware.ts`.
 
 ### Headers Requeridos
 
 ```http
-Authorization: Bearer <token>
 Content-Type: application/json
+Cookie: auth-token=<jwt>        # lo pone el navegador automáticamente
 ```
 
-### Obtener Token
+Desde un cliente HTTP hay que conservar la cookie:
+
+```bash
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"...","password":"..."}'
+
+curl -b cookies.txt http://localhost:3000/api/my-applications
+```
+
+> La única superficie que acepta `Authorization: Bearer` / `X-Api-Key` es el
+> puente de integración `/api/integration/*`; ver
+> [WORKY2_INTEGRATION.md](./WORKY2_INTEGRATION.md).
+
+### Códigos de error transversales
+
+| Código | Cuándo |
+| ------ | ------ |
+| 401 | Sin cookie `auth-token`, o token inválido/expirado |
+| 403 | Autenticado pero sin el rol necesario para la ruta |
+| 429 | Rate limit por IP superado (ver la sección de Rate Limiting) |
+
+### Obtener la cookie de sesión
 
 Ver endpoint [POST /api/auth/login](#post-apiauthlogin)
 
@@ -29,7 +53,10 @@ Ver endpoint [POST /api/auth/login](#post-apiauthlogin)
 
 #### POST /api/auth/login
 
-Iniciar sesión y obtener token JWT.
+Iniciar sesión. Devuelve el usuario y **establece la cookie httpOnly
+`auth-token`**; el JWT NO viene en el cuerpo de la respuesta.
+
+**Rate limit:** 7 intentos fallidos por 15 minutos por IP y 10 por cuenta (un login correcto reinicia el contador).
 
 **Request:**
 ```http
@@ -37,8 +64,8 @@ POST /api/auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@inakat.com",
-  "password": "AdminInakat2024!"
+  "email": "tu-usuario@dominio.com",
+  "password": "<tu contraseña>"
 }
 ```
 
@@ -47,7 +74,6 @@ Content-Type: application/json
 {
   "success": true,
   "message": "Login exitoso",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": 1,
     "email": "admin@inakat.com",
@@ -56,6 +82,11 @@ Content-Type: application/json
   }
 }
 ```
+```http
+Set-Cookie: auth-token=<jwt>; HttpOnly; Path=/; SameSite=Lax; Max-Age=<JWT_EXPIRES_IN en segundos>
+```
+
+**Response 400:** cuerpo inválido (`errors` con los campos).
 
 **Response 401:**
 ```json
@@ -64,6 +95,8 @@ Content-Type: application/json
   "error": "Credenciales inválidas"
 }
 ```
+
+**Response 429:** demasiados intentos desde la misma IP.
 
 ---
 
@@ -160,7 +193,7 @@ Crear nueva vacante.
 **Request:**
 ```http
 POST /api/jobs
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 Content-Type: application/json
 
 {
@@ -209,7 +242,7 @@ Actualizar una vacante existente.
 **Request:**
 ```http
 PATCH /api/jobs/1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 Content-Type: application/json
 
 {
@@ -243,7 +276,7 @@ Eliminar una vacante.
 **Request:**
 ```http
 DELETE /api/jobs/1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 ```
 
 **Response 200:**
@@ -272,7 +305,7 @@ Listar aplicaciones con filtros opcionales.
 **Request:**
 ```http
 GET /api/applications?status=pending&jobId=1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 ```
 
 **Response 200:**
@@ -315,7 +348,7 @@ Obtener detalles de una aplicación específica.
 **Request:**
 ```http
 GET /api/applications/1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 ```
 
 **Response 200:**
@@ -403,7 +436,7 @@ Actualizar estado de aplicación.
 **Request:**
 ```http
 PATCH /api/applications/1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 Content-Type: application/json
 
 {
@@ -444,7 +477,7 @@ Eliminar aplicación.
 **Request:**
 ```http
 DELETE /api/applications/1
-Authorization: Bearer <token>
+Cookie: auth-token=<jwt>
 ```
 
 **Response 200:**
@@ -459,13 +492,17 @@ Authorization: Bearer <token>
 
 ### Empresas (Companies)
 
-#### POST /api/companies
+> ⚠️ Las rutas son `/api/company-requests` y `/api/company-requests/[id]`.
+> `/api/companies` **no existe** (responde 404).
 
-Registrar solicitud de empresa.
+#### POST /api/company-requests
+
+Registrar solicitud de empresa. **Ruta pública** (excepción del middleware) con
+rate limit por IP.
 
 **Request:**
 ```http
-POST /api/companies
+POST /api/company-requests
 Content-Type: application/json
 
 {
@@ -506,19 +543,20 @@ Content-Type: application/json
 
 ---
 
-#### GET /api/companies/requests
+#### GET /api/company-requests
 
 Listar solicitudes de empresas (Admin).
 
-**🔒 Requiere autenticación de Admin**
+**🔒 Requiere autenticación de Admin** (el middleware devuelve 403 a cualquier
+otro rol)
 
 **Query Parameters:**
 - `status` (string, optional): pending, approved, rejected
 
 **Request:**
 ```http
-GET /api/companies/requests?status=pending
-Authorization: Bearer <admin_token>
+GET /api/company-requests?status=pending
+Cookie: auth-token=<jwt de un usuario admin>
 ```
 
 **Response 200:**
@@ -540,31 +578,33 @@ Authorization: Bearer <admin_token>
 
 ---
 
-#### PATCH /api/companies/requests/[id]
+#### PATCH /api/company-requests/[id]
 
-Aprobar o rechazar solicitud (Admin).
+Aprobar o rechazar solicitud (Admin). El cuerpo lleva **`status`**, no `action`:
+los valores válidos son `pending`, `approved` y `rejected` (cualquier otro
+devuelve 400).
 
 **🔒 Requiere autenticación de Admin**
 
 **Request (Aprobar):**
 ```http
-PATCH /api/companies/requests/1
-Authorization: Bearer <admin_token>
+PATCH /api/company-requests/1
+Cookie: auth-token=<jwt de un usuario admin>
 Content-Type: application/json
 
 {
-  "action": "approve"
+  "status": "approved"
 }
 ```
 
 **Request (Rechazar):**
 ```http
-PATCH /api/companies/requests/1
-Authorization: Bearer <admin_token>
+PATCH /api/company-requests/1
+Cookie: auth-token=<jwt de un usuario admin>
 Content-Type: application/json
 
 {
-  "action": "reject",
+  "status": "rejected",
   "rejectionReason": "Documentos incompletos"
 }
 ```
@@ -633,17 +673,19 @@ file: [binary data]
 | 401 | Unauthorized - No autenticado |
 | 403 | Forbidden - No autorizado (sin permisos) |
 | 404 | Not Found - Recurso no encontrado |
+| 409 | Conflict - Duplicado o recurso en uso |
+| 429 | Too Many Requests - Rate limit por IP superado |
 | 500 | Internal Server Error - Error del servidor |
 
 ---
 
 ## 📝 Ejemplos con cURL
 
-### Login
+### Login (guarda la cookie de sesión en cookies.txt)
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@inakat.com","password":"AdminInakat2024!"}'
+  -d '{"email":"TU_EMAIL","password":"TU_PASSWORD"}'
 ```
 
 ### Listar Vacantes
@@ -653,8 +695,7 @@ curl http://localhost:3000/api/jobs?status=active
 
 ### Crear Vacante
 ```bash
-curl -X POST http://localhost:3000/api/jobs \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+curl -b cookies.txt -X POST http://localhost:3000/api/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Backend Developer",
@@ -681,21 +722,36 @@ curl -X POST http://localhost:3000/api/applications \
 
 ---
 
-## 🧪 Testing con Postman
+## 🧪 Testing manual
 
-1. Importa la colección: [INAKAT.postman_collection.json](./postman/INAKAT.postman_collection.json)
-2. Configura el environment con `BASE_URL` y `TOKEN`
-3. Ejecuta los tests
+No hay colección de Postman versionada en el repo. Para probar a mano:
+
+1. Haz login con `curl -c cookies.txt` (ver ejemplos) y reutiliza `cookies.txt`.
+2. En Postman/Insomnia, activa el manejo de cookies: la sesión es una cookie
+   httpOnly, no una cabecera `Authorization`.
+3. Los roles importan: el middleware devuelve 403 antes de llegar al handler.
 
 ---
 
 ## 📚 Rate Limiting
 
-Actualmente no hay rate limiting implementado.
+**Sí hay rate limiting** (en memoria, por IP y por instancia; ver
+`src/lib/rate-limit.ts`). Al superarlo la respuesta es **429**.
 
-**Planificado para Q1 2025:**
-- 100 requests/minuto por IP para endpoints públicos
-- 1000 requests/minuto para usuarios autenticados
+| Endpoint | Límite |
+|----------|--------|
+| `POST /api/auth/login` | 7 fallidos por 15 min por IP; 10 fallidos por 15 min por cuenta |
+| `POST /api/auth/register` | 3 por hora |
+| `POST /api/auth/forgot-password` | 3 por hora |
+| `POST /api/auth/reset-password` | 5 por 15 min |
+| `POST /api/upload` | 15 por hora |
+| `POST /api/applications` (público) | 10 por hora |
+| `POST /api/contact` | 5 por hora |
+| Validación de código de descuento | 10 por 15 min |
+
+> Es un contador en memoria: cada instancia serverless lleva el suyo, así que el
+> límite efectivo se multiplica por el número de instancias. Para un límite duro
+> hace falta un almacén compartido.
 
 ---
 
@@ -722,4 +778,8 @@ Todos los errores siguen este formato:
 
 ---
 
-**Última actualización:** Enero 2025
+**Última actualización:** Septiembre 2026
+
+> Este documento cubre sólo una parte de las rutas. La referencia definitiva son
+> los `route.ts` bajo `src/app/api/`. Si encuentras una diferencia entre este
+> documento y el código, manda el cambio al documento: el código es el contrato.

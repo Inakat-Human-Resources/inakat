@@ -149,5 +149,5 @@ positivos plausibles.
 npx tsc --noEmit          # type-check (0 errores)
 npm run lint              # ESLint (0 errores)
 npm test                  # jest unit/integration mockeado (1355 pasan, 7 skip)
-npm run test:integration  # tests contra DB real (requiere DATABASE_URL alcanzable)
+npm run test:integration  # tests contra DB real: exige TEST_DATABASE_URL (nunca la de producción)
 ```

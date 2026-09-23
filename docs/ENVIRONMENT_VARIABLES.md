@@ -4,30 +4,48 @@ Guía completa de todas las variables de entorno necesarias para INAKAT.
 
 ---
 
+> **Fuente de verdad:** [`.env.example`](../.env.example) en la raíz del
+> repositorio. Este documento explica cada variable; la lista completa y
+> actualizada es la de ese archivo. Si algo no coincide, manda el cambio aquí.
+
 ## 📋 Tabla de Contenidos
 
-1. [Archivo .env.local](#archivo-envlocal)
+1. [Archivo .env](#archivo-env)
 2. [Base de Datos](#base-de-datos)
 3. [Autenticación](#autenticación)
 4. [Almacenamiento](#almacenamiento)
 5. [Configuración de Admin](#configuración-de-admin)
-6. [Aplicación](#aplicación)
-7. [Producción vs Desarrollo](#producción-vs-desarrollo)
+6. [Contraseñas del seed](#contraseñas-del-seed)
+7. [Pagos, correo y mapas](#pagos-correo-y-mapas)
+8. [Aplicación](#aplicación)
+9. [Producción vs Desarrollo](#producción-vs-desarrollo)
 
 ---
 
-## 📄 Archivo .env.local
+## 📄 Archivo .env
 
-Crea este archivo en la raíz de tu proyecto:
+Copia la plantilla de la raíz:
 
 ```bash
-touch .env.local
+cp .env.example .env
 ```
 
-⚠️ **IMPORTANTE:** Este archivo **NUNCA** debe commitearse a Git.
+⚠️ **Usa `.env`, no `.env.local`.** Next lee los dos, pero el CLI de Prisma
+(`db push`, `db seed`, `studio`, `migrate`) **sólo lee `.env`**: con las
+variables en `.env.local` el primer `npx prisma db push` falla con
+*"Environment variable not found: DATABASE_URL"*.
+
+Si prefieres mantener `.env.local` para Next, ejecuta Prisma así:
+
+```bash
+npx dotenv -e .env.local -- prisma db push
+```
+
+⚠️ **IMPORTANTE:** ni `.env` ni `.env.local` se commitean a Git.
 
 Verificar que `.gitignore` incluye:
 ```
+.env
 .env.local
 .env*.local
 ```
@@ -228,30 +246,10 @@ ADMIN_EMAIL="admin@tuempresa.com"
 
 ---
 
-### ADMIN_PASSWORD
+### ~~ADMIN_PASSWORD~~ (obsoleta)
 
-**Propósito:** Contraseña del usuario administrador por defecto
-
-**Formato:**
-```env
-ADMIN_PASSWORD="AdminInakat2024!"
-```
-
-**Ejemplo:**
-```env
-ADMIN_PASSWORD="MySecureAdminPass123!"
-```
-
-**Requisitos:**
-- Mínimo 8 caracteres
-- Al menos 1 mayúscula
-- Al menos 1 número
-- Caracteres especiales recomendados
-
-**⚠️ Seguridad:**
-- Cambiar después del primer login
-- No usar contraseñas obvias
-- Se guarda hasheada con bcrypt
+**El seed ya no lee `ADMIN_PASSWORD`.** Definirla no tiene ningún efecto: la
+contraseña del admin sale de `SEED_ADMIN_PASSWORD` (ver la sección siguiente).
 
 ---
 
@@ -268,6 +266,51 @@ ADMIN_NOMBRE="Administrador"
 ```env
 ADMIN_NOMBRE="Juan Pérez"
 ```
+
+---
+
+## 🔑 Contraseñas del seed
+
+`prisma/seed.ts` **exige estas 8 variables** y aborta con `process.exit(1)`
+listando las que falten. No hay valores por defecto y **no se publican en la
+documentación**: cada entorno genera las suyas.
+
+| Variable                   | Cuentas que crea                          |
+| -------------------------- | ----------------------------------------- |
+| `SEED_ADMIN_PASSWORD`      | Admin principal (el de `ADMIN_EMAIL`)     |
+| `SEED_ADMIN2_PASSWORD`     | Segundo admin                             |
+| `SEED_COMPANY_PASSWORD`    | Usuarios de empresa de ejemplo            |
+| `SEED_RECRUITER_PASSWORD`  | Reclutadores                              |
+| `SEED_SPECIALIST_PASSWORD` | Especialistas                             |
+| `SEED_CANDIDATE_PASSWORD`  | Candidatos con cuenta                     |
+| `SEED_USER_PASSWORD`       | Usuarios normales                         |
+| `SEED_STAFF_PASSWORD`      | Staff adicional                           |
+
+Generar una contraseña fuerte:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(16).toString('base64'))"
+```
+
+**⚠️ Seguridad:**
+- Las contraseñas se guardan hasheadas con bcrypt.
+- Distintas por entorno; **nunca** sembrar producción con las de desarrollo.
+- Si una contraseña de seed llegó a estar publicada, hay que rotarla en la base
+  o desactivar esas cuentas.
+
+---
+
+## 💳 Pagos, correo y mapas
+
+| Variable | Para qué | ¿Obligatoria? |
+| -------- | -------- | ------------- |
+| `MERCADOPAGO_ACCESS_TOKEN` | Crear preferencias de pago (servidor) | Sí para vender créditos |
+| `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY` | SDK del checkout en el navegador. **Ojo:** el nombre lleva el prefijo `NEXT_PUBLIC_`; sin él la página de compra muestra "Error de configuración" | Sí para vender créditos |
+| `MERCADOPAGO_WEBHOOK_SECRET` | Validar la firma de los webhooks. En producción, sin ella el webhook responde 500 y **los pagos nunca se acreditan** | Sí en producción |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Correos (reset de contraseña, avisos). Sin SMTP el envío falla **en silencio** | Sí en producción |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Autocompletado de direcciones y distancias | Sí para el alta de vacantes/empresas |
+
+> `MERCADOPAGO_PUBLIC_KEY` (sin `NEXT_PUBLIC_`) **no existe** en el código.
 
 ---
 
@@ -300,12 +343,12 @@ NEXT_PUBLIC_APP_URL="https://inakat.vercel.app"
 
 ## 🔄 Producción vs Desarrollo
 
-### Archivo .env.local (Desarrollo)
+### Archivo .env (Desarrollo)
 
 ```env
 # Supabase Dev
-DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
+DATABASE_URL="postgresql://...pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://...pooler.supabase.com:5432/postgres"
 
 # JWT Dev (diferente a producción!)
 JWT_SECRET="dev-secret-32-chars-minimum-length"
@@ -315,8 +358,28 @@ BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
 
 # Admin
 ADMIN_EMAIL="admin@inakat.com"
-ADMIN_PASSWORD="AdminInakat2024!"
 ADMIN_NOMBRE="Administrador"
+
+# Seed (las 8, generadas localmente)
+SEED_ADMIN_PASSWORD="..."
+SEED_ADMIN2_PASSWORD="..."
+SEED_COMPANY_PASSWORD="..."
+SEED_RECRUITER_PASSWORD="..."
+SEED_SPECIALIST_PASSWORD="..."
+SEED_CANDIDATE_PASSWORD="..."
+SEED_USER_PASSWORD="..."
+SEED_STAFF_PASSWORD="..."
+
+# Pagos / correo / mapas
+MERCADOPAGO_ACCESS_TOKEN="TEST-..."
+NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY="TEST-..."
+MERCADOPAGO_WEBHOOK_SECRET="..."
+SMTP_HOST="smtp.zoho.com"
+SMTP_PORT="465"
+SMTP_USER="noreply@inakat.com"
+SMTP_PASS="..."
+SMTP_FROM="INAKAT <noreply@inakat.com>"
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="..."
 
 # App
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
@@ -341,8 +404,18 @@ BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
 
 # Admin Prod
 ADMIN_EMAIL="admin@inakat.com"
-ADMIN_PASSWORD="SecureProductionPass123!"
 ADMIN_NOMBRE="Administrador"
+
+# Pagos / correo / mapas (obligatorias en producción)
+MERCADOPAGO_ACCESS_TOKEN="APP_USR-..."
+NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY="APP_USR-..."
+MERCADOPAGO_WEBHOOK_SECRET="..."
+SMTP_HOST="smtp.zoho.com"
+SMTP_PORT="465"
+SMTP_USER="noreply@inakat.com"
+SMTP_PASS="..."
+SMTP_FROM="INAKAT <noreply@inakat.com>"
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="..."
 
 # App Prod
 NEXT_PUBLIC_APP_URL="https://inakat.com"
@@ -352,70 +425,38 @@ NEXT_PUBLIC_APP_URL="https://inakat.com"
 - Usar bases de datos SEPARADAS para dev y prod
 - JWT_SECRET DIFERENTE en cada ambiente
 - Nunca usar datos de producción en desarrollo
+- Las `SEED_*` sólo hacen falta si se va a ejecutar el seed en ese entorno
 
 ---
 
 ## 📝 Plantilla Completa
 
-Copia esto a tu `.env.local`:
+**No se duplica aquí**: la plantilla completa, con comentarios y todos los
+grupos, es [`.env.example`](../.env.example).
 
-```env
-# =============================================
-# BASE DE DATOS (Supabase)
-# =============================================
-DATABASE_URL="postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.pooler.supabase.com:5432/postgres"
-DIRECT_URL="postgresql://postgres.xxx:[PASSWORD]@aws-1-us-west-1.compute.amazonaws.com:5432/postgres"
-
-# =============================================
-# AUTENTICACIÓN
-# =============================================
-# Generar con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-JWT_SECRET="reemplazar-con-secret-aleatorio-minimo-32-caracteres"
-
-# =============================================
-# ALMACENAMIENTO (Vercel Blob)
-# =============================================
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_xxxxx"
-
-# =============================================
-# ADMIN POR DEFECTO (para seed)
-# =============================================
-ADMIN_EMAIL="admin@inakat.com"
-ADMIN_PASSWORD="AdminInakat2024!"
-ADMIN_NOMBRE="Administrador"
-
-# =============================================
-# APLICACIÓN
-# =============================================
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-
-# =============================================
-# OPCIONAL - EMAIL (próximamente)
-# =============================================
-# SMTP_HOST="smtp.gmail.com"
-# SMTP_PORT="587"
-# SMTP_USER="noreply@inakat.com"
-# SMTP_PASS="app-specific-password"
-
-# =============================================
-# OPCIONAL - ANALYTICS (próximamente)
-# =============================================
-# GOOGLE_ANALYTICS_ID="G-XXXXXXXXXX"
-# HOTJAR_ID="1234567"
+```bash
+cp .env.example .env
 ```
+
+Cualquier variable nueva se añade primero a `.env.example` y después se explica
+en este documento.
 
 ---
 
 ## ✅ Checklist de Configuración
 
-- [ ] `.env.local` creado
-- [ ] `DATABASE_URL` configurado y probado
-- [ ] `DIRECT_URL` configurado
+- [ ] `.env` creado a partir de `.env.example`
+- [ ] `DATABASE_URL` configurado (pooler 6543 + `pgbouncer=true`) y probado
+- [ ] `DIRECT_URL` configurado (5432)
 - [ ] `JWT_SECRET` generado aleatoriamente (32+ chars)
 - [ ] `BLOB_READ_WRITE_TOKEN` obtenido de Vercel
-- [ ] Variables de admin configuradas
+- [ ] `ADMIN_EMAIL` / `ADMIN_NOMBRE` configurados
+- [ ] Las 8 `SEED_*_PASSWORD` generadas (si vas a correr el seed)
+- [ ] MercadoPago: access token, `NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY` y webhook secret
+- [ ] SMTP configurado (si no, los correos se descartan en silencio)
+- [ ] `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada y restringida por dominio
 - [ ] `NEXT_PUBLIC_APP_URL` correcto
-- [ ] `.env.local` en `.gitignore`
+- [ ] `.env` y `.env.local` en `.gitignore`
 - [ ] Conexión a BD verificada: `npx prisma db pull`
 - [ ] Servidor reiniciado después de cambios
 
@@ -426,12 +467,15 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ### Ver variables cargadas
 
 ```bash
-# En desarrollo
-node -e "require('dotenv').config({path:'.env.local'}); console.log(process.env.DATABASE_URL)"
+# Comprobar que una variable está definida (sin imprimir su valor)
+node -e "require('dotenv').config(); console.log('DATABASE_URL definida:', !!process.env.DATABASE_URL)"
 
-# Ver todas (sin valores sensibles)
-node -e "require('dotenv').config({path:'.env.local'}); console.log(Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('JWT')))"
+# Ver qué variables hay cargadas (sólo los nombres, nunca los valores)
+node -e "require('dotenv').config(); console.log(Object.keys(process.env).filter(k => /^(DATABASE|DIRECT|JWT|SEED|SMTP|MERCADOPAGO|BLOB|NEXT_PUBLIC)/.test(k)))"
 ```
+
+⚠️ No imprimas valores de secretos en la terminal ni los pegues en tickets,
+chats o documentos: acaban en historiales y capturas.
 
 ### Verificar conexión a BD
 
