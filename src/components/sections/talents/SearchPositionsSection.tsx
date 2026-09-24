@@ -1,43 +1,35 @@
 // RUTA: src/components/sections/talents/SearchPositionsSection.tsx
+//
+// La bolsa de trabajo pública: buscador, resultados y detalle.
+//
+// Presentación (registro PÚBLICO «Arco», estilos en src/app/talents/talents.css):
+// - el buscador es una pieza blanca acoplada al pie de la portada («el
+//   muelle»): cruza del suelo arena al suelo tinta de los resultados;
+// - resultados en suelo tinta: titular grande, la cifra de vacantes en lima y
+//   un tablero de dos columnas desde 1024 px (lista a la izquierda, detalle
+//   fijo a la derecha con su propio scroll);
+// - por debajo de 1024 px la lista ocupa todo y el detalle se abre en un
+//   Drawer al elegir una vacante.
+//
+// Lógica: la de siempre. Mismas llamadas (/api/auth/me, /api/specialties,
+// /api/jobs paginado de 20 en 20 con los filtros en el servidor, /api/jobs/:id
+// para ?vacante=), mismos estados y mismas reglas de quién puede postularse.
 
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import {
-  Search,
-  MapPin,
-  Briefcase,
-  Building2,
-  ChevronDown  // FIX-05: Para dropdown de ordenamiento
-} from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import Link from 'next/link';
+import { ArrowDown, ArrowRight, Info, Loader2, LogIn, MapPin, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import ApplyJobModal from './ApplyJobModal';
-import CompanyLogo from '@/components/shared/CompanyLogo';
-
-interface Job {
-  id: number;
-  title: string;
-  company: string;
-  location: string;
-  salary: string;
-  jobType: string;
-  workMode?: string; // Actualizado de isRemote
-  companyRating: number | null;
-  description: string;
-  requirements: string | null;
-  status: string;
-  createdAt: string;
-  profile?: string;  // FIX-06: Campo de especialidad para filtro
-  logoUrl?: string | null; // FEAT-1: Logo de empresa
-  subcategory?: string;
-  seniority?: string;
-  educationLevel?: string;
-  habilidades?: string;
-  responsabilidades?: string;
-  resultadosEsperados?: string;
-  valoresActitudes?: string;
-  informacionAdicional?: string;
-}
+import TarjetaVacante from './TarjetaVacante';
+import DetalleVacante from './DetalleVacante';
+import { textoPublicada, type Job } from './vacante';
+import Drawer from '@/components/ui/Drawer';
+import EmptyState from '@/components/ui/EmptyState';
+import FormField, { Input, Select } from '@/components/ui/FormField';
+import Skeleton from '@/components/ui/Skeleton';
+import Toast from '@/components/ui/Toast';
 
 interface User {
   id: number;
@@ -48,6 +40,30 @@ interface User {
 
 /** Tamaño de página del listado público (la API admite hasta 100). */
 const JOBS_POR_PAGINA = 20;
+
+/** id del panel de detalle (lo enlazan las tarjetas con aria-controls). */
+const ID_DETALLE = 'tl-detalle';
+
+/** Por debajo de este ancho el detalle se abre en un Drawer (lg de Tailwind). */
+const CONSULTA_ESTRECHA = '(max-width: 1023.98px)';
+
+const OPCIONES_ORDEN = [
+  { value: 'newest', label: 'Más reciente' },
+  { value: 'oldest', label: 'Menos reciente' },
+  { value: 'az', label: 'A → Z' },
+  { value: 'za', label: 'Z → A' },
+];
+
+/** ¿Pantalla estrecha? Sin matchMedia (jsdom, navegadores viejos) se trata como escritorio. */
+const pantallaEstrecha = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(CONSULTA_ESTRECHA).matches;
+
+const prefiereMenosMovimiento = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const SearchPositionsSection = () => {
   const router = useRouter();
@@ -67,9 +83,9 @@ const SearchPositionsSection = () => {
   const [locationFilter, setLocationFilter] = useState('');
   const [jobTypeFilter, setJobTypeFilter] = useState('');
 
-  // FIX-05: Estado para ordenamiento
+  // FIX-05: Estado para ordenamiento (ahora un <select> nativo con etiqueta:
+  // el desplegable propio no tenía teclado ni aria-expanded).
   const [sortOrder, setSortOrder] = useState<string>('newest');
-  const [showSortDropdown, setShowSortDropdown] = useState(false);
 
   // FIX-06: Estado para filtro de especialidad
   const [specialties, setSpecialties] = useState<{id: number, name: string}[]>([]);
@@ -79,8 +95,10 @@ const SearchPositionsSection = () => {
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applicationSuccess, setApplicationSuccess] = useState(false);
 
-  // Ref para cerrar dropdown al hacer click fuera
-  const sortDropdownRef = useRef<HTMLDivElement>(null);
+  // Presentación: el detalle en un Drawer por debajo de 1024 px.
+  const [detalleMovilAbierto, setDetalleMovilAbierto] = useState(false);
+  const busquedaRef = useRef<HTMLInputElement>(null);
+  const detallePorEnlaceMostradoRef = useRef(false);
 
   // Identifica la última petición del listado (ver fetchJobs).
   const peticionVacantesRef = useRef(0);
@@ -103,14 +121,16 @@ const SearchPositionsSection = () => {
     }
   }, []);
 
+  // Si la ventana se ensancha con el Drawer abierto, el detalle ya se ve en
+  // su columna: se cierra el Drawer.
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
-        setShowSortDropdown(false);
-      }
+    if (typeof window.matchMedia !== 'function') return;
+    const consulta = window.matchMedia(CONSULTA_ESTRECHA);
+    const alCambiar = () => {
+      if (!consulta.matches) setDetalleMovilAbierto(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    consulta.addEventListener?.('change', alCambiar);
+    return () => consulta.removeEventListener?.('change', alCambiar);
   }, []);
 
   // Cargar usuario actual
@@ -302,19 +322,17 @@ const SearchPositionsSection = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobsOrdenadas]);
 
-  const getTimeSincePosted = (createdAt: string) => {
-    const now = new Date();
-    const posted = new Date(createdAt);
-    const diffMs = now.getTime() - posted.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+  // Presentación: quien vuelve del login a /talents?vacante=ID en el móvil no
+  // ve la columna de detalle; se le abre el Drawer con esa vacante (una vez).
+  useEffect(() => {
+    if (detallePorEnlaceMostradoRef.current || !selectedJob) return;
+    if (!vacantePedidaResueltaRef.current || selectedJob.id !== vacantePedidaRef.current) return;
+    detallePorEnlaceMostradoRef.current = true;
+    if (pantallaEstrecha()) setDetalleMovilAbierto(true);
+  }, [selectedJob]);
 
-    if (diffMins < 60) return `Publicado hace ${diffMins} min.`;
-    if (diffHours < 24)
-      return `Publicado hace ${diffHours} hora${diffHours > 1 ? 's' : ''}.`;
-    return `Publicado hace ${diffDays} día${diffDays > 1 ? 's' : ''}.`;
-  };
+  // Por tramos: pasado un mes, la fecha corta en vez de «hace 212 días».
+  const getTimeSincePosted = (createdAt: string) => textoPublicada(createdAt);
 
   const handleApplyClick = () => {
     setIsApplyModalOpen(true);
@@ -325,23 +343,27 @@ const SearchPositionsSection = () => {
     setTimeout(() => setApplicationSuccess(false), 5000);
   };
 
-  // Helper para mostrar badge de modalidad
-  const getWorkModeBadge = (job: Job) => {
-    if (job.workMode === 'remote') {
-      return (
-        <span className="bg-orange-500 text-white px-3 py-1 rounded-full text-sm">
-          Remoto
-        </span>
-      );
-    }
-    if (job.workMode === 'hybrid') {
-      return (
-        <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
-          Híbrido
-        </span>
-      );
-    }
-    return null;
+  // Elegir una vacante: la de siempre (setSelectedJob) y, en pantallas
+  // estrechas, además se abre el detalle en el Drawer.
+  const seleccionarVacante = (job: Job) => {
+    setSelectedJob(job);
+    if (pantallaEstrecha()) setDetalleMovilAbierto(true);
+  };
+
+  // #64: el filtrado es reactivo (en vivo): «Buscar» lleva a los resultados.
+  const irAResultados = () => {
+    document
+      .getElementById('resultados-vacantes')
+      ?.scrollIntoView({ behavior: prefiereMenosMovimiento() ? 'auto' : 'smooth' });
+  };
+
+  // Vuelve a los filtros iniciales (dispara la misma búsqueda que al cargar).
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setLocationFilter('');
+    setJobTypeFilter('');
+    setSpecialtyFilter('');
+    busquedaRef.current?.focus();
   };
 
   // Verificar si el usuario puede aplicar
@@ -356,9 +378,79 @@ const SearchPositionsSection = () => {
       (jobTypeFilter && jobTypeFilter !== 'all') ||
       specialtyFilter
   );
+  const filtrosActivos = [
+    searchTerm.trim(),
+    locationFilter.trim(),
+    jobTypeFilter && jobTypeFilter !== 'all' ? jobTypeFilter : '',
+    specialtyFilter,
+  ].filter(Boolean).length;
+
+  // La cifra grande espera a la primera respuesta (no pinta un «0» falso).
+  const primeraCarga = isLoading && jobs.length === 0;
+
+  const estadoResultados = isLoading
+    ? ''
+    : totalJobs > 0
+      ? `Mostrando ${jobsOrdenadas.length} de ${totalJobs} vacante${totalJobs === 1 ? '' : 's'}`
+      : hayFiltrosActivos
+        ? 'Ninguna vacante coincide con tu búsqueda'
+        : '';
+
+  /** Botón (o aviso) del pie del detalle: los tres estados de siempre. */
+  const accionPostular = (job: Job) =>
+    !user ? (
+      // No logueado → botón que lleva a login
+      <button
+        type="button"
+        onClick={() => irALoginParaPostular(job.id)}
+        className="hm-btn hm-btn--orange tl-accion"
+      >
+        <LogIn aria-hidden="true" />
+        Inicia sesión para postularte
+      </button>
+    ) : canApply ? (
+      // Candidato logueado → aplicar normal
+      <button type="button" onClick={handleApplyClick} className="hm-btn hm-btn--orange tl-accion">
+        Postularme
+        <ArrowRight aria-hidden="true" />
+      </button>
+    ) : (
+      // Otros roles → mensaje informativo
+      <p className="tl-aviso-rol bg-mist text-ink">
+        <Info className="h-5 w-5 flex-none text-teal" aria-hidden="true" />
+        <span>
+          {user?.role === 'company' && 'Las empresas no pueden aplicar a vacantes'}
+          {user?.role === 'admin' && 'Los administradores no pueden aplicar a vacantes'}
+          {user?.role === 'recruiter' && 'Los reclutadores no pueden aplicar a vacantes'}
+          {user?.role === 'specialist' && 'Los especialistas no pueden aplicar a vacantes'}
+        </span>
+      </p>
+    );
+
+  // Avisos por rol (textos de siempre; un solo estilo: el color no los distingue).
+  const avisoRol =
+    user && user.role === 'company'
+      ? {
+          titulo: 'Estás viendo como empresa',
+          texto:
+            'Puedes ver las vacantes publicadas pero no aplicar a ellas. Para publicar tus vacantes, ve a tu panel de empresa.',
+        }
+      : user && user.role === 'admin'
+        ? { titulo: 'Vista de administrador', texto: 'Estás viendo las vacantes activas en la plataforma.' }
+        : user && user.role === 'recruiter'
+          ? {
+              titulo: 'Vista de reclutador',
+              texto: 'Estás viendo las vacantes activas. Para gestionar candidatos, ve a tu dashboard.',
+            }
+          : user && user.role === 'specialist'
+            ? {
+                titulo: 'Vista de especialista',
+                texto: 'Estás viendo las vacantes activas. Para evaluar candidatos, ve a tu dashboard.',
+              }
+            : null;
 
   return (
-    <section className="bg-custom-beige text-text-black pt-20">
+    <section className="tl-bolsa hm-suelo--tinta" aria-labelledby="tl-bolsa-titulo">
       {/* Modal de aplicación */}
       {selectedJob && (
         <ApplyJobModal
@@ -371,454 +463,342 @@ const SearchPositionsSection = () => {
         />
       )}
 
-      {/* Sección de Búsqueda */}
-      <div className="bg-soft-green text-white py-24 mt-20">
-        <div className="container mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-10">
-            DESCUBRE TUS OPORTUNIDADES
-          </h2>
+      {/* Mensaje de éxito: aviso flotante, se ve esté donde esté la persona. */}
+      <Toast
+        tono="exito"
+        mensaje={
+          applicationSuccess
+            ? '¡Aplicación enviada exitosamente! El reclutador revisará tu perfil pronto.'
+            : null
+        }
+        alCerrar={() => setApplicationSuccess(false)}
+        duracion={5000}
+      />
 
-          {/* Filtros */}
-          <div className="flex flex-col md:flex-row justify-center gap-4 mb-10">
-            <div className="relative w-full md:w-1/4">
-              <input
-                type="text"
-                placeholder="Buscar puesto, área, empresa"
-                className="w-full p-3 pl-10 text-black rounded-full"
+      <div className="tl-bolsa__deco" aria-hidden="true">
+        <span className="tl-bolsa__arco" />
+        <span className="tl-bolsa__arco tl-bolsa__arco--b" />
+      </div>
+
+      {/* ── El buscador: el muelle entre la portada y los resultados ── */}
+      <div className="hm-wrap tl-muelle">
+        <form
+          id="vacantes"
+          role="search"
+          aria-label="Buscar vacantes"
+          className="tl-busqueda"
+          onSubmit={(e) => {
+            e.preventDefault();
+            irAResultados();
+          }}
+        >
+          <div className="tl-busqueda__campos">
+            <FormField etiqueta="¿Qué buscas?" className="tl-campo tl-campo--que">
+              <Input
+                ref={busquedaRef}
+                type="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Puesto, área o empresa"
+                prefijo={<Search />}
+                autoComplete="off"
+                enterKeyHint="search"
+                className="tl-control"
               />
-              <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
-            </div>
+            </FormField>
 
-            <div className="relative w-full md:w-1/4">
-              <input
+            <FormField etiqueta="¿Dónde?" className="tl-campo tl-campo--donde">
+              <Input
                 type="text"
-                placeholder="Ubicación"
-                className="w-full p-3 pl-10 text-black rounded-full"
                 value={locationFilter}
                 onChange={(e) => setLocationFilter(e.target.value)}
+                placeholder="Ciudad o estado"
+                prefijo={<MapPin />}
+                autoComplete="address-level2"
+                enterKeyHint="search"
+                className="tl-control"
               />
-              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
-            </div>
+            </FormField>
 
-            <div className="w-full md:w-1/4">
-              <select
-                className="w-full p-3 text-black rounded-full"
+            <FormField etiqueta="Tipo de trabajo" className="tl-campo">
+              <Select
                 value={jobTypeFilter}
                 onChange={(e) => setJobTypeFilter(e.target.value)}
+                className="tl-control"
               >
-                <option value="all">Modalidad de trabajo</option>
-                <option value="Tiempo Completo">Tiempo Completo</option>
-                <option value="Medio Tiempo">Medio Tiempo</option>
-                <option value="Por Proyecto">Por Proyecto</option>
-              </select>
-            </div>
+                <option value="all">Todos</option>
+                <option value="Tiempo Completo">Tiempo completo</option>
+                <option value="Medio Tiempo">Medio tiempo</option>
+                <option value="Por Proyecto">Por proyecto</option>
+              </Select>
+            </FormField>
 
             {/* FIX-06: Filtro por especialidad */}
-            <div className="w-full md:w-1/4">
-              <select
-                className="w-full p-3 text-black rounded-full"
+            <FormField etiqueta="Especialidad" className="tl-campo">
+              <Select
                 value={specialtyFilter}
                 onChange={(e) => setSpecialtyFilter(e.target.value)}
+                className="tl-control"
               >
-                <option value="">Todas las especialidades</option>
+                <option value="">Todas</option>
                 {specialties.map(s => (
                   <option key={s.id} value={s.name}>{s.name}</option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </FormField>
 
-            {/* #64: el filtrado es reactivo (en vivo) — el botón ahora lleva el
-                foco a los resultados en vez de no hacer nada. */}
-            <button
-              type="button"
-              onClick={() =>
-                document
-                  .getElementById('resultados-vacantes')
-                  ?.scrollIntoView({ behavior: 'smooth' })
-              }
-              className="cta-glow bg-lemon-green text-black font-bold px-8 py-3 rounded-full hover:bg-green-700 flex items-center justify-center gap-2"
-            >
-              <Search size={20} aria-hidden="true" />
-              BUSCAR
+            <button type="submit" className="hm-btn hm-btn--orange tl-busqueda__boton">
+              <Search aria-hidden="true" />
+              Buscar
             </button>
           </div>
-        </div>
+
+          {hayFiltrosActivos && (
+            <div className="tl-busqueda__pie border-t border-line">
+              <p className="text-sm text-ink-muted">
+                {filtrosActivos} {filtrosActivos === 1 ? 'filtro activo' : 'filtros activos'} · los resultados se
+                actualizan solos
+              </p>
+              <button type="button" onClick={limpiarFiltros} className="tl-limpiar text-teal">
+                <X aria-hidden="true" />
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+        </form>
       </div>
 
-      {/* Lista de Vacantes */}
-      <div id="resultados-vacantes" className="container mx-auto py-12 px-4">
-        {/* Mensaje de éxito */}
-        {applicationSuccess && (
-          <div className="mb-6 p-4 bg-green-100 border-2 border-green-500 text-green-800 rounded-lg text-center font-semibold">
-            ✅ ¡Aplicación enviada exitosamente! El reclutador revisará tu
-            perfil pronto.
-          </div>
-        )}
-
-        {/* Aviso para empresas */}
-        {user && user.role === 'company' && (
-          <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 text-blue-800 rounded-lg flex items-center gap-3">
-            <Building2 size={24} />
-            <div>
-              <p className="font-semibold">Estás viendo como empresa</p>
-              <p className="text-sm">
-                Puedes ver las vacantes publicadas pero no aplicar a ellas. Para
-                publicar tus vacantes, ve a tu panel de empresa.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Aviso para admin */}
-        {user && user.role === 'admin' && (
-          <div className="mb-6 p-4 bg-purple-50 border-2 border-purple-300 text-purple-800 rounded-lg flex items-center gap-3">
-            <Building2 size={24} />
-            <div>
-              <p className="font-semibold">Vista de administrador</p>
-              <p className="text-sm">
-                Estás viendo las vacantes activas en la plataforma.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Aviso para reclutador */}
-        {user && user.role === 'recruiter' && (
-          <div className="mb-6 p-4 bg-green-50 border-2 border-green-300 text-green-800 rounded-lg flex items-center gap-3">
-            <Building2 size={24} />
-            <div>
-              <p className="font-semibold">Vista de reclutador</p>
-              <p className="text-sm">
-                Estás viendo las vacantes activas. Para gestionar candidatos, ve a tu dashboard.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Aviso para especialista */}
-        {user && user.role === 'specialist' && (
-          <div className="mb-6 p-4 bg-indigo-50 border-2 border-indigo-300 text-indigo-800 rounded-lg flex items-center gap-3">
-            <Building2 size={24} />
-            <div>
-              <p className="font-semibold">Vista de especialista</p>
-              <p className="text-sm">
-                Estás viendo las vacantes activas. Para evaluar candidatos, ve a tu dashboard.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Filtros de estado y ordenamiento */}
-        <div className="flex justify-between items-center mb-6">
-          {/* Los botones 'Guardados' / 'Postulados' / 'Vencidos' se retiraron:
-              no tenían onClick ni estado, 'Guardados' aparecía siempre activo y
-              no existe modelo ni API de vacantes guardadas. Se reponen cuando la
-              función exista de verdad. */}
-          <div className="text-sm text-gray-600">
-            {!isLoading && totalJobs > 0 && (
-              <>
-                Mostrando {jobsOrdenadas.length} de {totalJobs} vacante
-                {totalJobs === 1 ? '' : 's'}
-              </>
-            )}
-          </div>
-
-          {/* FIX-05: Dropdown funcional de ordenamiento con click-outside */}
-          <div className="relative" ref={sortDropdownRef}>
-            <button
-              onClick={() => setShowSortDropdown(!showSortDropdown)}
-              className="text-black font-bold border-2 border-gray-600 px-6 py-2 rounded-full hover:border-button-green flex items-center gap-2"
+      {/* ── Resultados ── */}
+      <div className="hm-wrap tl-resultados">
+        <div id="resultados-vacantes" className="tl-cabeza">
+          <div>
+            <p className="hm-eyebrow">Vacantes</p>
+            <h2
+              id="tl-bolsa-titulo"
+              className="hm-h2 tl-cabeza__titulo mt-5"
+              aria-label="Descubre tus oportunidades."
             >
-              {{ newest: 'Más reciente', oldest: 'Menos reciente', az: 'A → Z', za: 'Z → A' }[sortOrder] || 'Ordenar por'}
-              <ChevronDown size={16} />
-            </button>
-            {showSortDropdown && (
-              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border z-50 min-w-[200px]">
-                {[
-                  { value: 'newest', label: 'Más reciente' },
-                  { value: 'oldest', label: 'Menos reciente' },
-                  { value: 'az', label: 'A → Z' },
-                  { value: 'za', label: 'Z → A' },
-                ].map(option => (
-                  <button
-                    key={option.value}
-                    onClick={() => { setSortOrder(option.value); setShowSortDropdown(false); }}
-                    className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${sortOrder === option.value ? 'font-bold text-button-green' : 'text-gray-700'}`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
+              <span className="tl-renglon hm-mask" aria-hidden="true">
+                <span>Descubre tus</span>
+              </span>
+              <span className="tl-renglon hm-mask" aria-hidden="true">
+                <span>
+                  <em>oportunidades.</em>
+                </span>
+              </span>
+            </h2>
+          </div>
+
+          {/* Decorativa: la misma cifra la anuncia la línea de estado. */}
+          {!primeraCarga && (
+            <p className="tl-cifra" aria-hidden="true" data-cargando={isLoading || undefined}>
+              <span className="tl-cifra__n">{totalJobs.toLocaleString('es-MX')}</span>
+              <span className="tl-cifra__l">
+                {totalJobs === 1 ? 'vacante' : 'vacantes'}{' '}
+                {hayFiltrosActivos ? 'con tu búsqueda' : totalJobs === 1 ? 'activa' : 'activas'}
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* Aviso por rol */}
+        {avisoRol && (
+          <div className="tl-aviso bg-teal-tint text-teal-dark">
+            <Info className="mt-0.5 h-5 w-5 flex-none" aria-hidden="true" />
+            <div>
+              <p className="font-display font-semibold">{avisoRol.titulo}</p>
+              <p className="mt-0.5 text-sm">{avisoRol.texto}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Estado y orden. Los botones 'Guardados' / 'Postulados' / 'Vencidos'
+            se retiraron: no tenían onClick ni estado, 'Guardados' aparecía
+            siempre activo y no existe modelo ni API de vacantes guardadas. Se
+            reponen cuando la función exista de verdad. */}
+        <div className="tl-barra">
+          <p className="tl-barra__estado" role="status" aria-live="polite">
+            {estadoResultados}
+          </p>
+
+          <div className="tl-orden">
+            <label htmlFor="tl-orden">Ordenar por</label>
+            <Select
+              id="tl-orden"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="tl-orden__control"
+            >
+              {OPCIONES_ORDEN.map((opcion) => (
+                <option key={opcion.value} value={opcion.value}>
+                  {opcion.label}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
 
-        {/* Loading state */}
+        <noscript>
+          <p className="tl-sin-js">Para buscar y ver las vacantes necesitas activar JavaScript en tu navegador.</p>
+        </noscript>
+
+        {/* Cargando */}
         {isLoading && (
-          <div className="text-center py-20">
-            <p className="text-gray-600 text-lg">Cargando vacantes...</p>
+          <div className="tl-cargando" role="status" aria-live="polite">
+            <span className="sr-only">Cargando vacantes…</span>
+            <div className="tl-tablero" aria-hidden="true">
+              <div className="tl-lista">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="tl-tarjeta tl-tarjeta--hueco">
+                    <Skeleton className="tl-tarjeta__logo h-10 w-10 rounded-lg" />
+                    <div className="space-y-2.5">
+                      <Skeleton className="h-5 w-3/4" />
+                      <Skeleton className="h-3.5 w-1/2" />
+                      <Skeleton className="h-3.5 w-2/3" />
+                      <Skeleton className="h-6 w-28 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="tl-detalle tl-detalle--hueco hidden lg:block">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="mt-5 h-9 w-2/3" />
+                <Skeleton className="mt-3 h-4 w-1/3" />
+                <Skeleton className="mt-8 h-16 w-full rounded-xl" />
+                <Skeleton className="mt-8 h-3.5 w-full" />
+                <Skeleton className="mt-2.5 h-3.5 w-11/12" />
+                <Skeleton className="mt-2.5 h-3.5 w-4/5" />
+              </div>
+            </div>
           </div>
         )}
 
         {/* No hay vacantes */}
         {!isLoading && jobsOrdenadas.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-gray-600 text-lg">
-              {hayFiltrosActivos
-                ? 'No se encontraron vacantes que coincidan con tu búsqueda.'
-                : 'No hay vacantes disponibles en este momento.'}
-            </p>
+          <div className="tl-vacio">
+            <EmptyState
+              frase={hayFiltrosActivos ? 'Ninguna coincidencia, por ahora.' : 'Vuelve pronto.'}
+              titulo={
+                hayFiltrosActivos
+                  ? 'No se encontraron vacantes que coincidan con tu búsqueda.'
+                  : 'No hay vacantes disponibles en este momento.'
+              }
+              descripcion={
+                hayFiltrosActivos
+                  ? 'Prueba con otra palabra, otra ciudad o quita algún filtro.'
+                  : 'Crea tu perfil y podrás postularte en cuanto se publiquen nuevas vacantes.'
+              }
+              accion={
+                hayFiltrosActivos ? (
+                  <button type="button" onClick={limpiarFiltros} className="hm-btn hm-btn--ghost tl-vacio__boton">
+                    <X aria-hidden="true" />
+                    Limpiar filtros
+                  </button>
+                ) : (
+                  <Link href="/register" className="hm-btn hm-btn--orange tl-vacio__boton">
+                    Regístrate ahora
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                )
+              }
+            />
           </div>
         )}
 
         {/* Lista y Detalle */}
         {!isLoading && jobsOrdenadas.length > 0 && (
-          <div className="flex flex-col md:flex-row gap-6 md:h-[calc(100vh-220px)]">
-            {/* Columna Izquierda: Lista */}
-            <div className="w-full md:w-1/2 space-y-4 md:overflow-y-auto md:pr-2">
-              {jobsOrdenadas.map((job) => (
-                <div
-                  key={job.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={selectedJob?.id === job.id}
-                  aria-label={`Ver detalle de la vacante ${job.title}`}
-                  onClick={() => setSelectedJob(job)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedJob(job);
-                    }
-                  }}
-                  className={`hover-lift bg-white p-6 rounded-lg shadow-lg cursor-pointer relative ${
-                    selectedJob?.id === job.id
-                      ? 'border-2 border-button-green'
-                      : ''
-                  }`}
-                >
-                  {/* Los iconos Bookmark/MoreVertical se retiraron: no tenían
-                      onClick, ni foco, ni nombre accesible, y no hay función de
-                      guardar vacantes detrás. */}
-                  <p className="text-gray-500 text-sm">
-                    {getTimeSincePosted(job.createdAt)}
-                  </p>
-
-                  <div className="flex items-start gap-3 mt-2">
-                    <CompanyLogo
-                      logoUrl={job.logoUrl}
-                      companyName={job.company}
-                      size="md"
+          <div className="tl-tablero">
+            {/* Columna izquierda: la lista se desplaza con la página */}
+            <div className="tl-tablero__lista">
+              <ol className="tl-lista" aria-label="Vacantes encontradas">
+                {jobsOrdenadas.map((job) => (
+                  <li key={job.id} className="tl-lista__item">
+                    <TarjetaVacante
+                      job={job}
+                      seleccionada={selectedJob?.id === job.id}
+                      publicada={getTimeSincePosted(job.createdAt)}
+                      alSeleccionar={() => seleccionarVacante(job)}
+                      idDetalle={ID_DETALLE}
                     />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-bold text-black">
-                        {job.title}
-                      </h3>
-                      {/* DB-003: sin estrella de companyRating hasta que haya
-                          reseñas reales; las vacantes antiguas conservan el 5.0
-                          del default y parecía reputación verificada. */}
-                      <p className="text-gray-600">{job.company}</p>
-                      <p className="text-gray-600">{job.location}</p>
-                    </div>
-                  </div>
-
-                  <p className="font-bold text-black mt-2">Salario:</p>
-                  <p className="font-bold text-black">{job.salary}</p>
-
-                  <div className="flex gap-2 mt-2">
-                    <span className="bg-gray-800 text-white px-3 py-1 rounded-full text-sm">
-                      {job.jobType}
-                    </span>
-                    {getWorkModeBadge(job)}
-                  </div>
-                </div>
-              ))}
+                  </li>
+                ))}
+              </ol>
 
               {/* Paginación: la API devuelve la página y si quedan más. Sin esto
                   las vacantes fuera de la primera página eran inalcanzables. */}
               {hasNext && (
-                <button
-                  type="button"
-                  onClick={cargarMasVacantes}
-                  disabled={isLoadingMore}
-                  className="w-full bg-white border-2 border-button-green text-button-green font-bold py-3 rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isLoadingMore ? 'CARGANDO...' : 'CARGAR MÁS VACANTES'}
-                </button>
-              )}
-            </div>
-
-            {/* Columna Derecha: Detalle */}
-            <div className="w-full md:w-1/2 md:overflow-y-auto md:pl-2">
-              {selectedJob && (
-                <div className="bg-white p-6 rounded-lg shadow-lg relative">
-                  <p className="text-gray-500 text-sm">
-                    {getTimeSincePosted(selectedJob.createdAt)}
+                <div className="tl-mas">
+                  <p className="tl-mas__cuenta">
+                    Has visto <strong>{jobsOrdenadas.length}</strong> de {totalJobs}
                   </p>
-
-                  <div className="flex items-start gap-4 mt-2">
-                    <CompanyLogo
-                      logoUrl={selectedJob.logoUrl}
-                      companyName={selectedJob.company}
-                      size="lg"
+                  <span className="tl-mas__barra" aria-hidden="true">
+                    <span
+                      style={
+                        { '--p': Math.min(1, jobsOrdenadas.length / Math.max(totalJobs, 1)) } as CSSProperties
+                      }
                     />
-                    <div className="flex-1 min-w-0">
-                      <h2 className="text-2xl font-bold text-black">
-                        {selectedJob.title}
-                      </h2>
-                      <p className="text-gray-600 mt-1">{selectedJob.company}</p>
-                      <p className="text-gray-600">{selectedJob.location}</p>
-                    </div>
-                  </div>
-
-                  <p className="font-bold text-black mt-4">Salario:</p>
-                  <p className="font-bold text-black">{selectedJob.salary}</p>
-
-                  <div className="flex gap-2 mt-4">
-                    <span className="bg-gray-800 text-white px-3 py-1 rounded-full text-sm">
-                      {selectedJob.jobType}
-                    </span>
-                    {getWorkModeBadge(selectedJob)}
-                  </div>
-
-                  <hr className="my-6" />
-
-                  <h3 className="font-bold text-lg mb-2">
-                    Descripción del Puesto
-                  </h3>
-                  <p className="text-gray-700 whitespace-pre-line">
-                    {selectedJob.description}
-                  </p>
-
-                  {selectedJob.requirements && (
-                    <>
-                      <h3 className="font-bold text-lg mt-6 mb-2">
-                        Requisitos
-                      </h3>
-                      <p className="text-gray-700 whitespace-pre-line">
-                        {selectedJob.requirements}
-                      </p>
-                    </>
-                  )}
-
-                  {/* Habilidades Requeridas (chips) */}
-                  {selectedJob.habilidades && (() => {
-                    try {
-                      const skills = JSON.parse(selectedJob.habilidades);
-                      return skills.length > 0 ? (
-                        <>
-                          <h3 className="font-bold text-lg mt-6 mb-2">Habilidades Requeridas</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {skills.map((skill: string, i: number) => (
-                              <span key={i} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </>
-                      ) : null;
-                    } catch { return null; }
-                  })()}
-
-                  {/* Responsabilidades */}
-                  {selectedJob.responsabilidades && (
-                    <>
-                      <h3 className="font-bold text-lg mt-6 mb-2">Responsabilidades</h3>
-                      <p className="text-gray-700 whitespace-pre-line">
-                        {selectedJob.responsabilidades}
-                      </p>
-                    </>
-                  )}
-
-                  {/* Resultados Esperados */}
-                  {selectedJob.resultadosEsperados && (
-                    <>
-                      <h3 className="font-bold text-lg mt-6 mb-2">Resultados Esperados (3-6 meses)</h3>
-                      <p className="text-gray-700 whitespace-pre-line">
-                        {selectedJob.resultadosEsperados}
-                      </p>
-                    </>
-                  )}
-
-                  {/* Valores y Actitudes */}
-                  {selectedJob.valoresActitudes && (
-                    <>
-                      <h3 className="font-bold text-lg mt-6 mb-2">Valores y Actitudes</h3>
-                      <p className="text-gray-700 whitespace-pre-line">
-                        {selectedJob.valoresActitudes}
-                      </p>
-                    </>
-                  )}
-
-                  {/* Especialidad, Nivel y Estudios (badges) */}
-                  {(selectedJob.profile || selectedJob.seniority || selectedJob.educationLevel) && (
-                    <div className="flex flex-wrap gap-2 mt-6">
-                      {selectedJob.profile && (
-                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                          {selectedJob.profile}
-                        </span>
-                      )}
-                      {selectedJob.subcategory && (
-                        <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
-                          {selectedJob.subcategory}
-                        </span>
-                      )}
-                      {selectedJob.seniority && (
-                        <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
-                          {selectedJob.seniority}
-                        </span>
-                      )}
-                      {selectedJob.educationLevel && selectedJob.educationLevel !== 'Sin requisito' && (
-                        <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-sm">
-                          {selectedJob.educationLevel}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Información Adicional */}
-                  {selectedJob.informacionAdicional && (
-                    <>
-                      <h3 className="font-bold text-lg mt-6 mb-2">Información Adicional</h3>
-                      <p className="text-gray-700 whitespace-pre-line">
-                        {selectedJob.informacionAdicional}
-                      </p>
-                    </>
-                  )}
-
-                  {/* BOTÓN POSTULARME - Tres estados: no logueado, candidato, otros roles */}
-                  {!user ? (
-                    // No logueado → botón que lleva a login
-                    <button
-                      onClick={() => irALoginParaPostular(selectedJob.id)}
-                      className="w-full bg-button-orange text-white font-bold py-3 rounded-lg mt-6 hover:bg-orange-600 transition-colors"
-                    >
-                      INICIA SESIÓN PARA POSTULARTE
-                    </button>
-                  ) : canApply ? (
-                    // Candidato logueado → aplicar normal
-                    <button
-                      onClick={handleApplyClick}
-                      className="w-full bg-button-green text-white font-bold py-3 rounded-lg mt-6 hover:bg-green-700 transition-colors"
-                    >
-                      POSTULARME
-                    </button>
-                  ) : (
-                    // Otros roles → mensaje informativo
-                    <div className="mt-6 p-4 bg-gray-100 rounded-lg text-center text-gray-600">
-                      {user?.role === 'company' && '🏢 Las empresas no pueden aplicar a vacantes'}
-                      {user?.role === 'admin' && '⚙️ Los administradores no pueden aplicar a vacantes'}
-                      {user?.role === 'recruiter' && '📋 Los reclutadores no pueden aplicar a vacantes'}
-                      {user?.role === 'specialist' && '👔 Los especialistas no pueden aplicar a vacantes'}
-                    </div>
-                  )}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={cargarMasVacantes}
+                    disabled={isLoadingMore}
+                    aria-busy={isLoadingMore || undefined}
+                    className="hm-btn hm-btn--lime tl-mas__boton"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                        Cargando…
+                      </>
+                    ) : (
+                      <>
+                        Cargar más vacantes
+                        <ArrowDown aria-hidden="true" />
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
+
+            {/* Columna derecha: el detalle, fijo y con scroll propio (desde 1024 px) */}
+            <aside className="tl-tablero__detalle hidden lg:block" aria-label="Detalle de la vacante">
+              {selectedJob && (
+                // key: al cambiar de vacante el panel se monta de nuevo y vuelve
+                // arriba (si no, la nueva se leía a media altura).
+                <DetalleVacante
+                  key={selectedJob.id}
+                  id={ID_DETALLE}
+                  job={selectedJob}
+                  publicada={getTimeSincePosted(selectedJob.createdAt)}
+                  accion={accionPostular(selectedJob)}
+                  desplazable
+                  className="lg:sticky lg:top-[calc(var(--nav)_+_1rem)] lg:max-h-[calc(100vh_-_var(--nav)_-_2rem)] lg:overflow-y-auto lg:overscroll-contain"
+                />
+              )}
+            </aside>
           </div>
         )}
       </div>
+
+      {/* Móvil y tablet: el mismo detalle en un panel lateral */}
+      <Drawer
+        abierto={detalleMovilAbierto && Boolean(selectedJob)}
+        alCerrar={() => setDetalleMovilAbierto(false)}
+        titulo={selectedJob?.title}
+        ancho="w-full sm:w-[min(36rem,100vw)]"
+        pie={selectedJob ? accionPostular(selectedJob) : undefined}
+      >
+        {selectedJob && (
+          <DetalleVacante
+            key={selectedJob.id}
+            job={selectedJob}
+            publicada={getTimeSincePosted(selectedJob.createdAt)}
+            conTitulo={false}
+            className="tl-detalle--cajon"
+          />
+        )}
+      </Drawer>
     </section>
   );
 };

@@ -1,0 +1,270 @@
+/* RUTA: src/app/contact/contact.css
+   /contact en el registro PÚBLICO «Arco» (prefijo ct-). Un solo suelo arena con
+   los tres arcos del puente detrás; el titular a escala de encuadre, los
+   canales directos como filas grandes y el formulario en una hoja blanca con
+   los FormField del sistema (la legibilidad no se negocia).
+
+   Movimiento: sólo las entradas al cargar (hm-entra, cuelgan de .hm--js). Nada
+   ligado al scroll en un formulario.
+
+   Pares medidos: tinta/arena 9.91 · tinta .8/arena 5.74 · teal/arena 5.91 ·
+   blanco/tinta 12.38 · tinta/naranja 4.87 · lime-dark/lime-tint 7.84 ·
+   danger-dark/danger-tint 6.30 · ink-muted/blanco 5.85 */
+
+.ct {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  padding-block: clamp(2.5rem, 7svh, 5.5rem) clamp(4rem, 10vw, 8rem);
+}
+.ct__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.ct__cabeza {
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+}
+@media (min-width: 1024px) {
+  .ct__cabeza {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    align-items: end;
+  }
+}
+
+.ct__rejilla {
+  display: grid;
+  gap: clamp(2.5rem, 5vw, 4rem);
+  margin-top: clamp(2.5rem, 6vw, 5rem);
+}
+@media (min-width: 1024px) {
+  .ct__rejilla {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+}
+
+/* ---------- canales directos ---------- */
+.ct__subtitulo {
+  font-family: var(--disp);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ct__lista {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--ink);
+}
+.ct-canal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1.1rem;
+  border-bottom: 1px solid rgb(40 55 57 / 0.25);
+  color: var(--ink);
+  transition: padding-left 0.5s var(--ease), background-color 0.3s;
+}
+.ct-canal:hover {
+  padding-left: 0.5rem;
+  background: rgb(255 255 255 / 0.35);
+}
+.ct-canal:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+.ct-canal__icono {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  transition: background-color 0.25s, color 0.25s;
+}
+.ct-canal__icono svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+/* Naranja con icono tinta (4.87). */
+.ct-canal:hover .ct-canal__icono {
+  background: var(--orange);
+  color: var(--ink);
+}
+.ct-canal__etiqueta {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(40 55 57 / 0.8);
+}
+.ct-canal__valor {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 1rem + 0.8vw, 1.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.ct-canal__flecha {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--teal);
+  transition: transform 0.35s var(--ease);
+}
+.ct-canal:hover .ct-canal__flecha {
+  transform: translate(3px, -3px);
+}
+
+.ct__redes {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 2rem;
+}
+.ct__redes-titulo {
+  margin-right: 0.4rem;
+  font-family: var(--disp);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ct__redes a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+  transition: background-color 0.2s, color 0.2s;
+}
+.ct__redes a:hover {
+  background: var(--ink);
+  color: #fff;
+}
+.ct__redes svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* ---------- la hoja del formulario ---------- */
+.ct-hoja {
+  position: relative;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  border-radius: clamp(1.25rem, 2.5vw, 2rem);
+  background: #fff;
+  box-shadow: 0 30px 70px -40px rgb(40 55 57 / 0.45), 0 2px 6px rgb(40 55 57 / 0.06);
+}
+/* el punto de la persona, asomando por la esquina de la hoja */
+.ct-hoja::before {
+  content: '';
+  position: absolute;
+  top: clamp(-1.1rem, -1.6vw, -0.75rem);
+  right: clamp(1.5rem, 4vw, 3rem);
+  width: clamp(1.5rem, 3vw, 2.25rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.ct-hoja__titulo {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+.ct-hoja__titulo em {
+  color: var(--teal);
+}
+.ct-hoja__intro {
+  margin-top: 0.6rem;
+  font-size: 0.975rem;
+  line-height: 1.55;
+  color: #5b6769;
+}
+.ct-form {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+.ct-form__par {
+  display: grid;
+  gap: 1.25rem;
+}
+@media (min-width: 640px) {
+  .ct-form__par {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ct-form__aviso {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #5b6769;
+}
+.ct-form__aviso a {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.ct-form__aviso a:hover {
+  color: var(--ink);
+}
+.ct-form__enviar {
+  width: 100%;
+}
+.ct-form__enviar:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---------- avisos del envío ---------- */
+.ct-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.ct-aviso svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  margin-top: 0.1rem;
+}
+.ct-aviso--exito {
+  border: 1px solid rgb(61 80 16 / 0.25);
+  background: #eef3d9;
+  color: #3d5010;
+}
+.ct-aviso--error {
+  border: 1px solid rgb(180 35 24 / 0.3);
+  background: #fbe4e0;
+  color: #9b2a1c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-canal,
+  .ct-canal__flecha {
+    transition: none;
+  }
+}

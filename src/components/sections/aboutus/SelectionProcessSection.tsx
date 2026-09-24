@@ -1,7 +1,16 @@
 // RUTA: src/components/sections/aboutus/SelectionProcessSection.tsx
+//
+// Fuente ÚNICA de las 11 etapas del proceso de selección, con dos caras:
+// - variant="arc": la escena fijada de la portada (ProcessArc + home.css). NO
+//   se toca: la portada está aprobada por el cliente.
+// - variant="grid" (por defecto): /about. El punto baja por un carril al
+//   ritmo del scroll y cada número rellena su contorno al pasar por el centro
+//   (src/app/about/about.css, prefijo ab-). Sin scroll timelines o con
+//   movimiento reducido, el carril se ve completo y quieto.
+// Sigue siendo componente de cliente para que la portada no cambie de
+// frontera de hidratación (ya no usa hooks).
 'use client';
 
-import { useInView } from '@/hooks/useInView';
 import ProcessArc from '@/components/sections/home/ProcessArc';
 import {
   FileText,
@@ -93,8 +102,6 @@ interface SelectionProcessSectionProps {
 }
 
 const SelectionProcessSection = ({ variant = 'grid' }: SelectionProcessSectionProps) => {
-  const { ref, isInView } = useInView(0.1);
-
   if (variant === 'arc') {
     return (
       <ProcessArc
@@ -107,95 +114,71 @@ const SelectionProcessSection = ({ variant = 'grid' }: SelectionProcessSectionPr
   }
 
   return (
-    <section
-      ref={ref as React.RefObject<HTMLDivElement>}
-      className="bg-title-dark py-16 md:py-24"
-    >
-      <div className="container mx-auto px-4">
-        {/* Title */}
-        <h2
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-14`}
-        >
-          Nuestro Proceso de Selección
-        </h2>
+    <section className="hm-suelo--tinta hm-on-dark ab-proceso" aria-labelledby="ab-proceso-t">
+      <div className="hm-wrap ab-proceso__rejilla">
+        {/* Cabecera fija desde 1024 px (la sección devuelve overflow: visible). */}
+        <div className="ab-proceso__cabeza">
+          <p className="hm-eyebrow">Paso a paso</p>
+          <h2 id="ab-proceso-t" className="hm-h2 mt-5">
+            Nuestro proceso <em>de selección</em>
+          </h2>
+          <p className="ab-proceso__cierre">
+            Delega el proceso de reclutamiento en expertos, liberando a tu equipo
+            para centrarse en objetivos clave.
+          </p>
+        </div>
 
-        {/* Main 9 steps grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
-          {mainSteps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <div
-                key={step.number}
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} flex items-start gap-4 bg-white/5 rounded-xl p-5 hover:bg-white/10 transition-colors`}
-                style={{ transitionDelay: `${index * 80}ms` }}
-              >
-                {/* Number circle */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-button-orange flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">
-                    {step.number}
+        <div className="ab-recorrido">
+          {/* El carril: el punto (la persona) lo recorre al bajar. */}
+          <span className="ab-carril" aria-hidden="true">
+            <span className="ab-carril__lleno" />
+            <span className="ab-carril__viajero" />
+          </span>
+
+          <ol className="ab-etapas">
+            {mainSteps.map((step) => {
+              const Icon = step.icon;
+              const n = String(step.number).padStart(2, '0');
+              return (
+                <li key={step.number} className="ab-etapa">
+                  {/* La lista ordenada ya numera para el lector de pantalla. */}
+                  <span className="ab-etapa__n" data-t={n} aria-hidden="true">
+                    <span>{n}</span>
                   </span>
-                </div>
+                  <div>
+                    <h3 className="ab-etapa__titulo">
+                      <Icon aria-hidden="true" />
+                      {step.title}
+                    </h3>
+                    <span className="ab-etapa__duracion">{step.duration}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
 
-                {/* Content */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon className="w-4 h-4 text-button-green" />
-                    <h3 className="font-display text-white font-semibold text-sm">
+          <p className="ab-etapas__corte">Post contratación</p>
+
+          <ol className="ab-etapas ab-etapas--post" start={mainSteps.length + 1}>
+            {postSteps.map((step) => {
+              const Icon = step.icon;
+              const n = String(step.number).padStart(2, '0');
+              return (
+                <li key={step.number} className="ab-etapa">
+                  <span className="ab-etapa__n" data-t={n} aria-hidden="true">
+                    <span>{n}</span>
+                  </span>
+                  <div>
+                    <h3 className="ab-etapa__titulo">
+                      <Icon aria-hidden="true" />
                       {step.title}
                     </h3>
                   </div>
-                  <span className="inline-block px-2 py-0.5 bg-button-green/20 text-button-green text-xs rounded-full">
-                    {step.duration}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+                </li>
+              );
+            })}
+          </ol>
         </div>
-
-        {/* Divider */}
-        <div className="max-w-5xl mx-auto my-10 flex items-center gap-4">
-          <div className="flex-1 h-px bg-white/20" />
-          <span className="text-white/40 text-sm font-medium uppercase tracking-wider">
-            Post contratación
-          </span>
-          <div className="flex-1 h-px bg-white/20" />
-        </div>
-
-        {/* Post-hire steps */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
-          {postSteps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <div
-                key={step.number}
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''} flex items-center gap-4 bg-button-green/10 rounded-xl p-5 border border-button-green/20`}
-                style={{ transitionDelay: `${(index + 9) * 80}ms` }}
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-button-green flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">
-                    {step.number}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4 text-button-green" />
-                  <h3 className="font-display text-white font-semibold text-sm">
-                    {step.title}
-                  </h3>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Closing text */}
-        <p
-          className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-button-green font-semibold text-lg md:text-xl text-center mt-14 max-w-3xl mx-auto`}
-          style={{ transitionDelay: '900ms' }}
-        >
-          Delega el proceso de reclutamiento en expertos, liberando a tu equipo
-          para centrarse en objetivos clave.
-        </p>
       </div>
     </section>
   );

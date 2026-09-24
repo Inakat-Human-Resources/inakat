@@ -1,0 +1,455 @@
+/* RUTA: src/app/login/_acceso/acceso.css
+   Registro PÚBLICO — las páginas de ACCESO: /login, /register,
+   /forgot-password, /reset-password y /unauthorized. Prefijo ac-.
+
+   «Arco» en composición partida:
+   - un PANEL en tinta con una frase grande en serif (la voz humana), los tres
+     arcos del puente y el punto (la persona). En /register el punto recorre
+     el arco: una marca por paso, igual que las 11 etapas de la portada;
+   - el LADO de papel con el titular enorme en máscaras y la tarjeta del
+     formulario (FormField del sistema: la legibilidad no se negocia).
+
+   Orden en el DOM: primero el lado (h1 y formulario), después el panel; el
+   panel se pinta a la izquierda (o arriba en móvil) con `order`. Así el lector
+   de pantalla y el tabulador llegan antes al formulario, y el panel no tiene
+   nada enfocable.
+
+   Reglas (las de site.css):
+   - Sólo se animan transform, opacity y clip-path.
+   - Lo ligado al scroll, dentro de @supports (animation-timeline: view()) +
+     prefers-reduced-motion: no-preference. El estado natural es el final.
+   - Las entradas al cargar cuelgan de .hm--js (SiteMotion la pone sólo con la
+     pestaña visible) y, además, de prefers-reduced-motion: no-preference.
+   - Lo fijo va en top: var(--nav). Aquí no hay <section> (globals.css les pone
+     overflow: hidden y eso mata el sticky del panel). */
+
+/* =====================================================================
+   COMPOSICIÓN PARTIDA
+   ===================================================================== */
+.ac-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: calc(100svh - var(--nav));
+  /* Línea de tiempo de toda la composición: los arcos salen con ella. */
+  view-timeline-name: --ac;
+}
+
+/* ---------- el panel en tinta ---------- */
+.ac-panel {
+  order: -1;
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1rem, 3.5vw, 1.75rem);
+  padding: clamp(1.75rem, 7vw, 3rem) var(--gut) clamp(2.75rem, 11vw, 4.5rem);
+  background: var(--ink);
+  color: #fff;
+}
+
+/* La escena: una caja 2:1 anclada al pie del panel. Dentro, los arcos (que se
+   mueven con el scroll) y, en /register, el recorrido (que NO se mueve). */
+.ac-panel__escena {
+  position: absolute;
+  z-index: -1;
+  left: 80%;
+  bottom: -1px;
+  width: min(150%, 36rem);
+  aspect-ratio: 2 / 1;
+  translate: -50% 0;
+  pointer-events: none;
+}
+.ac-panel__arcos {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+.ac-arco {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  aspect-ratio: 2 / 1;
+  translate: -50% 0;
+  border: 2px solid rgb(255 255 255 / 0.14);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  transform-origin: 50% 100%;
+}
+.ac-arco--a {
+  width: 100%;
+}
+.ac-arco--b {
+  width: 72%;
+  border-color: rgb(159 187 47 / 0.5);
+}
+.ac-arco--c {
+  width: 44%;
+  border-color: rgb(244 134 2 / 0.55);
+}
+/* El punto: la persona dentro del puente, como en el isotipo. */
+.ac-punto {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  width: 9%;
+  aspect-ratio: 1;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: var(--orange);
+}
+
+/* La frase: Instrument Serif itálica, grande. Su <em> va en lima (5.67:1). */
+/* En móvil el panel es una banda baja sobre el formulario (≈160 px a 360):
+   la frase cabe en dos renglones y deja sitio al punto, a la derecha. */
+.ac-frase {
+  margin: 0;
+  max-width: min(16ch, 80%);
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.75rem, 1rem + 3.4vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+.ac-frase em {
+  color: var(--lime);
+}
+/* Blanco al 78 % sobre tinta: 8.22:1 (medido). En teléfonos no sale: la
+   banda se queda en antetítulo + frase y el formulario sube. */
+.ac-panel__pie {
+  display: none;
+  margin: 0;
+  max-width: 26rem;
+  font-size: clamp(0.92rem, 0.88rem + 0.2vw, 1.02rem);
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.78);
+}
+@media (min-width: 640px) {
+  .ac-panel__pie {
+    display: block;
+  }
+}
+
+/* ---------- el lado de papel ---------- */
+.ac-lado {
+  display: flex;
+  justify-content: center;
+  padding: clamp(2rem, 7vw, 4rem) var(--gut) clamp(3.5rem, 10vw, 6rem);
+  background: var(--paper);
+}
+.ac-lado__inner {
+  width: 100%;
+  max-width: 34rem;
+}
+.ac-lado__inner--ancho {
+  max-width: 50rem;
+}
+
+/* Titular del lado: menor que .hm-display (comparte el ancho con el panel),
+   igual de rotundo. Su <em> es el remate serif en verde azulado (6.77:1). */
+.ac-titulo {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.75rem, calc(5.4vw - 2px), 6.25rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.ac-titulo em {
+  color: var(--teal);
+  letter-spacing: -0.02em;
+}
+
+/* La tarjeta del formulario: blanca sobre papel. */
+.ac-tarjeta {
+  position: relative;
+  scroll-margin-top: calc(var(--nav) + 1rem);
+  padding: clamp(1.25rem, 4.5vw, 2.25rem);
+  border: 1px solid rgb(40 55 57 / 0.1);
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(40 55 57 / 0.05), 0 30px 60px -36px rgb(40 55 57 / 0.45);
+}
+
+/* Enlaces de texto: verde azulado (7.38 sobre blanco, 6.77 sobre papel). */
+.ac-enlace {
+  font-weight: 600;
+  color: var(--teal);
+  text-decoration: underline;
+  text-decoration-color: rgb(43 93 98 / 0.35);
+  text-underline-offset: 0.25em;
+  border-radius: 4px;
+  transition: text-decoration-color 0.15s ease, color 0.15s ease;
+}
+.ac-enlace:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+.ac-enlace:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* Botón «Anterior» con hm-btn: la flecha se va hacia atrás, no hacia delante. */
+.hm-btn.ac-atras:hover svg {
+  transform: translateX(-4px);
+}
+
+/* ---------- opciones grandes («Soy candidato» / «Soy empresa») ---------- */
+.ac-opciones {
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 520px) {
+  .ac-opciones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ac-opcion {
+  position: relative;
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem 3rem 1.05rem 1.25rem;
+  border-radius: 1rem;
+  /* line-strong sobre papel: 3.51:1 (borde de un control, WCAG 1.4.11). */
+  border: 1.5px solid #7c8482;
+  color: var(--ink);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.ac-opcion:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.ac-opcion:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+.ac-opcion__k {
+  font-family: var(--disp);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+  transition: color 0.2s ease;
+}
+/* Sobre tinta el verde azulado no se lee (2.2): pasa a lima (5.67). */
+.ac-opcion:hover .ac-opcion__k {
+  color: var(--lime);
+}
+.ac-opcion__t {
+  font-family: var(--disp);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.ac-opcion svg {
+  position: absolute;
+  right: 1.1rem;
+  top: 50%;
+  width: 1.2rem;
+  height: 1.2rem;
+  translate: 0 -50%;
+  transition: transform 0.35s var(--ease);
+}
+.ac-opcion:hover svg {
+  transform: translateX(4px);
+}
+
+/* =====================================================================
+   /register — el punto recorre el arco (un paso por marca)
+   Decorativo (aria-hidden): el progreso accesible lo da el Stepper.
+   Sólo en escritorio; en móvil el Stepper de la tarjeta basta.
+   ===================================================================== */
+.ac-recorrido {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.ac-recorrido__marca,
+.ac-recorrido__corredor {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  /* Radio del arco b: 36 % del ancho de la escena = 72 % de su alto (2:1). */
+  height: 72%;
+  transform-origin: 50% 100%;
+}
+.ac-recorrido__marca {
+  transform: rotate(calc(-75deg + var(--i, 0) * 30deg));
+}
+.ac-recorrido__marca::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.45);
+  transition: background-color 0.4s ease;
+}
+.ac-recorrido__marca[data-hecho='true']::before {
+  background: var(--lime);
+}
+.ac-recorrido__corredor {
+  transform: rotate(calc(-75deg + var(--p, 0) * 150deg));
+}
+.ac-recorrido__corredor::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: clamp(1.25rem, 2vw, 1.9rem);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 7px rgb(244 134 2 / 0.22);
+}
+.ac-recorrido__cifra {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  white-space: nowrap;
+}
+.ac-recorrido__n {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(3rem, 5vw, 5.25rem);
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--lime);
+}
+/* Blanco al 70 % sobre tinta: 6.97:1. */
+.ac-recorrido__n small {
+  margin-left: 0.12em;
+  font-size: 0.36em;
+  letter-spacing: 0;
+  color: rgb(255 255 255 / 0.7);
+}
+.ac-recorrido__paso {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.2rem, 1.6vw, 1.6rem);
+  line-height: 1.1;
+  color: #fff;
+}
+
+/* =====================================================================
+   ESCRITORIO: panel fijo a la izquierda, formulario a la derecha
+   ===================================================================== */
+@media (min-width: 1024px) {
+  .ac-split {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+  .ac-panel {
+    position: sticky;
+    top: var(--nav);
+    align-self: start;
+    height: calc(100svh - var(--nav));
+    justify-content: flex-start;
+    gap: clamp(1.25rem, 3svh, 2rem);
+    padding: clamp(2.5rem, 7svh, 4.5rem) clamp(2rem, 3.6vw, 4rem);
+  }
+  .ac-panel__escena {
+    left: 50%;
+    width: min(135%, 62rem, 150svh);
+  }
+  .ac-frase {
+    max-width: 16ch;
+    font-size: clamp(2.9rem, 4.2vw, 5.4rem);
+  }
+  .ac-panel__pie {
+    max-width: 22rem;
+  }
+  .ac-lado {
+    align-items: center;
+    padding: clamp(3rem, 9svh, 6rem) clamp(2rem, 5vw, 6rem);
+  }
+  .ac-recorrido {
+    display: block;
+  }
+  .ac-panel--recorrido .ac-punto {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   MOVIMIENTO
+   ===================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  /* Entradas al cargar (con la pestaña visible): los arcos crecen desde el
+     pie, uno tras otro, y el punto aparece. */
+  .hm--js .ac-arco {
+    animation: ac-crece 1.3s var(--ease) both;
+    animation-delay: calc(0.15s + var(--i, 0) * 0.12s);
+  }
+  .hm--js .ac-punto {
+    animation: hm-pop 0.9s var(--ease) 0.7s both;
+  }
+  /* El punto del registro se desliza al paso nuevo (no ligado al scroll: al estado). */
+  .ac-recorrido__corredor {
+    transition: transform 0.9s var(--ease);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* Al dejar atrás la composición, los arcos se hunden y crecen (como los
+       planos de la portada). En reposo no llevan transform. */
+    .ac-panel__arcos {
+      animation: ac-arcos-salen linear both;
+      animation-timeline: --ac;
+      animation-range: exit 0% exit 100%;
+    }
+    /* En /register el panel está fijo mientras el formulario pasa: los arcos
+       giran sobre su centro con el scroll de la página. Sólo giran (no
+       escalan): así las marcas del recorrido siguen sobre el arco. */
+    .ac-panel--recorrido .ac-panel__arcos {
+      animation-name: ac-arcos-giran;
+      animation-timeline: scroll(root);
+      animation-range: normal;
+    }
+    /* La frase sube y se apaga al salir de pantalla. */
+    .ac-frase {
+      animation: ac-frase-sale linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+
+@keyframes ac-crece {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+@keyframes ac-arcos-salen {
+  to {
+    transform: translateY(14%) scale(1.08);
+  }
+}
+@keyframes ac-arcos-giran {
+  to {
+    transform: rotate(12deg);
+  }
+}
+@keyframes ac-frase-sale {
+  to {
+    transform: translateY(-22%);
+    opacity: 0.25;
+  }
+}

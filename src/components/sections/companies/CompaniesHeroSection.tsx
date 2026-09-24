@@ -1,74 +1,123 @@
 // RUTA: src/components/sections/companies/CompaniesHeroSection.tsx
-'use client';
-
+//
+// Portada de /companies («Arco», registro público) y, pegada a ella, la banda
+// de las tres garantías.
+//
+// - El titular baja en escalera (tres máscaras que suben al cargar, con
+//   TituloMascara: aria-label en el h1 y trozos aria-hidden).
+// - La foto vive en una ventana de MEDIO PUNTO: el puente del isotipo a escala
+//   de página, apoyado en una línea de suelo; el punto naranja es la persona.
+// - Las tres viñetas que antes iban en una lista pequeña bajo la entradilla
+//   pasan a una banda naranja a toda escala (mismo texto, palabra por palabra).
+//
+// Componente de servidor: el único JS de movimiento es <SiteMotion /> (lo monta
+// la página). Sin JS o con movimiento reducido todo está en su sitio.
+import type { CSSProperties } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import heroImage from '@/assets/images/3-companies/1.png';
-import { CheckCircle } from 'lucide-react';
+import TituloMascara from '@/components/ui/TituloMascara';
 
-const bullets = [
-  'Evaluación psicológica por expertos',
-  'Validación técnica por especialistas',
-  'Candidatos evaluados en 2-4 semanas',
+/** Las tres garantías de siempre, partidas en estructura + remate serif. */
+const garantias = [
+  { base: 'Evaluación psicológica', remate: 'por expertos' },
+  { base: 'Validación técnica', remate: 'por especialistas' },
+  { base: 'Candidatos evaluados', remate: 'en 2-4 semanas' },
 ];
 
 const CompaniesHeroSection = () => {
   return (
-    <section className="bg-custom-beige py-12 md:py-20 lg:py-24">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
-          {/* Text Column */}
-          <div className="order-1">
-            <h1 className="hero-headline font-display text-4xl sm:text-5xl md:text-6xl font-bold text-title-dark leading-tight">
-              Encuentra al talento que tu empresa{' '}
-              <span className="gradient-text">merece.</span>
-            </h1>
+    <>
+      <section className="emp-hero hm-suelo--arena" data-hm-hero aria-labelledby="emp-hero-titulo">
+        <div className="emp-hero__arcos hm-plane" aria-hidden="true">
+          <span className="hm-arc hm-arc--a" />
+          <span className="hm-arc hm-arc--b" />
+          <span className="hm-arc hm-arc--c" />
+        </div>
 
-            <p className="hero-sub mt-6 text-lg md:text-xl text-text-black/70 max-w-lg leading-relaxed">
-              Publica tu vacante, nosotros nos encargamos del proceso de
-              evaluación completo.
-            </p>
+        <div className="hm-wrap emp-hero__inner">
+          <p className="hm-eyebrow hm-entra" style={{ '--i': 0 } as CSSProperties}>
+            Para empresas
+          </p>
 
-            {/* Bullet points */}
-            <ul className="hero-sub mt-6 space-y-3">
-              {bullets.map((bullet, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-button-green flex-shrink-0" />
-                  <span className="text-text-black/80">{bullet}</span>
-                </li>
-              ))}
-            </ul>
+          <TituloMascara
+            como="h1"
+            id="emp-hero-titulo"
+            className="hm-display emp-hero__titulo"
+            renglones={[
+              { texto: 'Encuentra al talento', className: 'emp-hero__r1' },
+              { texto: 'que tu empresa', className: 'emp-hero__r2' },
+              { texto: 'merece.', contenido: <em>merece.</em>, className: 'emp-hero__r3' },
+            ]}
+          />
 
-            <div className="hero-cta mt-8 flex flex-col sm:flex-row gap-4">
-              <Link
-                href="#register"
-                className="inline-flex items-center justify-center bg-button-orange text-white font-semibold px-8 py-4 rounded-full text-lg hover:scale-105 hover:shadow-lg transition-all duration-300"
-              >
-                Registra tu Empresa
-              </Link>
-              <Link
-                href="#register"
-                className="inline-flex items-center justify-center border-2 border-button-green text-button-dark-green font-semibold px-8 py-4 rounded-full text-lg hover:bg-button-green hover:text-white transition-all duration-300"
-              >
-                Cotiza en tiempo real
-              </Link>
+          <div className="emp-hero__pie">
+            <div className="hm-entra" style={{ '--i': 1 } as CSSProperties}>
+              <p className="hm-lead">
+                Publica tu vacante, nosotros nos encargamos del proceso de
+                evaluación completo.
+              </p>
+              <div className="emp-hero__cta">
+                <Link href="#register" className="hm-btn hm-btn--orange" data-hm-magnet>
+                  Registra tu Empresa
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+                <Link href="#register" className="hm-btn hm-btn--ghost" data-hm-magnet>
+                  Cotiza en tiempo real
+                </Link>
+              </div>
             </div>
-          </div>
 
-          {/* Image Column */}
-          <div className="hero-image order-2">
-            <Image
-              src={heroImage}
-              alt="Empresas que confían en INAKAT para encontrar talento"
-              width={600}
-              height={450}
-              className="w-full h-auto rounded-2xl shadow-2xl object-cover"
-              priority
-            />
+            <figure className="emp-hero__marco hm-plane">
+              <div className="emp-hero__ventana">
+                <Image
+                  src={heroImage}
+                  alt="Dos profesionales revisan juntos una tableta"
+                  priority
+                  placeholder="blur"
+                  sizes="(max-width: 899px) 92vw, 46vw"
+                />
+              </div>
+              <span className="hm-dot emp-hero__punto" aria-hidden="true" />
+              <span className="hm-dot emp-hero__punto2" aria-hidden="true" />
+              <span className="emp-hero__sello" aria-hidden="true">
+                Evaluación dual
+              </span>
+            </figure>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      {/* La banda continúa la portada: no abre sección propia en el índice de
+          encabezados. La cejilla es un rótulo visual (en mayúsculas por CSS,
+          que el árbol de accesibilidad de Chrome leería «LO QUE RECIBES»); el
+          nombre accesible lo lleva la lista numerada, en caja normal. */}
+      <section className="hm-seccion hm-suelo--naranja emp-garantias">
+        <span className="emp-garantias__arco" aria-hidden="true" />
+        <div className="hm-wrap">
+          <p className="hm-eyebrow" aria-hidden="true">
+            Lo que recibes
+          </p>
+          <ol className="emp-garantias__lista" aria-label="Lo que recibes">
+            {garantias.map((g, i) => (
+              <li key={g.base} className="emp-garantia">
+                <span className="emp-garantia__n" aria-hidden="true">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <p className="emp-garantia__t">
+                  <span className="hm-mask">
+                    <span>
+                      {g.base} <em>{g.remate}</em>
+                    </span>
+                  </span>
+                </p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    </>
   );
 };
 

@@ -1,23 +1,76 @@
 // RUTA: src/components/sections/companies/FormRegisterForQuotationSection.tsx
 'use client';
 
-import React, { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
+// Registro de empresa (/companies#register), en el registro público «Arco».
+//
+// El FORMULARIO es el de siempre: mismo estado, mismas validaciones en línea,
+// misma pre-validación (dryRun), mismas subidas a /api/upload y la misma alta
+// en /api/company-requests; mismo modal de éxito con el mismo auto-login. Todo
+// el bloque de lógica de abajo está intacto.
+//
+// Lo que cambia es la PRESENTACIÓN (docs/DISENO.md §6): cinco pasos con
+// progreso, validación al intentar avanzar y un resumen antes de enviar. Los
+// pasos son presentación: todos los campos siguen montados (los ocultos con
+// `hidden`), así los <input type="file">, el mapa y el autocompletado conservan
+// su estado al ir y volver.
+//
+// Validación por pasos = la de antes, repartida:
+// - los errores en línea de handleInputChange (`errors`), como siempre;
+// - las restricciones nativas que el navegador comprobaba al enviar (required,
+//   type="email", minLength), leídas con checkValidity() del propio campo;
+// - los documentos obligatorios, con los mismos mensajes que handleSubmit.
+// Esos dos últimos van en un estado de PRESENTACIÓN aparte (`erroresPaso`): si
+// fueran a `errors`, handleSubmit los vería y bloquearía el envío para siempre
+// (handleInputChange no borra los errores de los campos que no valida).
+// El formulario lleva noValidate: con campos ocultos, la validación nativa se
+// quedaría muda («campo no enfocable»). Antes de llamar a handleSubmit se
+// repasan TODOS los pasos, igual que hacía el navegador con `required`.
+
+import React, { useState, useRef, useEffect, FormEvent, ChangeEvent, KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
-import { Building2 } from 'lucide-react';
-import ErrorToast from '@/components/shared/ErrorToast';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Mail,
+  MapPin,
+  Phone,
+  Search,
+  Send,
+} from 'lucide-react';
+import Toast from '@/components/ui/Toast';
+import FormField, { Checkbox, Input } from '@/components/ui/FormField';
+import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import Stepper, { type PasoStepper } from '@/components/ui/Stepper';
+import { Badge } from '@/components/ui/Badge';
+import Skeleton from '@/components/ui/Skeleton';
+import { CONTACTO } from '@/lib/nav-publica';
+import { cn } from '@/lib/utils';
+import CampoArchivo from '@/components/ui/CampoArchivo';
+import Aviso from '@/components/ui/Aviso';
+import { useFalloMapa } from '@/hooks/useFalloMapa';
+import ResumenSolicitud, { type PasoEditable } from './ResumenSolicitud';
 
 const libraries: ("places")[] = ["places"];
 const mapContainerStyle = {
   width: '100%',
   height: '300px',
-  borderRadius: '8px'
 };
 const defaultCenter = {
   lat: 19.4326, // CDMX por defecto
   lng: -99.1332
 };
+
+// Los mismos formatos de siempre para identificación y constancia fiscal.
+const ACEPTA_DOCUMENTOS = '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx';
 
 interface FormData {
   nombre: string;
@@ -62,6 +115,46 @@ const mensajeDeError = (
     : '';
   return detalle || data?.error || porDefecto;
 };
+
+// ---------------------------------------------------------------------------
+// Pasos (presentación)
+// ---------------------------------------------------------------------------
+type IdPaso = PasoEditable | 'revision';
+type CampoDelFormulario = keyof FormData;
+
+const PASOS: Array<PasoStepper & { id: IdPaso; titulo: string; remate: string }> = [
+  { id: 'cuenta', etiqueta: 'Tu cuenta', descripcion: 'Quién la registra', titulo: 'Tu cuenta', remate: 'con ella entrarás a INAKAT' },
+  { id: 'empresa', etiqueta: 'Tu empresa', descripcion: 'Nombre y datos fiscales', titulo: 'Tu empresa', remate: 'cómo te van a conocer' },
+  { id: 'ubicacion', etiqueta: 'Ubicación', descripcion: 'Dirección y mapa', titulo: 'Ubicación', remate: 'dónde está tu empresa' },
+  { id: 'documentos', etiqueta: 'Documentos', descripcion: 'Identificación y constancia', titulo: 'Documentos', remate: 'para validar tu empresa' },
+  { id: 'revision', etiqueta: 'Revisión', descripcion: 'Confirma y envía', titulo: 'Revisa tu solicitud', remate: 'y envíala' },
+];
+const ULTIMO = PASOS.length - 1;
+
+/** Campos de cada paso, en el orden en que se ven (el primero con error recibe el foco). */
+const CAMPOS_POR_PASO: Record<IdPaso, CampoDelFormulario[]> = {
+  cuenta: ['nombre', 'apellidoPaterno', 'apellidoMaterno', 'departamento', 'correoEmpresa', 'password', 'confirmPassword'],
+  empresa: ['nombreEmpresa', 'sitioWeb', 'razonSocial', 'rfc'],
+  ubicacion: ['calle', 'colonia', 'ciudad', 'codigoPostal'],
+  documentos: ['identificacion', 'documentosConstitucion'],
+  revision: [],
+};
+
+/** id del control de cada campo (lo reparte FormField). */
+const idCampo = (campo: string) => `empresa-${campo}`;
+const idTituloPaso = (paso: IdPaso) => `emp-titulo-paso-${paso}`;
+
+/** Mensaje en español para lo que el navegador comprobaba al enviar. */
+const mensajeNativo = (el: HTMLInputElement): string => {
+  const v = el.validity;
+  if (v.valueMissing) return 'Este campo es obligatorio.';
+  if (v.typeMismatch) return 'Correo electrónico inválido';
+  if (v.tooShort) return `Debe tener al menos ${el.minLength} caracteres`;
+  return el.validationMessage || 'Revisa este campo.';
+};
+
+/** Campos del registro público: 48 px y 16 px (en iPhone, menos de 16 px hace zoom al enfocar). */
+const CONTROL = 'h-12 text-base';
 
 const FormRegisterForQuotationSection = () => {
   const router = useRouter();
@@ -584,605 +677,889 @@ const FormRegisterForQuotationSection = () => {
     }
   };
 
+  // Auto-login del modal de éxito (el mismo de siempre, sólo con nombre).
+  const irAPlataforma = async () => {
+    if (!loginCredentials) {
+      router.push('/login');
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginCredentials.email,
+          password: loginCredentials.password
+        })
+      });
+      if (res.ok) {
+        router.push('/company/dashboard');
+      } else {
+        router.push('/login');
+      }
+    } catch {
+      router.push('/login');
+    }
+  };
+
+  // =========================================================================
+  // PRESENTACIÓN: pasos, errores al intentar avanzar y foco
+  // =========================================================================
+  const [paso, setPaso] = useState(0);
+  // El paso más lejano al que se llegó validando: el Stepper deja volver a él
+  // de un salto (p. ej. de «Revisión» → «Editar» → otra vez «Revisión»).
+  const [pasoMaximo, setPasoMaximo] = useState(0);
+  // Errores que antes pintaba el navegador (obligatorio, formato de correo) y
+  // los de documentos. No gobiernan el envío: sólo se muestran.
+  const [erroresPaso, setErroresPaso] = useState<Errors>({});
+  const [avisoPaso, setAvisoPaso] = useState<{ paso: number; total: number } | null>(null);
+  const [verContrasenas, setVerContrasenas] = useState(false);
+  // Antes era un alert() del navegador; el flujo es el mismo (no se guarda el logo).
+  const [errorLogo, setErrorLogo] = useState<string | null>(null);
+  // El mapa se monta la primera vez que se VE su paso (inicializarlo oculto lo
+  // dejaría sin tamaño) y después se queda montado.
+  const [mapaVisto, setMapaVisto] = useState(false);
+  // ¿Google rechazó la clave? (facturación apagada, dominio no permitido: el
+  // script carga, pero tapa el mapa con su diálogo en inglés y apaga el
+  // buscador). Entonces no se pintan ni el buscador ni el mapa, que son
+  // opcionales: la dirección se escribe a mano en los campos de siempre.
+  const contenedorMapaRef = useRef<HTMLDivElement>(null);
+  const claveMapaRechazada = useFalloMapa(contenedorMapaRef, isLoaded && !loadError && mapaVisto);
+  const mapaNoDisponible = Boolean(loadError) || claveMapaRechazada;
+  const [entrando, setEntrando] = useState(false);
+  const [foco, setFoco] = useState<{ id: string; desplazar: boolean; n: number } | null>(null);
+  const tarjetaRef = useRef<HTMLDivElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const idPaso = PASOS[paso].id;
+
+  // Mueve el foco DESPUÉS de pintar el paso nuevo (o los errores nuevos).
+  useEffect(() => {
+    if (!foco) return;
+    const tarjeta = tarjetaRef.current;
+    if (foco.desplazar && tarjeta && tarjeta.getBoundingClientRect().top < 0) {
+      const calma = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      tarjeta.scrollIntoView({ block: 'start', behavior: calma ? 'auto' : 'smooth' });
+    }
+    document.getElementById(foco.id)?.focus({ preventScroll: foco.desplazar });
+  }, [foco]);
+
+  // Tras enviar con éxito el formulario ya quedó vacío: vuelve al primer paso.
+  useEffect(() => {
+    if (!showSuccessModal) return;
+    setPaso(0);
+    setPasoMaximo(0);
+    setErroresPaso({});
+    setAvisoPaso(null);
+    setVerContrasenas(false);
+    setErrorLogo(null);
+  }, [showSuccessModal]);
+
+  const irAPaso = (indice: number) => {
+    setPaso(indice);
+    setPasoMaximo((m) => Math.max(m, indice));
+    setAvisoPaso(null);
+    if (PASOS[indice].id === 'ubicacion') setMapaVisto(true);
+    // El lector anuncia el paso nuevo: el foco va a su título.
+    setFoco({ id: idTituloPaso(PASOS[indice].id), desplazar: true, n: Date.now() });
+  };
+
+  /** Lo que falta o sobra en un paso, con la validación de siempre. */
+  const erroresDelPaso = (indice: number): Errors => {
+    const encontrados: Errors = {};
+    for (const campo of CAMPOS_POR_PASO[PASOS[indice].id]) {
+      // 1. Los errores en línea de handleInputChange.
+      if (errors[campo]) {
+        encontrados[campo] = errors[campo];
+        continue;
+      }
+      // 2. Los documentos obligatorios: los mismos mensajes que handleSubmit.
+      if (campo === 'identificacion' || campo === 'documentosConstitucion') {
+        if (!formData[campo]) {
+          encontrados[campo] =
+            campo === 'identificacion' ? 'La identificación es requerida' : 'Los documentos son requeridos';
+        }
+        continue;
+      }
+      // 3. Lo que comprobaba el navegador al enviar (required, type, minLength).
+      const control = document.getElementById(idCampo(campo));
+      if (control instanceof HTMLInputElement && !control.checkValidity()) {
+        encontrados[campo] = mensajeNativo(control);
+      }
+    }
+    return encontrados;
+  };
+
+  /** Pinta los errores de un paso y lleva el foco al primero. */
+  const mostrarErrores = (indice: number, encontrados: Errors) => {
+    const claves = Object.keys(encontrados);
+    setErroresPaso((prev) => {
+      const siguiente = { ...prev };
+      claves.forEach((c) => {
+        // Los de `errors` ya se pintan solos; aquí sólo los demás.
+        if (!errors[c]) siguiente[c] = encontrados[c];
+      });
+      return siguiente;
+    });
+    setAvisoPaso({ paso: indice, total: claves.length });
+    if (indice !== paso) {
+      setPaso(indice);
+      if (PASOS[indice].id === 'ubicacion') setMapaVisto(true);
+    }
+    setFoco({ id: idCampo(claves[0]), desplazar: false, n: Date.now() });
+  };
+
+  const avanzar = () => {
+    const encontrados = erroresDelPaso(paso);
+    if (Object.keys(encontrados).length > 0) {
+      mostrarErrores(paso, encontrados);
+      return;
+    }
+    irAPaso(paso + 1);
+  };
+
+  /**
+   * Desde el Stepper. Hacia atrás, sin más (como siempre). Hacia adelante
+   * (hasta el paso más lejano ya alcanzado), repasando cada paso que se salta
+   * igual que «Continuar»: el primero con errores se muestra y ahí se queda.
+   */
+  const saltarAPaso = (indice: number) => {
+    if (indice <= paso) {
+      irAPaso(indice);
+      return;
+    }
+    for (let i = paso; i < indice; i++) {
+      const encontrados = erroresDelPaso(i);
+      if (Object.keys(encontrados).length > 0) {
+        mostrarErrores(i, encontrados);
+        return;
+      }
+    }
+    irAPaso(indice);
+  };
+
+  // Intro en cualquier campo avanza de paso (el botón «Continuar» es el submit
+  // del formulario). En el último paso, antes de handleSubmit se repasan todos
+  // los pasos, como hacía la validación nativa del navegador.
+  const alEnviar = (e: FormEvent<HTMLFormElement>) => {
+    if (paso < ULTIMO) {
+      e.preventDefault();
+      avanzar();
+      return;
+    }
+    for (let i = 0; i < ULTIMO; i++) {
+      const encontrados = erroresDelPaso(i);
+      if (Object.keys(encontrados).length > 0) {
+        e.preventDefault();
+        mostrarErrores(i, encontrados);
+        return;
+      }
+    }
+    handleSubmit(e);
+  };
+
+  const quitarErrorPaso = (campo: string) => {
+    setErroresPaso((prev) => {
+      if (!(campo in prev)) return prev;
+      const siguiente = { ...prev };
+      delete siguiente[campo];
+      return siguiente;
+    });
+  };
+
+  // handleInputChange de siempre + quitar el aviso de «obligatorio» del campo.
+  const alCambiarCampo = (e: ChangeEvent<HTMLInputElement>) => {
+    handleInputChange(e);
+    quitarErrorPaso(e.target.name);
+  };
+
+  // En el buscador de direcciones, Intro elige la sugerencia de Google: no
+  // debe además enviar el formulario (avanzaría de paso a medio elegir).
+  const evitarEnvioConIntro = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') e.preventDefault();
+  };
+
+  const errorDe = (campo: string) => errors[campo] || erroresPaso[campo] || undefined;
+
+  const erroresVisibles = CAMPOS_POR_PASO[idPaso].filter((c) => errorDe(c)).length;
+  const mostrarAviso = avisoPaso !== null && avisoPaso.paso === paso && erroresVisibles > 0;
+
+  const reglasContrasena = [
+    { ok: formData.password.length >= 8, texto: '8 caracteres o más' },
+    { ok: /[A-Z]/.test(formData.password), texto: 'una mayúscula' },
+    { ok: /[0-9]/.test(formData.password), texto: 'un número' },
+  ];
+
+  /**
+   * Título de cada paso: estructura + remate serif (la voz humana).
+   * El espacio va DENTRO del mismo nodo de texto que el título: suelto
+   * (`{p.titulo}{' '}`) React lo deja en un nodo aparte, sólo de espacio, que el
+   * árbol de accesibilidad de Chrome descarta, y el lector decía «Tu
+   * cuentacon ella entrarás a INAKAT». El aria-label lo deja atado del todo.
+   */
+  const tituloDePaso = (i: number) => {
+    const p = PASOS[i];
+    return (
+      <div className="mb-6">
+        <h3
+          id={idTituloPaso(p.id)}
+          tabIndex={-1}
+          aria-label={`${p.titulo} ${p.remate}`}
+          className="font-display text-[1.65rem] font-bold leading-tight tracking-tight text-ink outline-none sm:text-3xl"
+        >
+          {`${p.titulo} `}
+          <em className="font-serif font-normal italic tracking-normal text-teal">{p.remate}</em>
+        </h3>
+      </div>
+    );
+  };
+
   return (
     <>
-    <ErrorToast
-      message={submitStatus.type === 'error' ? submitStatus.message : null}
-      onClose={() => setSubmitStatus({ type: null, message: '' })}
+    <Toast
+      tono="error"
+      mensaje={submitStatus.type === 'error' ? submitStatus.message : null}
+      alCerrar={() => setSubmitStatus({ type: null, message: '' })}
     />
     <section
-      id="formulario-registro"
-      className="bg-title-dark text-white bg-center py-20"
+      id="register"
+      className="hm-suelo--tinta emp-registro"
+      aria-labelledby="emp-registro-titulo"
       suppressHydrationWarning
     >
-      <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto bg-lemon-green p-8 rounded-2xl">
-          <h2 className="text-3xl font-bold text-title-dark mb-12 text-center">
-            ÚNETE HOY Y DESCUBRE CÓMO PODEMOS TRANSFORMAR TU EQUIPO
+      <div className="emp-registro__arcos" aria-hidden="true">
+        <span className="emp-registro__arco" />
+        <span className="emp-registro__arco emp-registro__arco--b" />
+      </div>
+
+      <div className="hm-wrap emp-registro__rejilla">
+        {/* Columna: qué es, qué se necesita y a quién preguntar */}
+        <div className="emp-registro__lado">
+          <p className="hm-eyebrow">Registro de empresa</p>
+          <h2 id="emp-registro-titulo" className="hm-h2 emp-registro__titulo mt-5" aria-label="Registra tu empresa.">
+            <span className="hm-mask" aria-hidden="true">
+              <span>Registra</span>
+            </span>{' '}
+            <span className="hm-mask" aria-hidden="true">
+              <span>
+                tu <em>empresa.</em>
+              </span>
+            </span>
           </h2>
+          <p className="hm-lead mt-6">
+            Completa el formulario y nuestro equipo te contactará para iniciar
+            el proceso.
+          </p>
+          <p className="emp-registro__voz">
+            Únete hoy y descubre cómo podemos transformar tu equipo.
+          </p>
 
-          {submitStatus.type === 'error' && (
-            <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500">
-              <p className="font-semibold">{submitStatus.message}</p>
-            </div>
-          )}
+          <div className="emp-registro__mano">
+            <h3>Ten a la mano</h3>
+            <ul>
+              <li>Tu RFC y la razón social</li>
+              <li>
+                <span>
+                  Tu identificación y la Constancia de Situación Fiscal
+                  <small>PDF, imagen, Word o Excel · máx. 4 MB cada una</small>
+                </span>
+              </li>
+              <li>
+                <span>
+                  El logo de tu empresa, si quieres
+                  <small>PNG, JPG o WebP · máx. 2 MB</small>
+                </span>
+              </li>
+            </ul>
+          </div>
 
-          <form onSubmit={handleSubmit} autoComplete="off" suppressHydrationWarning>
+          <p className="emp-registro__contacto">
+            ¿Dudas?{' '}
+            <a href={`mailto:${CONTACTO.email}`}>
+              <Mail aria-hidden="true" />
+              {CONTACTO.email}
+            </a>
+            {' · '}
+            <a href={CONTACTO.telefonoHref}>
+              <Phone aria-hidden="true" />
+              {CONTACTO.telefono}
+            </a>
+          </p>
+        </div>
+
+        {/* La tarjeta del formulario */}
+        <div id="formulario-registro" ref={tarjetaRef} className="emp-form">
+          <Stepper pasos={PASOS} actual={paso} alIrA={saltarAPaso} pasoMaximo={pasoMaximo} className="mb-8" />
+
+          <form onSubmit={alEnviar} autoComplete="off" noValidate suppressHydrationWarning>
             {/* Honeypots ocultos: absorben el autofill agresivo de Chrome
                 (recuerda credenciales de admin de sesiones anteriores). */}
             <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
               <input type="text" name="username" tabIndex={-1} autoComplete="username" />
               <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <div className="mb-8">
-                  <h3 className="font-bold text-lg mb-4">DATOS DEL USUARIO</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <input
-                        type="text"
-                        name="nombre"
-                        value={formData.nombre}
-                        onChange={handleInputChange}
-                        aria-label="Nombre *"
-                        placeholder="Nombre *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        required
-                      />
-                      {errors.nombre && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.nombre}
-                        </span>
-                      )}
-                    </div>
 
-                    <div>
-                      <input
-                        type="text"
-                        name="apellidoPaterno"
-                        value={formData.apellidoPaterno}
-                        onChange={handleInputChange}
-                        aria-label="Apellido Paterno *"
-                        placeholder="Apellido Paterno *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        required
-                      />
-                      {errors.apellidoPaterno && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.apellidoPaterno}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <input
-                        type="text"
-                        name="apellidoMaterno"
-                        value={formData.apellidoMaterno}
-                        onChange={handleInputChange}
-                        aria-label="Apellido Materno (opcional)"
-                        placeholder="Apellido Materno (opcional)"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                      />
-                      {errors.apellidoMaterno && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.apellidoMaterno}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
+            {/* ============ Paso 1 · Tu cuenta ============ */}
+            <div hidden={idPaso !== 'cuenta'}>
+              <div className="emp-panel">
+                {tituloDePaso(0)}
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <FormField etiqueta="Nombre" requerido id={idCampo('nombre')} error={errorDe('nombre')}>
+                    <Input
+                      type="text"
+                      name="nombre"
+                      value={formData.nombre}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Apellido paterno" requerido id={idCampo('apellidoPaterno')} error={errorDe('apellidoPaterno')}>
+                    <Input
+                      type="text"
+                      name="apellidoPaterno"
+                      value={formData.apellidoPaterno}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Apellido materno" opcional id={idCampo('apellidoMaterno')} error={errorDe('apellidoMaterno')}>
+                    <Input
+                      type="text"
+                      name="apellidoMaterno"
+                      value={formData.apellidoMaterno}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Departamento" opcional id={idCampo('departamento')} error={errorDe('departamento')}>
+                    <>
                       {/* Hidden dummy input to absorb browser autofill */}
                       <input type="text" name="fakeField" style={{ display: 'none' }} tabIndex={-1} autoComplete="organization-title" />
-                      <input
+                      <Input
                         type="text"
                         name="departamento"
-                        id="company-dept-input"
-                        value={formData.departamento}
-                        onChange={handleInputChange}
                         autoComplete="one-time-code"
                         role="presentation"
-                        aria-label="Departamento de la empresa (ej: Recursos Humanos)"
-                        placeholder="Departamento de la empresa (ej: Recursos Humanos)"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                        value={formData.departamento}
+                        onChange={alCambiarCampo}
+                        placeholder="Ej.: Recursos Humanos"
+                        className={CONTROL}
                       />
-                    </div>
-
-                    <div>
-                      <label className="block mb-2 font-semibold">
-                        Identificación *
-                      </label>
-                      <input
-                        type="file"
-                        ref={fileInputIdRef}
-                        onChange={(e) => handleFileChange(e, 'identificacion')}
-                        className="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputIdRef.current?.click()}
-                        className="bg-soft-green text-white py-3 px-6 rounded-xl hover:bg-green-700 w-full md:w-auto flex items-center justify-center transition-colors"
-                      >
-                        CARGAR DOCUMENTO <span className="ml-2">↑</span>
-                      </button>
-                      {formData.identificacion && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="text-sm text-gray-700 font-semibold">
-                            ✓ {formData.identificacion.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleFileRemove('identificacion')}
-                            className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full p-1 transition-colors"
-                            title="Eliminar archivo"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                      {errors.identificacion && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.identificacion}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <h3 className="font-bold text-lg mb-4">
-                    GENERA TU CONTRASEÑA
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <input
-                        type="password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        aria-label="Genera tu contraseña *"
-                        placeholder="Genera tu contraseña *"
-                        className={`w-full p-3 rounded-lg border text-gray-700 ${
-                          errors.password ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        autoComplete="new-password"
-                        required
-                        minLength={8}
-                      />
-                      {errors.password && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.password}
-                        </span>
-                      )}
-                      <p className="text-xs text-gray-600 mt-1">
-                        Mínimo 8 caracteres, una mayúscula y un número
-                      </p>
-                    </div>
-
-                    <div>
-                      <input
-                        type="password"
-                        name="confirmPassword"
-                        value={formData.confirmPassword}
-                        onChange={handleInputChange}
-                        aria-label="Confirma tu contraseña *"
-                        placeholder="Confirma tu contraseña *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="new-password"
-                        required
-                      />
-                      {errors.confirmPassword && (
-                        <span className="text-red-600 text-sm font-semibold block mt-1">
-                          {errors.confirmPassword}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-lg mb-4">DATOS DE LA EMPRESA</h3>
-                <div className="space-y-4">
-                  {/* FEAT-1b: Logo de la empresa */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Logo de la empresa <span className="text-gray-500 font-normal">(opcional)</span>
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
-                        {logoPreview ? (
-                          <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
-                        ) : (
-                          <Building2 className="w-8 h-8 text-gray-400" />
-                        )}
-                      </div>
-                      <div>
-                        <label className="cursor-pointer bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 inline-block">
-                          {logoFile ? 'Cambiar logo' : 'Subir logo'}
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/png,image/jpeg,image/webp"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (file.size > 2 * 1024 * 1024) {
-                                  alert('El logo no debe pesar más de 2MB');
-                                  return;
-                                }
-                                setLogoFile(file);
-                                setLogoPreview(URL.createObjectURL(file));
-                                // Logo nuevo: no reutilizar el subido en un intento anterior.
-                                urlsSubidasRef.current.logo = null;
-                              }
-                            }}
-                          />
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG o WebP. Máx 2MB.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      name="nombreEmpresa"
-                      value={formData.nombreEmpresa}
-                      onChange={handleInputChange}
-                      aria-label="Nombre comercial *"
-                      placeholder="Nombre comercial *"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                      autoComplete="off"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <input
+                    </>
+                  </FormField>
+                  <FormField
+                    etiqueta="Correo electrónico"
+                    requerido
+                    id={idCampo('correoEmpresa')}
+                    error={errorDe('correoEmpresa')}
+                    ayuda="Será tu usuario para entrar a la plataforma."
+                    className="sm:col-span-2"
+                  >
+                    <Input
                       type="email"
                       name="correoEmpresa"
                       value={formData.correoEmpresa}
-                      onChange={handleInputChange}
-                      aria-label="Correo electrónico *"
-                      placeholder="Correo electrónico *"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                      autoComplete="off"
-                      required
-                    />
-                    {errors.correoEmpresa && (
-                      <span className="text-red-600 text-sm font-semibold block mt-1">
-                        {errors.correoEmpresa}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      name="sitioWeb"
-                      value={formData.sitioWeb}
-                      onChange={handleInputChange}
-                      aria-label="Sitio web (opcional)"
-                      placeholder="Sitio web (opcional)"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
+                      onChange={alCambiarCampo}
+                      placeholder="nombre@tuempresa.com"
+                      className={CONTROL}
                       autoComplete="off"
                     />
-                    {errors.sitioWeb && (
-                      <span className="text-red-600 text-sm font-semibold block mt-1">
-                        {errors.sitioWeb}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      name="razonSocial"
-                      value={formData.razonSocial}
-                      onChange={handleInputChange}
-                      aria-label="Razón Social *"
-                      placeholder="Razón Social *"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                      autoComplete="off"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      name="rfc"
-                      value={formData.rfc}
-                      onChange={handleInputChange}
-                      aria-label="RFC *"
-                      placeholder="RFC *"
-                      className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 uppercase"
-                      autoComplete="off"
-                      required
-                      maxLength={13}
-                    />
-                    {errors.rfc && (
-                      <span className="text-red-600 text-sm font-semibold block mt-1">
-                        {errors.rfc}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Dirección desglosada */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <input
-                        type="text"
-                        name="calle"
-                        value={formData.calle}
-                        onChange={handleInputChange}
-                        aria-label="Calle y número *"
-                        placeholder="Calle y número *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        name="colonia"
-                        value={formData.colonia}
-                        onChange={handleInputChange}
-                        aria-label="Colonia *"
-                        placeholder="Colonia *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        name="ciudad"
-                        value={formData.ciudad}
-                        onChange={handleInputChange}
-                        aria-label="Ciudad *"
-                        placeholder="Ciudad *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        name="codigoPostal"
-                        value={formData.codigoPostal}
-                        onChange={handleInputChange}
-                        aria-label="Código Postal *"
-                        placeholder="Código Postal *"
-                        className="w-full p-3 rounded-lg border border-gray-300 text-gray-700"
-                        autoComplete="off"
-                        maxLength={5}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Mapa de ubicación */}
-                  <div className="mt-4">
-                    <label className="block mb-2 text-sm font-semibold">
-                      Ubicación en mapa
-                    </label>
-
-                    {loadError && (
-                      <p className="text-red-500 text-sm">Error al cargar el mapa</p>
-                    )}
-
-                    {!isLoaded ? (
-                      <div className="w-full h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
-                        <p className="text-gray-500">Cargando mapa...</p>
-                      </div>
-                    ) : (
+                  </FormField>
+                  <FormField
+                    etiqueta="Genera tu contraseña"
+                    requerido
+                    id={idCampo('password')}
+                    error={errorDe('password')}
+                    ayuda={
                       <>
-                        {/* Campo de búsqueda con autocompletado */}
-                        <Autocomplete
-                          onLoad={onAutocompleteLoad}
-                          onPlaceChanged={onPlaceChanged}
-                          options={{
-                            componentRestrictions: { country: 'mx' },
-                            types: ['geocode', 'establishment']
-                          }}
-                        >
-                          <input
-                            type="text"
-                            aria-label="Busca tu dirección..."
-                            placeholder="Busca tu dirección..."
-                            className="w-full p-3 rounded-lg border border-gray-300 text-gray-700 mb-3"
-                          />
-                        </Autocomplete>
-
-                        {/* Mapa */}
-                        <GoogleMap
-                          mapContainerStyle={mapContainerStyle}
-                          zoom={15}
-                          center={mapCenter}
-                          onClick={onMapClick}
-                          options={{
-                            streetViewControl: false,
-                            mapTypeControl: false,
-                          }}
-                        >
-                          <Marker
-                            position={markerPosition}
-                            draggable={true}
-                            onDragEnd={(e) => {
-                              if (e.latLng) {
-                                onMapClick(e as google.maps.MapMouseEvent);
-                              }
-                            }}
-                          />
-                        </GoogleMap>
-
-                        <p className="text-xs text-gray-600 mt-2">
-                          Puedes buscar tu dirección o hacer clic en el mapa para ajustar la ubicación
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block mb-2 text-sm font-semibold">
-                      Constancia de Situación Fiscal *
-                    </label>
-                    <input
-                      type="file"
-                      ref={fileInputDocRef}
-                      onChange={(e) =>
-                        handleFileChange(e, 'documentosConstitucion')
-                      }
-                      className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputDocRef.current?.click()}
-                      className="bg-soft-green text-white py-3 px-6 rounded-xl hover:bg-green-700 w-full md:w-auto flex items-center justify-center transition-colors"
-                    >
-                      CARGAR DOCUMENTO <span className="ml-2">↑</span>
-                    </button>
-                    {formData.documentosConstitucion && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-sm text-gray-700 font-semibold">
-                          ✓ {formData.documentosConstitucion.name}
+                        <span className="sr-only">Mínimo 8 caracteres, una mayúscula y un número.</span>
+                        <span className="flex flex-wrap gap-x-4 gap-y-1" aria-hidden="true">
+                          {reglasContrasena.map((r) => (
+                            <span
+                              key={r.texto}
+                              className={cn('inline-flex items-center gap-1.5', r.ok ? 'font-medium text-lime-dark' : 'text-ink-muted')}
+                            >
+                              {r.ok ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <Circle className="h-3 w-3" />}
+                              {r.texto}
+                            </span>
+                          ))}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleFileRemove('documentosConstitucion')}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full p-1 transition-colors"
-                          title="Eliminar archivo"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                    {errors.documentosConstitucion && (
-                      <span className="text-red-600 text-sm font-semibold block mt-1">
-                        {errors.documentosConstitucion}
-                      </span>
-                    )}
-                  </div>
+                      </>
+                    }
+                  >
+                    <Input
+                      type={verContrasenas ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="new-password"
+                      minLength={8}
+                    />
+                  </FormField>
+                  <FormField etiqueta="Confirma tu contraseña" requerido id={idCampo('confirmPassword')} error={errorDe('confirmPassword')}>
+                    <Input
+                      type={verContrasenas ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="new-password"
+                    />
+                  </FormField>
+                  <Checkbox
+                    className="sm:col-span-2"
+                    etiqueta="Mostrar contraseñas"
+                    checked={verContrasenas}
+                    onChange={(e) => setVerContrasenas(e.target.checked)}
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="mt-8">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="bg-button-orange text-white py-3 px-12 rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors font-semibold"
+            {/* ============ Paso 2 · Tu empresa ============ */}
+            <div hidden={idPaso !== 'empresa'}>
+              <div className="emp-panel">
+                {tituloDePaso(1)}
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {/* FEAT-1b: Logo de la empresa */}
+                  <FormField
+                    etiqueta="Logo de la empresa"
+                    opcional
+                    id="empresa-logo"
+                    ayuda="PNG, JPG o WebP. Máx 2MB."
+                    error={errorLogo}
+                    className="sm:col-span-2"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-line-strong bg-paper">
+                        {logoPreview ? (
+                          // Vista previa local (blob:), no pasa por next/image.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={logoPreview} alt="Vista previa del logo" className="h-full w-full object-cover" />
+                        ) : (
+                          <Building2 className="h-8 w-8 text-ink-muted" aria-hidden="true" />
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        ref={logoInputRef}
+                        className="hidden"
+                        tabIndex={-1}
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              setErrorLogo('El logo no debe pesar más de 2MB');
+                              return;
+                            }
+                            setErrorLogo(null);
+                            setLogoFile(file);
+                            setLogoPreview(URL.createObjectURL(file));
+                            // Logo nuevo: no reutilizar el subido en un intento anterior.
+                            urlsSubidasRef.current.logo = null;
+                          }
+                        }}
+                      />
+                      {/* El FormField apunta su etiqueta a este botón (id) y
+                          reparte los ids de su ayuda y su error. */}
+                      <Button
+                        variante="contorno"
+                        id="empresa-logo"
+                        aria-describedby={errorLogo ? 'empresa-logo-error empresa-logo-ayuda' : 'empresa-logo-ayuda'}
+                        onClick={() => logoInputRef.current?.click()}
+                      >
+                        {logoFile ? 'Cambiar logo' : 'Subir logo'}
+                      </Button>
+                    </div>
+                  </FormField>
+                  <FormField etiqueta="Nombre comercial" requerido id={idCampo('nombreEmpresa')} error={errorDe('nombreEmpresa')}>
+                    <Input
+                      type="text"
+                      name="nombreEmpresa"
+                      value={formData.nombreEmpresa}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField
+                    etiqueta="Sitio web"
+                    opcional
+                    id={idCampo('sitioWeb')}
+                    error={errorDe('sitioWeb')}
+                  >
+                    <Input
+                      type="text"
+                      name="sitioWeb"
+                      value={formData.sitioWeb}
+                      onChange={alCambiarCampo}
+                      placeholder="www.tuempresa.com"
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Razón social" requerido id={idCampo('razonSocial')} error={errorDe('razonSocial')}>
+                    <Input
+                      type="text"
+                      name="razonSocial"
+                      value={formData.razonSocial}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField
+                    etiqueta="RFC"
+                    requerido
+                    id={idCampo('rfc')}
+                    error={errorDe('rfc')}
+                    ayuda="12 caracteres si es persona moral, 13 si es persona física."
+                  >
+                    <Input
+                      type="text"
+                      name="rfc"
+                      value={formData.rfc}
+                      onChange={alCambiarCampo}
+                      className={cn(CONTROL, 'font-display uppercase tracking-wide')}
+                      autoComplete="off"
+                      maxLength={13}
+                    />
+                  </FormField>
+                </div>
+              </div>
+            </div>
+
+            {/* ============ Paso 3 · Ubicación ============ */}
+            <div hidden={idPaso !== 'ubicacion'}>
+              <div className="emp-panel">
+                {tituloDePaso(2)}
+
+                {/* Buscador: rellena calle, colonia, ciudad y CP */}
+                {mapaNoDisponible ? (
+                  // No es un error de quien llena el formulario: aviso
+                  // informativo, con el mismo tono que en /create-job.
+                  <Aviso tono="info" compacto className="mb-5">
+                    El buscador y el mapa no están disponibles en este momento. Escribe la dirección a mano: la
+                    ubicación en el mapa es opcional.
+                  </Aviso>
+                ) : !isLoaded ? (
+                  <div className="mb-5 grid gap-2" role="status">
+                    <span className="sr-only">Cargando mapa...</span>
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                  </div>
+                ) : (
+                  mapaVisto && (
+                    <FormField
+                      etiqueta="Busca tu dirección"
+                      opcional
+                      id="empresa-buscador"
+                      ayuda="Elige una sugerencia y llenamos la dirección por ti."
+                      className="mb-5"
+                    >
+                      <Autocomplete
+                        onLoad={onAutocompleteLoad}
+                        onPlaceChanged={onPlaceChanged}
+                        options={{
+                          componentRestrictions: { country: 'mx' },
+                          types: ['geocode', 'establishment']
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          prefijo={<Search />}
+                          placeholder="Calle, colonia o lugar"
+                          onKeyDown={evitarEnvioConIntro}
+                          className={CONTROL}
+                        />
+                      </Autocomplete>
+                    </FormField>
+                  )
+                )}
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <FormField etiqueta="Calle y número" requerido id={idCampo('calle')} error={errorDe('calle')} className="sm:col-span-2">
+                    <Input
+                      type="text"
+                      name="calle"
+                      value={formData.calle}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Colonia" requerido id={idCampo('colonia')} error={errorDe('colonia')}>
+                    <Input
+                      type="text"
+                      name="colonia"
+                      value={formData.colonia}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Ciudad" requerido id={idCampo('ciudad')} error={errorDe('ciudad')}>
+                    <Input
+                      type="text"
+                      name="ciudad"
+                      value={formData.ciudad}
+                      onChange={alCambiarCampo}
+                      className={CONTROL}
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Código postal" requerido id={idCampo('codigoPostal')} error={errorDe('codigoPostal')}>
+                    <Input
+                      type="text"
+                      name="codigoPostal"
+                      inputMode="numeric"
+                      value={formData.codigoPostal}
+                      onChange={alCambiarCampo}
+                      className={cn(CONTROL, 'tabular-nums')}
+                      autoComplete="off"
+                      maxLength={5}
+                    />
+                  </FormField>
+                </div>
+
+                {/* Mapa de ubicación */}
+                {isLoaded && !mapaNoDisponible && mapaVisto && (
+                  <div className="mt-6">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-ink">
+                        Ubicación en mapa <span className="font-normal text-ink-muted">(opcional)</span>
+                      </p>
+                      {ubicacionElegida ? (
+                        <Badge tono="exito" icono={MapPin}>Ubicación marcada</Badge>
+                      ) : (
+                        <Badge tono="neutro">Sin marcar</Badge>
+                      )}
+                    </div>
+                    {/* Envoltorio del mapa: ahí busca useFalloMapa el aviso de Google. */}
+                    <div ref={contenedorMapaRef} className="overflow-hidden rounded-xl border border-line">
+                      <GoogleMap
+                        mapContainerStyle={mapContainerStyle}
+                        zoom={15}
+                        center={mapCenter}
+                        onClick={onMapClick}
+                        options={{
+                          streetViewControl: false,
+                          mapTypeControl: false,
+                        }}
+                      >
+                        <Marker
+                          position={markerPosition}
+                          draggable={true}
+                          onDragEnd={(e) => {
+                            if (e.latLng) {
+                              onMapClick(e as google.maps.MapMouseEvent);
+                            }
+                          }}
+                        />
+                      </GoogleMap>
+                    </div>
+                    <p className="mt-2 text-[13px] text-ink-muted">
+                      Puedes buscar tu dirección o hacer clic en el mapa para ajustar la ubicación
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ============ Paso 4 · Documentos ============ */}
+            <div hidden={idPaso !== 'documentos'}>
+              <div className="emp-panel">
+                {tituloDePaso(3)}
+                <div className="grid gap-6">
+                  <FormField
+                    etiqueta="Identificación"
+                    requerido
+                    id={idCampo('identificacion')}
+                    error={errorDe('identificacion')}
+                    ayuda="De quien registra la cuenta. PDF, imagen, Word o Excel; máximo 4 MB."
+                  >
+                    <CampoArchivo
+                      nombre="Identificación"
+                      archivo={formData.identificacion}
+                      inputRef={fileInputIdRef}
+                      accept={ACEPTA_DOCUMENTOS}
+                      alCambiar={(e) => {
+                        handleFileChange(e, 'identificacion');
+                        quitarErrorPaso('identificacion');
+                      }}
+                      alQuitar={() => handleFileRemove('identificacion')}
+                    />
+                  </FormField>
+                  <FormField
+                    etiqueta="Constancia de Situación Fiscal"
+                    requerido
+                    id={idCampo('documentosConstitucion')}
+                    error={errorDe('documentosConstitucion')}
+                    ayuda="PDF, imagen, Word o Excel; máximo 4 MB."
+                  >
+                    <CampoArchivo
+                      nombre="Constancia de Situación Fiscal"
+                      archivo={formData.documentosConstitucion}
+                      inputRef={fileInputDocRef}
+                      accept={ACEPTA_DOCUMENTOS}
+                      alCambiar={(e) => {
+                        handleFileChange(e, 'documentosConstitucion');
+                        quitarErrorPaso('documentosConstitucion');
+                      }}
+                      alQuitar={() => handleFileRemove('documentosConstitucion')}
+                    />
+                  </FormField>
+                  <p className="flex items-start gap-2 rounded-xl bg-teal-tint px-4 py-3 text-sm text-teal-dark">
+                    <Clock className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+                    Los documentos se suben al enviar la solicitud, no antes.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ============ Paso 5 · Revisión ============ */}
+            <div hidden={idPaso !== 'revision'}>
+              <div className="emp-panel">
+                {tituloDePaso(4)}
+                <ResumenSolicitud
+                  datos={formData}
+                  logoPreview={logoPreview}
+                  ubicacionElegida={ubicacionElegida}
+                  alEditar={(p) => irAPaso(PASOS.findIndex((x) => x.id === p))}
+                />
+                <p className="mt-5 text-sm text-ink-muted">
+                  Al enviar se crea tu cuenta. Publicar vacantes y ver candidatos
+                  se habilitará cuando INAKAT apruebe tu empresa.
+                </p>
+
+                {submitStatus.type === 'error' && (
+                  // Sin role: el aviso flotante (Toast) ya lo anuncia como alerta.
+                  <div className="mt-5 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+                    <p>{submitStatus.message}</p>
+                  </div>
+                )}
+
+                {/* El aviso declaraba una aceptación sin poner los documentos a
+                    disposición: ahora son enlaces reales. */}
+                <p className="mt-5 text-xs text-ink-muted">
+                  *Al dar click, aceptas los{' '}
+                  <Link
+                    href="/terms"
+                    className="font-medium text-teal underline underline-offset-2 hover:text-ink"
+                  >
+                    términos y condiciones
+                  </Link>{' '}
+                  y la{' '}
+                  <Link
+                    href="/privacy"
+                    className="font-medium text-teal underline underline-offset-2 hover:text-ink"
+                  >
+                    política de privacidad
+                  </Link>
+                  .
+                </p>
+              </div>
+            </div>
+
+            {/* Resumen de errores del paso (al intentar avanzar) */}
+            {mostrarAviso && (
+              <div
+                role="alert"
+                className="mt-6 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark"
               >
-                {isSubmitting ? 'ENVIANDO...' : 'ENVIAR →'}
-              </button>
-              {/* El aviso declaraba una aceptación sin poner los documentos a
-                  disposición: ahora son enlaces reales. */}
-              <p className="text-xs mt-2 text-gray-700">
-                *Al dar click, aceptas los{' '}
-                <Link
-                  href="/terms"
-                  className="underline hover:text-button-dark-green"
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+                {avisoPaso.total === 1
+                  ? 'Revisa el campo marcado para continuar.'
+                  : `Revisa los ${avisoPaso.total} campos marcados para continuar.`}
+              </div>
+            )}
+
+            {/* Navegación: un solo botón submit (Intro en un campo = «Continuar») */}
+            <div className="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
+              {paso > 0 ? (
+                <Button
+                  variante="contorno"
+                  tamano="lg"
+                  icono={ArrowLeft}
+                  onClick={() => irAPaso(paso - 1)}
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto"
                 >
-                  términos y condiciones
-                </Link>{' '}
-                y la{' '}
-                <Link
-                  href="/privacy"
-                  className="underline hover:text-button-dark-green"
+                  Anterior
+                </Button>
+              ) : (
+                <span className="hidden sm:block" aria-hidden="true" />
+              )}
+              {paso < ULTIMO ? (
+                <Button type="submit" tamano="lg" iconoFinal={ArrowRight} className="w-full sm:w-auto">
+                  Continuar
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  tamano="lg"
+                  iconoFinal={Send}
+                  cargando={isSubmitting}
+                  textoCargando="Enviando solicitud…"
+                  className="w-full sm:w-auto"
                 >
-                  política de privacidad
-                </Link>
-                .
-              </p>
+                  Enviar solicitud
+                </Button>
+              )}
             </div>
           </form>
         </div>
       </div>
-
-      {/* Modal de éxito */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center transform animate-in fade-in zoom-in duration-300">
-            {/* Ícono de check verde */}
-            <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-              <svg
-                className="w-12 h-12 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            </div>
-
-            {/* Título */}
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
-              ¡Solicitud enviada exitosamente!
-            </h3>
-
-            {/* Mensaje.
-                El texto anterior («Ya puedes acceder a la plataforma») prometía
-                algo que el servidor no concede: publicar vacantes y ver
-                candidatos requiere que un admin apruebe la solicitud. */}
-            <p className="text-gray-600 mb-8 text-lg">
-              Tu cuenta ha sido creada. Ya puedes entrar, pero publicar vacantes y
-              ver candidatos se habilitará cuando INAKAT apruebe tu empresa.
-            </p>
-
-            {/* Botón */}
-            <button
-              onClick={async () => {
-                if (!loginCredentials) {
-                  router.push('/login');
-                  return;
-                }
-                try {
-                  const res = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      email: loginCredentials.email,
-                      password: loginCredentials.password
-                    })
-                  });
-                  if (res.ok) {
-                    router.push('/company/dashboard');
-                  } else {
-                    router.push('/login');
-                  }
-                } catch {
-                  router.push('/login');
-                }
-              }}
-              className="w-full bg-button-green text-white font-bold py-4 px-8 rounded-xl hover:bg-green-700 transition-colors text-lg"
-            >
-              Ir a plataforma
-            </button>
-          </div>
-        </div>
-      )}
     </section>
+
+    {/* Modal de éxito.
+        El texto anterior («Ya puedes acceder a la plataforma») prometía
+        algo que el servidor no concede: publicar vacantes y ver
+        candidatos requiere que un admin apruebe la solicitud. */}
+    <Modal
+      abierto={showSuccessModal}
+      alCerrar={() => setShowSuccessModal(false)}
+      titulo="¡Solicitud enviada exitosamente!"
+      iconoTitulo={<CheckCircle2 className="h-5 w-5 flex-none text-lime-dark" aria-hidden="true" />}
+      descripcion="Tu cuenta ha sido creada. Ya puedes entrar, pero publicar vacantes y ver candidatos se habilitará cuando INAKAT apruebe tu empresa."
+      tamano="sm"
+      cerrarAlPulsarFondo={false}
+      pie={
+        <Button
+          tamano="lg"
+          anchoCompleto
+          iconoFinal={ArrowRight}
+          cargando={entrando}
+          onClick={async () => {
+            setEntrando(true);
+            try {
+              await irAPlataforma();
+            } finally {
+              setEntrando(false);
+            }
+          }}
+        >
+          Ir a plataforma
+        </Button>
+      }
+    >
+      <ul className="grid gap-2">
+        <li className="flex items-center gap-3 rounded-xl bg-lime-tint px-4 py-3 text-sm font-medium text-lime-dark">
+          <Check className="h-4 w-4 flex-none" strokeWidth={3} aria-hidden="true" />
+          Cuenta creada
+        </li>
+        <li className="flex items-center gap-3 rounded-xl bg-orange-tint px-4 py-3 text-sm font-medium text-orange-dark">
+          <Clock className="h-4 w-4 flex-none" aria-hidden="true" />
+          Aprobación de tu empresa: pendiente
+        </li>
+      </ul>
+    </Modal>
     </>
   );
 };

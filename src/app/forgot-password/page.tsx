@@ -2,15 +2,29 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Mail, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Mail } from 'lucide-react';
+import Footer from '@/components/commons/Footer';
+import SiteMotion from '@/components/ui/SiteMotion';
+import TituloMascara from '@/components/ui/TituloMascara';
+import Button from '@/components/ui/Button';
+import FormField, { Input } from '@/components/ui/FormField';
+import { AvisoAcceso, BOTON_FANTASMA, MarcoAcceso, PanelAcceso } from '../login/_acceso/MarcoAcceso';
+import '../login/_acceso/acceso.css';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+
+  // Presentación: al cambiar a «Revisa tu correo» el formulario desaparece;
+  // el foco pasa a la confirmación para no quedarse en la nada.
+  const confirmacionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sent) confirmacionRef.current?.focus();
+  }, [sent]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,84 +53,120 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        {sent ? (
-          <div role="status" className="text-center">
-            <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Correo enviado</h2>
-            <p className="text-gray-600 mb-6">
-              Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.
-            </p>
-            <Link
-              href="/login"
-              className="text-blue-600 hover:underline flex items-center justify-center gap-2"
+    <>
+      <main className="hm">
+        <MarcoAcceso
+          panel={
+            <PanelAcceso
+              antetitulo="INAKAT"
+              frase={[{ texto: 'Sin problema.' }, { texto: 'Te ayudamos a volver a entrar.', em: true }]}
+              pie="Por seguridad, cada enlace sirve una sola vez y caduca en una hora."
+            />
+          }
+        >
+          {sent ? (
+            <div
+              ref={confirmacionRef}
+              tabIndex={-1}
+              role="status"
+              className="outline-none"
             >
-              <ArrowLeft size={16} />
-              Volver al login
-            </Link>
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">¿Olvidaste tu contraseña?</h1>
-            <p className="text-gray-600 mb-6">
-              Ingresa tu correo electrónico y te enviaremos un enlace para restablecerla.
-            </p>
-
-            {error && (
-              // AUTHUI-014: sin role="alert" el lector de pantalla no anunciaba el error.
-              <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-                {error}
+              <p className="hm-eyebrow">Correo enviado</p>
+              <TituloMascara
+                key="enviado"
+                como="h1"
+                className="ac-titulo mt-5"
+                renglones={[{ texto: 'Revisa' }, { texto: 'tu correo.', contenido: <em>tu correo.</em> }]}
+              />
+              <p className="hm-lead mt-5">
+                Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.
+              </p>
+              <p className="mt-4 text-sm text-ink-muted">
+                ¿No lo ves en unos minutos? Revisa la carpeta de correo no deseado.
+              </p>
+              <div className="mt-8">
+                <Link href="/login" className={`${BOTON_FANTASMA} ac-atras`}>
+                  <ArrowLeft aria-hidden="true" />
+                  Volver a iniciar sesión
+                </Link>
               </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Correo electrónico
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    id="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="tu@correo.com"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="animate-spin" size={18} />
-                    Enviando...
-                  </>
-                ) : (
-                  'Enviar enlace'
-                )}
-              </button>
-            </form>
-
-            <div className="mt-4 text-center">
-              <Link
-                href="/login"
-                className="text-sm text-gray-600 hover:underline flex items-center justify-center gap-1"
-              >
-                <ArrowLeft size={14} />
-                Volver al login
-              </Link>
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          ) : (
+            <>
+              <p className="hm-eyebrow">Recuperar acceso</p>
+              <TituloMascara
+                key="formulario"
+                como="h1"
+                className="ac-titulo mt-5"
+                renglones={[
+                  { texto: '¿Olvidaste' },
+                  {
+                    texto: 'tu contraseña?',
+                    contenido: (
+                      <>
+                        tu <em>contraseña?</em>
+                      </>
+                    ),
+                  },
+                ]}
+              />
+              <p className="hm-lead mt-5">
+                Ingresa tu correo electrónico y te enviaremos un enlace para restablecerla.
+              </p>
+
+              <div className="ac-tarjeta mt-8">
+                {error && (
+                  // AUTHUI-014: sin role="alert" el lector de pantalla no anunciaba el error.
+                  <AvisoAcceso tono="error" className="mb-5">
+                    {error}
+                  </AvisoAcceso>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <FormField
+                    etiqueta="Correo electrónico"
+                    requerido
+                    id="email"
+                    ayuda="Usa el correo con el que te registraste."
+                  >
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="tu@correo.com"
+                      prefijo={<Mail />}
+                      className="h-12 text-base"
+                    />
+                  </FormField>
+
+                  <Button
+                    variante="publico-naranja"
+                    type="submit"
+                    tamano="lg"
+                    anchoCompleto
+                    cargando={isSubmitting}
+                    textoCargando="Enviando…"
+                    iconoFinal={ArrowRight}
+                  >
+                    Enviar enlace
+                  </Button>
+                </form>
+              </div>
+
+              <p className="mt-6 text-sm">
+                <Link href="/login" className="ac-enlace inline-flex items-center gap-1.5">
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  Volver a iniciar sesión
+                </Link>
+              </p>
+            </>
+          )}
+        </MarcoAcceso>
+      </main>
+      <Footer />
+      <SiteMotion />
+    </>
   );
 }

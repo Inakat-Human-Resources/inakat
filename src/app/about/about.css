@@ -1,0 +1,1137 @@
+/* RUTA: src/app/about/about.css
+   /about — «Sobre nosotros» en el registro PÚBLICO «Arco».
+
+   Extiende el concepto de la portada (un punto = la persona, un arco = el
+   puente) sin inventar otro: la foto vive en un arco con anillos concéntricos,
+   los dos filtros humanos son dos arcos que se cruzan sobre un punto, los
+   expertos asoman por ventanas en arco y el proceso es un carril que el punto
+   recorre al bajar.
+
+   Reglas (las de site.css):
+   - Prefijo ab- (sólo esta página). Las primitivas hm- vienen de site.css.
+   - Sólo se animan transform, opacity y clip-path.
+   - Lo ligado al scroll vive dentro de @supports (animation-timeline: view())
+     y prefers-reduced-motion: no-preference. Sin eso, el estado natural es el
+     final: la página se lee completa sin JS y con movimiento reducido.
+   - Las entradas al cargar cuelgan de .hm--js (SiteMotion la pone sólo con la
+     pestaña visible).
+   - globals.css declara `section { overflow: hidden }`, que mata el sticky: la
+     sección del proceso (cabecera fija) lo devuelve a visible; las que sólo
+     recortan decoración usan `overflow: clip`, que no crea contenedor de scroll.
+
+   Pares de color medidos (WCAG 2.x):
+   tinta/arena 9.91 · tinta .86/arena 6.73 · tinta .8/arena 5.74 · teal/arena 5.91
+   teal/papel 6.77 · blanco/tinta 12.38 · blanco .9/tinta 10.2 · blanco .72/tinta 7.27
+   lima/tinta 5.67 · blanco/teal 7.38 · blanco .88/teal 6.2 · lima/teal 3.38 (sólo
+   titulares y cifras decorativas grandes) · tinta/lima 5.67 (SIN opacidad: al 80 %
+   baja a 3.93) · tinta/naranja 4.87 · naranja-oscuro/papel 6.51 · contorno del
+   nombre #7e8788/tinta 3.37 (decorativo, aria-hidden) */
+
+.ab-hero,
+.ab-nombre,
+.ab-modelo,
+.ab-presencia,
+.ab-compromiso,
+.ab-expertos,
+.ab-cierre {
+  overflow: clip;
+}
+.ab-proceso {
+  overflow: visible;
+}
+
+/* =====================================================================
+   1. PORTADA — el título y la foto dentro del puente
+   ===================================================================== */
+.ab-hero {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(2.5rem, 7svh, 5.5rem) clamp(4rem, 9vw, 8rem);
+}
+.ab-hero__cabeza {
+  display: grid;
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+@media (min-width: 1024px) {
+  .ab-hero__cabeza {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    align-items: end;
+  }
+}
+/* Más grande que el hm-display de página interior: aquí el título ES la
+   portada. 179 px a 1440; a 360 cabe «¿Quiénes» en 320 px de ancho útil. */
+.ab-hero__titulo {
+  font-size: clamp(3.4rem, calc(13vw - 8px), 12.5rem);
+}
+.ab-hero__lead {
+  max-width: 34rem;
+}
+.ab-hero__lead strong {
+  font-weight: 700;
+}
+
+/* La foto, dentro de un arco con dos anillos concéntricos: el puente. */
+.ab-hero__foto {
+  position: relative;
+  margin: clamp(2.5rem, 6vw, 5rem) 0 0;
+  --d: clamp(0.9rem, 2.6vw, 2.5rem);
+}
+.ab-ventana {
+  position: relative;
+  z-index: 1;
+  aspect-ratio: 5 / 4;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+}
+@media (min-width: 768px) {
+  .ab-ventana {
+    aspect-ratio: 16 / 9;
+  }
+}
+.ab-ventana img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Las dos personas están a la derecha del centro: así el arco no les corta
+     la cabeza ni en 5:4 (móvil) ni en 16:9. */
+  object-position: 60% 50%;
+}
+/* Anillos: mismo centro que el arco de la foto (arriba −d, a los lados −d,
+   pie común). Con radio 999px el navegador los deja en semicírculo exacto. */
+.ab-anillo {
+  position: absolute;
+  z-index: 0;
+  inset: calc(var(--d) * -1) calc(var(--d) * -1) 0;
+  border: 2px solid rgb(159 187 47 / 0.6);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  pointer-events: none;
+}
+.ab-anillo--b {
+  inset: calc(var(--d) * -2) calc(var(--d) * -2) 0;
+  border-color: rgb(43 93 98 / 0.24);
+}
+/* La persona, al pie del puente. */
+.ab-hero__punto {
+  z-index: 2;
+  left: 7%;
+  bottom: 0;
+  width: clamp(2.25rem, 6vw, 5.5rem);
+  translate: 0 50%;
+  background: var(--orange);
+}
+.ab-hero__punto2 {
+  z-index: 2;
+  right: 9%;
+  top: 4%;
+  width: clamp(0.9rem, 2vw, 1.6rem);
+  background: var(--lime);
+}
+.hm--js .ab-hero__punto {
+  animation: hm-pop 0.9s var(--ease) 1s both;
+}
+.hm--js .ab-hero__punto2 {
+  animation: hm-pop 0.9s var(--ease) 1.15s both;
+}
+
+/* =====================================================================
+   2. EL NOMBRE — la palabra que llena el encuadre
+   ===================================================================== */
+.ab-nombre {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.ab-nombre__arco {
+  position: absolute;
+  z-index: -1;
+  right: -22vw;
+  bottom: -2px;
+  width: min(92vw, 1300px);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(159 187 47 / 0.28);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  pointer-events: none;
+}
+.ab-nombre__palabra {
+  position: relative;
+  margin-top: clamp(1rem, 3vw, 2rem);
+  font-family: var(--disp);
+  font-weight: 800;
+  /* «INAKAT» mide ~3.4 cuerpos: a 22vw cabe con aire en 360 y en 1440. */
+  font-size: clamp(4rem, 22vw, 20rem);
+  line-height: 0.82;
+  letter-spacing: -0.06em;
+  white-space: nowrap;
+  color: #fff;
+}
+.ab-nombre__contorno {
+  display: none;
+}
+/* El relleno va ENCIMA del contorno y de su tapa (ver el bloque de movimiento):
+   sin z-index, el contorno —posicionado— pintaría encima de él. */
+.ab-nombre__lleno {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.ab-nombre__cuerpo {
+  display: grid;
+  gap: clamp(1.25rem, 4vw, 4rem);
+  margin-top: clamp(2rem, 5vw, 4rem);
+}
+@media (min-width: 900px) {
+  .ab-nombre__cuerpo {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    align-items: start;
+  }
+}
+.ab-nombre__talento {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(2.6rem, 1.8rem + 4vw, 6rem);
+  line-height: 1;
+  color: var(--lime);
+}
+.ab-nombre__texto {
+  max-width: 48rem;
+  font-family: var(--disp);
+  font-weight: 500;
+  font-size: clamp(1.3rem, 1rem + 1.4vw, 2.3rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: rgb(255 255 255 / 0.9);
+}
+.ab-nombre__texto strong {
+  font-weight: 800;
+  color: var(--lime);
+}
+
+/* =====================================================================
+   3. EL MODELO — dos arcos (dos filtros) que se cruzan sobre la persona
+   ===================================================================== */
+.ab-modelo {
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.ab-modelo__rejilla {
+  display: grid;
+  gap: clamp(3rem, 6vw, 6rem);
+}
+@media (min-width: 1024px) {
+  .ab-modelo__rejilla {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+}
+.ab-modelo .hm-h2 em {
+  display: block;
+  color: var(--teal);
+}
+.ab-modelo__texto {
+  max-width: 36rem;
+  margin-top: clamp(1.5rem, 3vw, 2.25rem);
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.55;
+  color: rgb(40 55 57 / 0.88);
+}
+.ab-modelo__texto strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.ab-filtros {
+  width: 100%;
+  max-width: 40rem;
+  margin-inline: auto;
+}
+.ab-filtros__lienzo {
+  position: relative;
+  /* Dos arcos de 64 % de ancho (2:1 → 32 % de alto): el lienzo mide 100 × 32. */
+  aspect-ratio: 25 / 8;
+  border-bottom: 2px solid rgb(40 55 57 / 0.25);
+}
+.ab-filtro {
+  position: absolute;
+  bottom: 0;
+  width: 64%;
+  aspect-ratio: 2 / 1;
+  border: clamp(2px, 0.35vw, 4px) solid;
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+}
+.ab-filtro--a {
+  left: 0;
+  border-color: var(--teal);
+}
+.ab-filtro--b {
+  right: 0;
+  border-color: var(--orange);
+}
+.ab-filtros__punto {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: clamp(1.25rem, 4vw, 2.5rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+  translate: -50% 50%;
+  box-shadow: 0 0 0 6px var(--paper);
+}
+.ab-filtros__rotulos {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.6rem;
+  font-family: var(--disp);
+  font-size: clamp(0.72rem, 0.66rem + 0.3vw, 0.9rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+.ab-filtros__rotulos span {
+  max-width: 45%;
+}
+.ab-filtros__rotulos span:first-child {
+  color: var(--teal);
+}
+.ab-filtros__rotulos span:last-child {
+  text-align: right;
+  color: #8a4600;
+}
+
+/* =====================================================================
+   4. PRESENCIA — las ciudades, en grande, sobre lima
+   ===================================================================== */
+.ab-presencia {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(5rem, 11vw, 10rem);
+}
+.ab-presencia__arco {
+  position: absolute;
+  z-index: -1;
+  left: -18vw;
+  top: -6%;
+  width: min(80vw, 1100px);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(40 55 57 / 0.18);
+  border-top: 0;
+  border-radius: 0 0 999vmax 999vmax;
+  pointer-events: none;
+}
+.ab-presencia .hm-eyebrow::before {
+  background: var(--ink);
+}
+.ab-ciudades {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: clamp(0.8rem, 2.2vw, 2rem);
+  row-gap: 0.15em;
+  margin: clamp(2rem, 5vw, 4rem) 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2rem, 1rem + 5vw, 6rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+.ab-ciudades li {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(0.8rem, 2.2vw, 2rem);
+}
+.ab-ciudades li:not(:last-child)::after {
+  content: '';
+  width: 0.2em;
+  height: 0.2em;
+  border-radius: 50%;
+  background: var(--ink);
+  flex: none;
+}
+.ab-presencia__texto {
+  max-width: 46rem;
+  margin-top: clamp(2rem, 5vw, 3.5rem);
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.55;
+}
+.ab-presencia__texto strong {
+  font-weight: 700;
+}
+
+/* =====================================================================
+   5. COMPROMISO — dos pilares sobre verde azulado
+   ===================================================================== */
+.ab-compromiso {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.ab-compromiso__arco {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: -6%;
+  width: min(140vw, 2100px);
+  margin-left: calc(min(140vw, 2100px) / -2);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(255 255 255 / 0.12);
+  border-top: 0;
+  border-radius: 0 0 999vmax 999vmax;
+  pointer-events: none;
+}
+.ab-compromiso__rejilla {
+  display: grid;
+  gap: clamp(3rem, 5vw, 5rem);
+  margin-top: clamp(2.5rem, 6vw, 5rem);
+}
+@media (min-width: 900px) {
+  .ab-compromiso__rejilla {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.ab-pilar {
+  display: grid;
+  gap: 1.15rem;
+  align-content: start;
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+  border-top: 2px solid rgb(255 255 255 / 0.85);
+}
+.ab-pilar__icono {
+  width: 3.25rem;
+  height: 3.25rem;
+  padding: 0.75rem;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--ink);
+}
+.ab-pilar__titulo {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 1.1rem + 1.8vw, 2.8rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.ab-pilar p {
+  font-size: clamp(1rem, 0.95rem + 0.3vw, 1.2rem);
+  line-height: 1.6;
+  color: rgb(255 255 255 / 0.88);
+}
+.ab-pilar strong {
+  font-weight: 700;
+  color: #fff;
+}
+.ab-pilar .ab-pilar__cita {
+  margin-top: 0.4rem;
+  padding-left: 1.1rem;
+  border-left: 3px solid var(--lime);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.35rem, 1rem + 1.2vw, 2rem);
+  line-height: 1.25;
+  color: #fff;
+}
+.ab-promesa {
+  display: grid;
+  gap: 0;
+}
+.ab-promesa p {
+  position: relative;
+  padding: 1rem 0 1rem 1.6rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.22);
+}
+.ab-promesa p:first-child {
+  padding-top: 0.25rem;
+}
+.ab-promesa p::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: calc(1rem + 0.5em);
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--lime);
+}
+.ab-promesa p:first-child::before {
+  top: calc(0.25rem + 0.5em);
+}
+
+/* =====================================================================
+   6. EXPERTOS — cada uno asoma por su ventana en arco
+   El encabezado es la primera celda de la rejilla y ocupa dos columnas: con
+   10 expertos, las filas salen completas en 2, 3, 4 y 5 columnas.
+   ===================================================================== */
+.ab-expertos {
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.ab-expertos .hm-h2 em {
+  color: var(--teal);
+}
+.ab-expertos__rejilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(2rem, 4vw, 3.5rem) clamp(1rem, 2.2vw, 2.25rem);
+}
+.ab-expertos__cabeza {
+  grid-column: span 2;
+  display: grid;
+  gap: 1.1rem;
+  align-content: start;
+  padding-bottom: clamp(0.5rem, 2vw, 1.5rem);
+}
+@media (min-width: 700px) {
+  .ab-expertos__rejilla {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 960px) {
+  .ab-expertos__rejilla {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1320px) {
+  .ab-expertos__rejilla {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .ab-expertos__cabeza {
+    grid-column: 1 / -1;
+    max-width: 62rem;
+    padding-bottom: clamp(1rem, 3vw, 2.5rem);
+  }
+}
+.ab-expertos__lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem);
+  line-height: 1.5;
+  max-width: 34rem;
+  color: rgb(40 55 57 / 0.86);
+}
+
+.ab-experto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 1rem;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.5s var(--ease);
+}
+/* El hover eleva la tarjeta; el revelado vive en su envoltorio (.hm-rv), así
+   su transform no anula éste. */
+.ab-experto:hover {
+  transform: translateY(-4px);
+}
+.ab-experto:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 6px;
+}
+.ab-experto__ventana {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  margin-bottom: 0.85rem;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+}
+.ab-experto__ventana img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  transition: transform 0.7s var(--ease);
+}
+.ab-experto:hover .ab-experto__ventana img,
+.ab-experto:focus-visible .ab-experto__ventana img {
+  transform: scale(1.06);
+}
+/* El punto aparece al pie del arco al pasar. */
+.ab-experto__ventana::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: -0.475rem;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 0.55);
+  transform: scale(0);
+  transition: transform 0.45s var(--ease);
+}
+.ab-experto:hover .ab-experto__ventana::after,
+.ab-experto:focus-visible .ab-experto__ventana::after {
+  transform: scale(1);
+}
+.ab-experto__nombre {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.3rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+.ab-experto__rol {
+  /* 13 px a 360 (dos columnas de ~150 px), 14.4 px en escritorio */
+  font-size: clamp(0.8125rem, 0.76rem + 0.2vw, 0.9rem);
+  line-height: 1.4;
+  color: rgb(40 55 57 / 0.8);
+}
+.ab-experto__ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  font-family: var(--disp);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--teal);
+}
+.ab-experto__ver svg {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 0.35s var(--ease);
+}
+.ab-experto:hover .ab-experto__ver svg {
+  transform: translate(2px, -2px);
+}
+
+/* Ficha del experto dentro del Modal del sistema (registro de aplicación). */
+.ab-ficha {
+  display: grid;
+  gap: 1.25rem;
+  justify-items: center;
+}
+@media (min-width: 560px) {
+  .ab-ficha {
+    grid-template-columns: 9rem minmax(0, 1fr);
+    justify-items: start;
+    align-items: start;
+    gap: 1.5rem;
+  }
+}
+.ab-ficha__foto {
+  position: relative;
+  width: 9rem;
+  aspect-ratio: 4 / 5;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+}
+.ab-ficha__foto img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+}
+.ab-ficha__bio {
+  font-size: 0.975rem;
+  line-height: 1.7;
+  color: var(--ink);
+}
+.ab-ficha__bio--vacia {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.25rem;
+  color: #5b6769;
+}
+
+/* =====================================================================
+   7. PROCESO — el punto recorre el carril, una etapa tras otra
+   Base (sin soporte / movimiento reducido): el carril completo, en lima,
+   con el punto al final (el puente ya cruzado).
+   ===================================================================== */
+.ab-proceso {
+  position: relative;
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.ab-proceso__rejilla {
+  display: grid;
+  gap: clamp(3rem, 6vw, 6rem);
+}
+@media (min-width: 1024px) {
+  .ab-proceso__rejilla {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+  .ab-proceso__cabeza {
+    position: sticky;
+    top: calc(var(--nav) + 2.5rem);
+  }
+}
+.ab-proceso__cierre {
+  max-width: 30rem;
+  margin-top: 1.5rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.3rem, 1rem + 1vw, 1.9rem);
+  line-height: 1.3;
+  color: rgb(255 255 255 / 0.9);
+}
+.ab-recorrido {
+  position: relative;
+  padding-left: clamp(2.75rem, 6vw, 4.5rem);
+}
+/* Tres capas sin recortes: la vía gris, la línea lima que crece (scaleY desde
+   arriba) y el viajero —una caja del alto del carril con el punto al pie— que
+   baja con translateY(-100% → 0). Así el punto va siempre en la punta de la
+   línea y nada depende de overflow-clip-margin (Safari no lo tiene). */
+.ab-carril {
+  position: absolute;
+  left: 0;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  width: 1.5rem;
+  pointer-events: none;
+}
+.ab-carril::before,
+.ab-carril__lleno {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+}
+.ab-carril::before {
+  content: '';
+  background: rgb(255 255 255 / 0.2);
+}
+.ab-carril__lleno {
+  background: var(--lime);
+  transform-origin: 50% 0;
+}
+.ab-carril__viajero {
+  position: absolute;
+  inset: 0;
+}
+.ab-carril__viajero::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0 0 -0.625rem -0.625rem;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 5px rgb(244 134 2 / 0.28);
+}
+.ab-etapas {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ab-etapa {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(1rem, 2.5vw, 2rem);
+  align-items: start;
+  padding-block: clamp(1.1rem, 2.2vw, 1.75rem);
+  border-bottom: 1px solid rgb(255 255 255 / 0.16);
+}
+.ab-etapa:first-child {
+  padding-top: 0;
+}
+.ab-etapa__n {
+  position: relative;
+  display: block;
+  min-width: 1.25em;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.2rem, 1.5rem + 2.6vw, 4rem);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--lime);
+}
+.ab-etapa__n > span {
+  display: block;
+}
+.ab-etapa__titulo {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 1rem + 0.7vw, 1.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.ab-etapa__titulo svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+  margin-top: 0.1em;
+  color: var(--lime);
+}
+.ab-etapa__duracion {
+  display: inline-block;
+  margin-top: 0.65rem;
+  padding: 0.3em 0.85em;
+  border: 1px solid rgb(159 187 47 / 0.6);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--lime);
+}
+.ab-etapas__corte {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: clamp(2.25rem, 4vw, 3.25rem) 0 clamp(1rem, 2vw, 1.5rem);
+  font-family: var(--disp);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.72);
+}
+.ab-etapas__corte::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgb(255 255 255 / 0.25);
+}
+.ab-etapas--post .ab-etapa__n {
+  color: #fff;
+}
+
+/* =====================================================================
+   8. CIERRE — sobre naranja, dos arcos creciendo desde el pie
+   ===================================================================== */
+.ab-cierre {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: min(90svh, 52rem);
+  padding-block: clamp(5rem, 12vw, 10rem);
+}
+.ab-cierre__arco {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: -2px;
+  width: min(150vw, 2200px);
+  margin-left: calc(min(150vw, 2200px) / -2);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(40 55 57 / 0.3);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  pointer-events: none;
+}
+.ab-cierre__arco--b {
+  width: min(96vw, 1400px);
+  margin-left: calc(min(96vw, 1400px) / -2);
+  border-color: rgb(255 255 255 / 0.55);
+}
+.ab-cierre__dentro {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: clamp(1.4rem, 3vw, 2.4rem);
+  text-align: center;
+}
+.ab-cierre__titulo {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.5rem, calc(8vw - 4px), 8.25rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.ab-cierre__titulo em {
+  display: block;
+  margin-top: 0.12em;
+}
+.ab-cierre__cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem;
+}
+/* Sobre naranja el contorno de foco va en tinta (4.87); el blanco daría 2.54. */
+.ab-cierre .hm-btn:focus-visible,
+.ab-cierre a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+.ab-cierre__contacto {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ab-cierre__contacto a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  min-height: 2.75rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: rgb(40 55 57 / 0.45);
+  text-underline-offset: 0.3em;
+}
+.ab-cierre__contacto a:hover {
+  text-decoration-color: currentColor;
+}
+.ab-cierre__contacto svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+/* Foco sobre suelos oscuros: anillo lima (5.67 sobre tinta). */
+.ab-nombre :focus-visible,
+.ab-proceso :focus-visible {
+  outline-color: var(--lime);
+}
+
+/* =====================================================================
+   MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* portada: el arco de la foto se abre y la foto se asienta al bajar */
+    .ab-ventana {
+      animation: ab-abre linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+    }
+    .ab-ventana img {
+      animation: ab-paralaje linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .ab-anillo {
+      animation: ab-anillo linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 50%;
+    }
+
+    /* el nombre: la palabra rellena su contorno al llegar.
+       El contorno NO es un trazo sobre letras vacías. Outfit dibuja la N, las A,
+       la K y la T con piezas SOLAPADAS (medido con fontTools: la N trae 3
+       contornos y la T 2, también en la instancia estática 800 que sirve Google
+       Fonts, así que cargar esa instancia no lo arreglaba) y -webkit-text-stroke
+       traza cada pieza: se veían las costuras cruzando las letras. Aquí el
+       trazo va debajo y una TAPA del color del suelo (::after, la misma palabra
+       rellena en tinta) cubre su mitad interior y todas las costuras: queda
+       sólo el borde exterior (por eso el trazo es el doble de ancho). El trazo
+       es opaco (blanco al 40 % ya mezclado con la tinta): con alfa, donde dos
+       letras se tocan (la K y la A) se sumaba y brillaba. Decorativo
+       (aria-hidden): #7e8788 sobre tinta da 3.37. Comprobado en Chrome a 1440
+       y 390 con la fuente servida. Al llegar el relleno, el contorno se apaga:
+       el estado final es la palabra blanca, igual que sin scroll timelines. */
+    .ab-nombre__contorno {
+      display: block;
+      position: absolute;
+      inset: 0;
+      color: transparent;
+      -webkit-text-stroke: clamp(2.5px, 0.28vw, 4px) #7e8788;
+      pointer-events: none;
+      animation: ab-apaga linear both;
+      animation-timeline: view();
+      animation-range: entry 35% cover 50%;
+    }
+    .ab-nombre__contorno::after {
+      content: attr(data-t);
+      position: absolute;
+      inset: 0;
+      color: var(--ink);
+      -webkit-text-stroke-width: 0;
+    }
+    .ab-nombre__lleno {
+      animation: ab-llena linear both;
+      animation-timeline: view();
+      animation-range: entry 35% cover 50%;
+    }
+    .ab-nombre__arco {
+      animation: ab-crece linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 60%;
+    }
+
+    /* el modelo: los dos filtros se acercan y el punto aparece en el cruce */
+    .ab-filtro--a {
+      animation: ab-desde-izquierda linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 45%;
+    }
+    .ab-filtro--b {
+      animation: ab-desde-derecha linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 45%;
+    }
+    .ab-filtros__punto {
+      animation: ab-aparece linear both;
+      animation-timeline: view();
+      animation-range: entry 60% cover 55%;
+    }
+
+    /* presencia y compromiso: los arcos derivan */
+    .ab-presencia__arco,
+    .ab-compromiso__arco {
+      animation: ab-deriva linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+
+    /* proceso: el punto baja por el carril siguiendo el centro de la pantalla */
+    .ab-recorrido {
+      view-timeline-name: --ab-recorrido;
+    }
+    .ab-carril__lleno {
+      animation: ab-linea linear both;
+      animation-timeline: --ab-recorrido;
+      animation-range: entry 50% exit 50%;
+    }
+    .ab-carril__viajero {
+      animation: ab-recorre linear both;
+      animation-timeline: --ab-recorrido;
+      animation-range: entry 50% exit 50%;
+    }
+    /* cada número: contorno que se rellena al pasar por el centro */
+    .ab-etapa__n::before {
+      content: attr(data-t);
+      position: absolute;
+      inset: 0;
+      color: transparent;
+      -webkit-text-stroke: 1.5px currentColor;
+    }
+    .ab-etapa__n > span {
+      animation: ab-rellena linear both;
+      animation-timeline: view();
+      animation-range: entry 100% cover 50%;
+    }
+
+    /* cierre: los arcos crecen desde el pie */
+    .ab-cierre__arco {
+      animation: ab-crece linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 60%;
+    }
+  }
+}
+
+@keyframes ab-abre {
+  from {
+    clip-path: inset(16% 11% 0 11% round 999px 999px 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 999px 999px 0 0);
+  }
+}
+@keyframes ab-paralaje {
+  from {
+    transform: scale(1.14) translateY(-4%);
+  }
+  to {
+    transform: scale(1.14) translateY(4%);
+  }
+}
+@keyframes ab-anillo {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+@keyframes ab-llena {
+  from {
+    opacity: 0;
+    transform: translateY(16%);
+  }
+}
+/* El contorno aguanta mientras sube el relleno y se apaga cuando éste llega. */
+@keyframes ab-apaga {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ab-crece {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+@keyframes ab-desde-izquierda {
+  from {
+    transform: translateX(-16%);
+    opacity: 0.2;
+  }
+}
+@keyframes ab-desde-derecha {
+  from {
+    transform: translateX(16%);
+    opacity: 0.2;
+  }
+}
+@keyframes ab-aparece {
+  from {
+    transform: scale(0);
+  }
+}
+@keyframes ab-deriva {
+  from {
+    transform: translateY(-14%);
+  }
+  to {
+    transform: translateY(10%);
+  }
+}
+@keyframes ab-recorre {
+  from {
+    transform: translateY(-100%);
+  }
+}
+@keyframes ab-linea {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes ab-rellena {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Movimiento reducido: la regla global acorta duraciones; las entradas de
+   esta hoja se apagan aquí EXPLÍCITAMENTE para que el estado sea el final. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .ab-hero__punto,
+  .hm--js .ab-hero__punto2 {
+    animation: none !important;
+  }
+  .ab-experto,
+  .ab-experto__ventana img,
+  .ab-experto__ventana::after {
+    transition: none;
+  }
+  .ab-experto:hover {
+    transform: none;
+  }
+}

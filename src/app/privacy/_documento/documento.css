@@ -1,0 +1,464 @@
+/* RUTA: src/app/privacy/_documento/documento.css
+   Documentos legales (/privacy y /terms) en el registro PÚBLICO «Arco»,
+   prefijo dl- (documento legal). Aquí manda la lectura:
+   - cabecera en arena: el titular a escala de encuadre con su remate serif y
+     el puente del isotipo (tres arcos que nacen de la costura con el papel y el
+     punto que los cruza al bajar);
+   - el texto sobre papel, SIN tarjeta, en una columna editorial de 68
+     caracteres, 17 px, interlineado 1.75;
+   - al margen, fija mientras se lee (desde 1024 px), la nota de documento
+     provisional —el único aviso— y el índice cuando lo haya.
+
+   Movimiento (las reglas de site.css): las entradas al cargar cuelgan de
+   .hm--js (SiteMotion la pone sólo con la pestaña visible); lo ligado al
+   scroll vive en @supports (animation-timeline: view()) + no-preference. Sin
+   eso todo está quieto y completo. Sólo se animan transform, opacity y rotate.
+
+   Trampa del repo: globals.css da `position: relative; overflow: hidden` a
+   toda <section>. La
+   cabecera lo devuelve a visible (el punto se asoma a la costura con el papel)
+   y el cuerpo también (si no, el margen fijo no se fija).
+
+   Pares medidos (WCAG 2.x): tinta/arena 9.91 · tinta .8/arena 5.74 ·
+   teal/arena 5.91 (remate del h1, titular grande) · tinta/papel 11.35 ·
+   naranja-oscuro #8a4600/papel 6.51 · ink-muted #5b6769/papel 5.36 ·
+   teal/papel 6.77 (foco y enlaces) · blanco/tinta 12.38 · tinta/naranja 4.87 ·
+   tinta/lima 5.67 */
+
+/* =====================================================================
+   CABECERA
+   ===================================================================== */
+/* z-index 1: globals.css también hace `position: relative` a toda <section>,
+   así que el papel (que va después) pintaría encima de la mitad del punto que
+   se asoma a la costura. Nada más de la cabecera invade el papel. */
+.dl-cabeza {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: visible;
+  padding-block: clamp(2.5rem, 7svh, 5.5rem) clamp(3.5rem, 8vw, 7rem);
+  /* El ancho del puente (lo usan el propio puente y, en estrecho, el aire de
+     abajo para que los arcos no crucen el texto). */
+  --puente: clamp(10rem, 40vw, 36rem);
+}
+@media (max-width: 899px) {
+  .dl-cabeza {
+    padding-bottom: calc(var(--puente) / 2 + clamp(2rem, 6vw, 3rem));
+  }
+}
+.dl-fecha {
+  margin-top: clamp(1.25rem, 2.5vw, 2rem);
+  font-size: 0.9375rem;
+  color: rgb(40 55 57 / 0.8);
+}
+
+/* ---------- el puente ----------
+   Caja 2:1 apoyada en el borde inferior de la cabecera (la costura con el
+   papel). Los tres arcos comparten centro: el punto medio del borde de abajo. */
+.dl-puente {
+  position: absolute;
+  z-index: -1;
+  right: calc(var(--gut) + 2vw);
+  bottom: 0;
+  width: var(--puente);
+  aspect-ratio: 2 / 1;
+  pointer-events: none;
+}
+.dl-arco {
+  position: absolute;
+  bottom: 0;
+  aspect-ratio: 2 / 1;
+  border: 2px solid;
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  transform-origin: 50% 100%;
+}
+.dl-arco--a {
+  left: 0;
+  width: 100%;
+  border-color: rgb(43 93 98 / 0.3);
+}
+.dl-arco--b {
+  left: 16%;
+  width: 68%;
+  border-color: rgb(159 187 47 / 0.75);
+}
+.dl-arco--c {
+  left: 32%;
+  width: 36%;
+  border-color: rgb(244 134 2 / 0.55);
+}
+/* La órbita es del tamaño del arco lima y gira sobre el mismo centro: el punto,
+   en su esquina inferior izquierda, recorre el arco. En reposo (sin JS, sin
+   scroll timelines, movimiento reducido) está al pie izquierdo, sin transform. */
+.dl-orbita {
+  position: absolute;
+  left: 16%;
+  bottom: 0;
+  width: 68%;
+  aspect-ratio: 2 / 1;
+  transform-origin: 50% 100%;
+}
+/* El punto se sienta en la costura: la mitad sobre la arena, la mitad sobre el
+   papel (por eso la cabecera no recorta). */
+.dl-punto {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: clamp(0.95rem, 1.6vw, 1.5rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 clamp(4px, 0.5vw, 6px) rgb(244 134 2 / 0.22);
+  translate: -50% 50%;
+}
+
+/* Entrada al cargar: los arcos crecen desde el suelo y el punto aparece. */
+.hm--js .dl-arco {
+  animation: dl-crece 1.2s var(--ease) both;
+  animation-delay: calc(0.25s + var(--n, 0) * 0.12s);
+}
+.hm--js .dl-arco--b {
+  --n: 1;
+}
+.hm--js .dl-arco--c {
+  --n: 2;
+}
+.hm--js .dl-punto {
+  animation: hm-pop 0.8s var(--ease) 0.85s both;
+}
+@keyframes dl-crece {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* =====================================================================
+   CUERPO: margen + columna editorial
+   ===================================================================== */
+.dl-cuerpo {
+  overflow: visible;
+  padding-block: clamp(3rem, 7vw, 6.5rem) clamp(4rem, 9vw, 7rem);
+}
+.dl-rejilla {
+  display: grid;
+  gap: clamp(2rem, 4vw, 3rem);
+}
+@media (min-width: 1024px) {
+  .dl-rejilla {
+    grid-template-columns: minmax(14rem, 19rem) minmax(0, 1fr);
+    column-gap: clamp(3rem, 6vw, 7rem);
+    align-items: start;
+  }
+  /* El margen ocupa toda la altura del texto; lo de dentro se fija. */
+  .dl-margen {
+    align-self: stretch;
+  }
+  .dl-margen__fijo {
+    position: sticky;
+    top: calc(var(--nav) + 2rem);
+  }
+}
+
+/* La nota de documento provisional: una nota al margen, con el color Y el
+   texto (nunca sólo color). */
+.dl-nota {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: start;
+  max-width: 36rem;
+  padding-top: 1rem;
+  border-top: 3px solid var(--orange);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.dl-nota svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  color: #8a4600;
+}
+.dl-nota strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-family: var(--disp);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #8a4600;
+}
+
+/* Índice (sólo con dos secciones o más). */
+.dl-indice {
+  margin-top: clamp(1.75rem, 3vw, 2.5rem);
+}
+.dl-indice__titulo {
+  font-family: var(--disp);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #5b6769;
+}
+.dl-indice ol {
+  display: grid;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid rgb(40 55 57 / 0.18);
+}
+.dl-indice a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding-block: 0.65rem;
+  border-bottom: 1px solid rgb(40 55 57 / 0.18);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+  transition: color 0.18s ease, padding-left 0.3s var(--ease);
+}
+.dl-indice a:hover {
+  padding-left: 0.35rem;
+  color: var(--teal);
+}
+.dl-indice__n {
+  font-family: var(--serif);
+  font-style: italic;
+  color: #5b6769;
+}
+
+/* ---------- el texto ---------- */
+.dl-texto {
+  max-width: 68ch;
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: var(--ink);
+}
+.dl-texto > * + * {
+  margin-top: 1.1em;
+}
+.dl-texto .dl-entrada {
+  font-family: var(--disp);
+  font-weight: 500;
+  font-size: clamp(1.2rem, 1rem + 0.8vw, 1.6rem);
+  line-height: 1.45;
+  letter-spacing: -0.015em;
+}
+.dl-texto h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 2.25em;
+  scroll-margin-top: calc(var(--nav) + 1.5rem);
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.35rem, 1.1rem + 0.9vw, 1.8rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+/* El punto (la persona) delante de cada sección. */
+.dl-texto h2::before {
+  content: '';
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 50%;
+  background: var(--orange);
+  flex: none;
+}
+.dl-principios {
+  display: grid;
+  margin: 1em 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid rgb(40 55 57 / 0.16);
+}
+.dl-principios li {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  padding-block: 0.9rem;
+  border-bottom: 1px solid rgb(40 55 57 / 0.16);
+}
+.dl-principios__marca {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-top: 0.15rem;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--ink);
+}
+.dl-principios__marca svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+/* ---------- contacto: el cierre del documento ---------- */
+.dl-contacto {
+  margin-top: 2.5em;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--ink);
+}
+.dl-canales {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dl-canal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 0.9rem;
+  border-bottom: 1px solid rgb(40 55 57 / 0.2);
+  color: var(--ink);
+  transition: padding-left 0.4s var(--ease), background-color 0.2s ease;
+}
+.dl-canal:hover {
+  padding-left: 0.4rem;
+  background: rgb(232 231 212 / 0.55);
+}
+.dl-canal:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+.dl-canal__icono {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.dl-canal__icono svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+/* Naranja con icono tinta (4.87). */
+.dl-canal:hover .dl-canal__icono {
+  background: var(--orange);
+  color: var(--ink);
+}
+.dl-canal__etiqueta {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #5b6769;
+}
+.dl-canal__valor {
+  display: block;
+  margin-top: 0.1rem;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1.1rem, 1rem + 0.5vw, 1.4rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.dl-canal__flecha {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--teal);
+  transition: transform 0.3s var(--ease);
+}
+.dl-canal:hover .dl-canal__flecha {
+  transform: translate(2px, -2px);
+}
+
+.dl-volver {
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+}
+.dl-volver a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  font-family: var(--disp);
+  font-weight: 700;
+  color: var(--teal);
+  transition: color 0.18s ease;
+}
+.dl-volver a:hover {
+  color: var(--ink);
+}
+.dl-volver svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  transition: transform 0.3s var(--ease);
+}
+.dl-volver a:hover svg {
+  transform: translateX(-4px);
+}
+
+/* =====================================================================
+   MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   Al bajar, la persona cruza el puente mientras la cabecera sale.
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .dl-cabeza {
+      view-timeline-name: --dl-cabeza;
+    }
+    .dl-orbita {
+      animation: dl-cruza linear both;
+      animation-timeline: --dl-cabeza;
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+@keyframes dl-cruza {
+  to {
+    rotate: 180deg;
+  }
+}
+
+/* Movimiento reducido: las entradas se apagan EXPLÍCITAMENTE (la regla global
+   sólo acorta duraciones) para que el estado sea el final. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .dl-arco,
+  .hm--js .dl-punto {
+    animation: none !important;
+  }
+  .dl-canal,
+  .dl-canal__flecha,
+  .dl-indice a,
+  .dl-volver svg {
+    transition: none;
+  }
+  .dl-canal:hover,
+  .dl-indice a:hover {
+    padding-left: 0;
+  }
+}
+
+@media print {
+  .dl-puente,
+  .dl-indice,
+  .dl-volver,
+  .hm-progress {
+    display: none;
+  }
+  .dl-cabeza,
+  .dl-cuerpo {
+    padding-block: 1rem;
+  }
+  .dl-rejilla {
+    display: block;
+  }
+  .dl-nota {
+    margin-bottom: 1.5rem;
+  }
+}

@@ -1,0 +1,1081 @@
+/* RUTA: src/app/talents/talents.css
+   Bolsa de trabajo (/talents) — registro PÚBLICO «Arco».
+
+   El isotipo es un punto (la persona) y un arco (el puente). Aquí:
+   - PORTADA (arena): los tres arcos del puente detrás del titular; la foto en
+     una ventana en arco con su propio aro, que el punto naranja (la persona)
+     CRUZA mientras bajas hacia las vacantes, hasta el punto lima.
+   - EL MUELLE: el buscador es una pieza blanca acoplada al pie de la portada;
+     cruza del suelo arena al suelo tinta de los resultados.
+   - RESULTADOS (tinta): titular grande, la cifra de vacantes en lima y un
+     tablero lista + detalle. El detalle es LEGIBLE antes que vistoso: blanco,
+     tinta, 16 px, 68 caracteres por línea como mucho.
+   - CIERRE (naranja, texto tinta): tres razones con el número en contorno que
+     se rellena y dos arcos que crecen desde el pie.
+
+   Reglas (las de site.css):
+   - Prefijo tl- (las primitivas hm- vienen de site.css; home.css NO carga aquí).
+   - Sólo se animan transform, opacity, clip-path (y rotate, que es transform).
+   - Lo ligado al scroll vive en @supports (animation-timeline: view()) y
+     prefers-reduced-motion: no-preference. El estado natural es el final: sin
+     JS, sin scroll timelines y con movimiento reducido todo se lee.
+   - Las entradas al cargar cuelgan de .hm--js (SiteMotion la pone sólo con la
+     pestaña visible).
+   - globals.css declara `section { overflow: hidden }`: mata el sticky del
+     detalle y recortaría el muelle. .tl-bolsa lo devuelve a visible; las
+     secciones que recortan usan overflow: clip (no crea contenedor de scroll).
+
+   Contrastes medidos (WCAG 2.x) de los pares nuevos de esta hoja:
+     blanco 80 % / tinta 8.55 · blanco 72 % / tinta 7.27 · lima / tinta 5.67 ·
+     tinta / lima 5.67 («Viendo») · tinta / naranja 4.87 (cierre: SIEMPRE tinta
+     sólida; al 78 % baja a 3.51 y no pasa) · tinta 88 % / arena 7.16 (hm-lead) ·
+     teal-dark / teal-tint 8.18 · tinta / mist 10.35 · lima / tinta 5.67 como
+     anillo de selección y de foco sobre el suelo tinta. */
+
+/* =====================================================================
+   1. PORTADA
+   ===================================================================== */
+.tl-hero {
+  /* Alto del muelle: lo que el buscador se mete en la portada. El mismo valor
+     en .tl-bolsa (clamp en vw: idéntico en las dos). */
+  --tl-muelle: clamp(2.75rem, 5vw, 4.5rem);
+  /* Cuerpo del titular: la foto se coloca en cuerpos de titular, así lo sigue
+     cuando cambia el ancho. */
+  --tl-tf: clamp(2.5rem, calc(8.2vw - 6px), 7.5rem);
+  --tl-foto: clamp(12rem, 24vw, 22rem);
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  view-timeline-name: --tl-hero;
+  background: var(--sand);
+  color: var(--ink);
+  padding-block: clamp(2.25rem, 6svh, 5rem) calc(var(--tl-muelle) + clamp(2.25rem, 6svh, 4.5rem));
+}
+.tl-hero__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.tl-hero__dentro {
+  position: relative;
+  z-index: 1;
+}
+.tl-hero .tl-hero__titulo {
+  font-size: var(--tl-tf);
+  margin-top: clamp(1rem, 2.4svh, 1.6rem);
+}
+.tl-hero .tl-hero__l3 em {
+  font-size: 1.06em;
+}
+@media (min-width: 861px) {
+  .tl-hero .tl-hero__l2 {
+    margin-left: 0.9em;
+  }
+  .tl-hero .tl-hero__l3 {
+    margin-left: 1.8em;
+  }
+}
+@media (max-width: 860.98px) {
+  .tl-hero .tl-hero__l2 {
+    margin-left: 0.45em;
+  }
+}
+
+/* La foto: ventana en arco a la derecha, desde el segundo renglón. Todo lo de
+   la pieza se mide en anchos de foto (--tl-foto), así el puente no depende
+   del ancho de la ventana del navegador ni pisa nunca el texto. */
+.tl-hero__pieza {
+  /* Radio del aro: el de la ventana (0.5) más el hueco (0.06). */
+  --tl-r: calc(var(--tl-foto) * 0.56);
+  position: absolute;
+  right: var(--gut);
+  top: calc(clamp(0.72rem, 0.66rem + 0.3vw, 0.9rem) * 1.5 + clamp(1rem, 2.4svh, 1.6rem) + var(--tl-tf) * 1.02);
+  width: var(--tl-foto);
+}
+/* El aro: concéntrico con el arco de la ventana; baja por los costados. */
+.tl-hero__aro {
+  position: absolute;
+  left: calc(var(--tl-foto) * -0.06);
+  right: calc(var(--tl-foto) * -0.06);
+  top: calc(var(--tl-foto) * -0.06);
+  bottom: calc(var(--tl-foto) * 0.2);
+  border: 2px solid rgb(43 93 98 / 0.4);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  pointer-events: none;
+}
+/* El punto (la persona): una varilla del radio del aro que gira desde el
+   centro del arco. Reposo (sin soporte o con movimiento reducido): arriba a
+   la izquierda, al empezar el puente. Con scroll: lo cruza hasta el punto lima. */
+.tl-hero__corredor {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: calc(var(--tl-foto) * 0.5 - var(--tl-r) + 1px);
+  width: 2px;
+  height: calc(var(--tl-r) - 1px);
+  transform-origin: 50% 100%;
+  rotate: -42deg;
+  pointer-events: none;
+}
+.tl-hero__corredor::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: calc(var(--tl-foto) * 0.085);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 calc(var(--tl-foto) * 0.022) rgb(244 134 2 / 0.25);
+}
+.tl-ventana {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+  box-shadow: 0 40px 80px -40px rgb(40 55 57 / 0.55);
+}
+.tl-ventana img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* El original es apaisado con esquinas redondeadas transparentes: el recorte
+     en retrato las deja fuera. */
+  object-position: 46% 50%;
+}
+.hm--js .tl-ventana {
+  animation: tl-descubre 1.4s var(--ease) 0.35s both;
+}
+.hm--js .tl-ventana img {
+  animation: tl-asienta 1.9s var(--ease) 0.35s both;
+}
+/* El otro lado del puente: el punto lima, al pie derecho del aro. */
+.tl-hero__punto {
+  width: calc(var(--tl-foto) * 0.1);
+  left: calc(var(--tl-foto) * 1.01);
+  top: calc(var(--tl-foto) * 0.45);
+  background: var(--lime);
+}
+.hm--js .tl-hero__punto {
+  animation: hm-pop 0.9s var(--ease) 1.1s both;
+}
+@keyframes tl-descubre {
+  from {
+    clip-path: inset(100% 0 0 0 round 999px 999px 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 999px 999px 0 0);
+  }
+}
+@keyframes tl-asienta {
+  from {
+    transform: scale(1.2);
+  }
+}
+
+.tl-hero__pie {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(1.5rem, 4.5svh, 2.75rem);
+  max-width: min(38rem, calc(100% - var(--tl-foto) - 2.5rem));
+}
+.tl-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: clamp(1.25rem, 3.2svh, 2rem);
+}
+/* La flecha de «Ver vacantes» apunta abajo: al pasar baja, no se va de lado. */
+.tl-hero__cta .tl-hero__bajar:hover svg {
+  transform: translateY(3px);
+}
+@media (max-width: 639.98px) {
+  /* En el móvil manda el buscador: la foto no cabe sin empujarlo fuera del
+     primer pliegue. display:none + carga diferida = ni se descarga. */
+  .tl-hero__pieza {
+    display: none;
+  }
+  .tl-hero__pie {
+    max-width: none;
+  }
+}
+
+/* =====================================================================
+   2. BOLSA: buscador (el muelle) + resultados, en suelo tinta
+   ===================================================================== */
+.tl-bolsa {
+  --tl-muelle: clamp(2.75rem, 5vw, 4.5rem);
+  position: relative;
+  /* flow-root: el margen negativo del muelle no arrastra a la sección hacia
+     arriba (sin esto, el suelo tinta taparía el pie de la portada). */
+  display: flow-root;
+  overflow: visible;
+  padding-bottom: clamp(4rem, 9vw, 8rem);
+}
+.tl-bolsa__deco {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: clip;
+  pointer-events: none;
+}
+.tl-bolsa__arco {
+  position: absolute;
+  right: -18vw;
+  top: clamp(9rem, 17vw, 15rem);
+  width: min(72vw, 1120px);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(159 187 47 / 0.32);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+}
+.tl-bolsa__arco--b {
+  right: -5vw;
+  top: clamp(12rem, 23vw, 21rem);
+  width: min(42vw, 660px);
+  border-color: rgb(244 134 2 / 0.42);
+}
+
+/* ---- el muelle ---- */
+.tl-muelle {
+  position: relative;
+  z-index: 3;
+  margin-top: calc(var(--tl-muelle) * -1);
+}
+.tl-busqueda {
+  background: #fff;
+  color: var(--ink);
+  border-radius: clamp(1.25rem, 2vw, 1.75rem);
+  padding: clamp(1rem, 2vw, 1.5rem);
+  box-shadow: 0 2px 0 rgb(40 55 57 / 0.05), 0 40px 80px -40px rgb(40 55 57 / 0.6);
+  /* html ya reserva 4rem (scroll-padding-top): el ancla #vacantes queda
+     justo bajo la barra. */
+  scroll-margin-top: 1rem;
+}
+.tl-busqueda__campos {
+  display: grid;
+  gap: 0.9rem 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+}
+@media (min-width: 480px) {
+  .tl-busqueda__campos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tl-campo--que,
+  .tl-campo--donde,
+  .tl-busqueda__boton {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 768px) {
+  .tl-campo--que,
+  .tl-campo--donde {
+    grid-column: auto;
+  }
+}
+@media (min-width: 1100px) {
+  .tl-busqueda__campos {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(0, 1fr) auto;
+  }
+  .tl-busqueda__boton {
+    grid-column: auto;
+  }
+}
+/* Campos del registro público: más altos y a 16 px (en iOS, por debajo de
+   16 px el navegador hace zoom al enfocar). Misma pieza (FormField + Input /
+   Select), sólo el tamaño. */
+.tl-busqueda .tl-control {
+  height: 3.25rem;
+  font-size: 1rem;
+  border-radius: 0.85rem;
+}
+.tl-busqueda__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-top: 1rem;
+  padding-top: 0.6rem;
+}
+.tl-limpiar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
+  border: 0;
+  background: none;
+  font-family: var(--disp);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgb(43 93 98 / 0.4);
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+.tl-limpiar:hover {
+  text-decoration-color: currentColor;
+}
+.tl-limpiar svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ---- cabecera de resultados ---- */
+.tl-resultados {
+  position: relative;
+  z-index: 1;
+  padding-top: clamp(3.5rem, 8vw, 7rem);
+}
+.tl-cabeza {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1.5rem 3rem;
+  scroll-margin-top: 1rem;
+}
+.tl-renglon {
+  display: block;
+}
+.tl-cifra {
+  margin: 0;
+  display: grid;
+  justify-items: end;
+  text-align: right;
+  transition: opacity 0.2s ease;
+}
+.tl-cifra[data-cargando] {
+  opacity: 0.45;
+}
+.tl-cifra__n {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(3.75rem, 11vw, 10rem);
+  line-height: 0.82;
+  letter-spacing: -0.06em;
+  /* El espaciado negativo también recorta tras la última cifra: alineada a la
+     derecha, sobresalía del margen. */
+  padding-right: 0.06em;
+  color: var(--lime);
+  font-variant-numeric: tabular-nums;
+}
+.tl-cifra__l {
+  margin-top: 0.5rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.15rem, 1rem + 0.7vw, 1.7rem);
+  line-height: 1.15;
+  color: rgb(255 255 255 / 0.8);
+}
+@media (max-width: 767.98px) {
+  .tl-cabeza {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tl-cifra {
+    grid-auto-flow: column;
+    justify-content: start;
+    justify-items: start;
+    align-items: baseline;
+    gap: 0.75rem;
+    text-align: left;
+  }
+  .tl-cifra__l {
+    margin-top: 0;
+  }
+}
+
+.tl-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  padding: 1rem 1.15rem;
+  border-radius: 1rem;
+}
+
+/* ---- estado + orden ---- */
+.tl-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 2rem;
+  margin-top: clamp(2rem, 4vw, 3rem);
+  padding-top: 1.1rem;
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+}
+.tl-barra__estado {
+  margin: 0;
+  min-height: 1.5rem;
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 0.8);
+  font-variant-numeric: tabular-nums;
+}
+.tl-orden {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.tl-orden label {
+  font-family: var(--disp);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+.tl-orden .tl-orden__control {
+  min-width: 11.5rem;
+  height: 2.75rem;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+}
+/* Sobre el suelo tinta el anillo teal no se ve: foco en lima (5.67:1). */
+.tl-orden .tl-orden__control:focus-visible {
+  outline: 3px solid var(--lime);
+  outline-offset: 2px;
+}
+
+.tl-sin-js {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 1rem;
+  background: #fff;
+  color: var(--ink);
+}
+/* Sin JS no hay nada que cargar: fuera el esqueleto (queda el aviso). */
+html:not(.js) .tl-cargando {
+  display: none;
+}
+
+/* =====================================================================
+   3. TABLERO: lista + detalle
+   ===================================================================== */
+.tl-tablero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .tl-tablero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(1.25rem, 2.2vw, 2.25rem);
+  }
+}
+.tl-tablero__detalle {
+  min-width: 0;
+}
+.tl-lista {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Tablet: el detalle va en el panel lateral, así que la lista usa el ancho. */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .tl-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.tl-lista__item {
+  min-width: 0;
+}
+
+/* ---- tarjeta ---- */
+.tl-tarjeta {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.9rem;
+  align-content: start;
+  height: 100%;
+  padding: 1.1rem 1.2rem 1.15rem;
+  border-radius: 1.1rem;
+  background: #fff;
+  color: var(--ink);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s ease;
+}
+.tl-tarjeta > * {
+  grid-column: 2;
+}
+.tl-tarjeta > .tl-tarjeta__logo {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  align-self: start;
+}
+.tl-tarjeta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 40px -24px rgb(0 0 0 / 0.7);
+}
+/* La que se está viendo: anillo lima (forma, no sólo color) + «Viendo». */
+.tl-tarjeta[data-seleccionada] {
+  box-shadow: 0 0 0 3px var(--lime), 0 22px 40px -24px rgb(0 0 0 / 0.7);
+}
+.tl-tarjeta__titulo {
+  margin: 0;
+  font-family: var(--disp);
+  font-size: clamp(1.08rem, 1rem + 0.35vw, 1.3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.tl-tarjeta[data-seleccionada] .tl-tarjeta__titulo {
+  padding-right: 4.75rem;
+}
+.tl-tarjeta__boton {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* Toda la tarjeta es la zona de clic (y el anillo de foco la rodea entera). */
+.tl-tarjeta__boton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 1.1rem;
+}
+.tl-tarjeta:hover .tl-tarjeta__boton {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--orange);
+  text-underline-offset: 0.18em;
+}
+.tl-tarjeta .tl-tarjeta__boton:focus-visible {
+  outline: none;
+}
+.tl-tarjeta .tl-tarjeta__boton:focus-visible::after {
+  outline: 3px solid var(--lime);
+  outline-offset: 3px;
+}
+.tl-tarjeta__empresa {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.tl-tarjeta__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0.55rem 0 0;
+  font-size: 0.9rem;
+}
+.tl-tarjeta__datos dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+}
+.tl-tarjeta__datos svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--teal);
+}
+.tl-tarjeta__salario {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tl-tarjeta__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+.tl-tarjeta__fecha {
+  margin-left: auto;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.tl-tarjeta__viendo {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-family: var(--disp);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tl-tarjeta__viendo::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.tl-tarjeta--hueco:hover {
+  transform: none;
+  box-shadow: none;
+}
+/* Por debajo de 1024 px no hay columna de detalle a la vista: la primera
+   vacante se selecciona sola y marcarla «Viendo» mentía. El detalle se abre
+   en el Drawer y, al cerrarlo, el foco vuelve a su tarjeta. */
+@media (max-width: 1023.98px) {
+  .tl-tarjeta[data-seleccionada] {
+    box-shadow: none;
+  }
+  .tl-tarjeta[data-seleccionada]:hover {
+    box-shadow: 0 22px 40px -24px rgb(0 0 0 / 0.7);
+  }
+  .tl-tarjeta__viendo {
+    display: none;
+  }
+  .tl-tarjeta[data-seleccionada] .tl-tarjeta__titulo {
+    padding-right: 0;
+  }
+}
+
+/* ---- detalle ----
+   OJO con la cascada: esta hoja va después de Tailwind. Sin `position` aquí:
+   la pone lg:sticky (una declaración de position en esta clase le ganaba, y
+   lg:top-[…] desplazaba el panel 72 px en vez de fijarlo). */
+.tl-detalle {
+  background: #fff;
+  color: var(--ink);
+  border-radius: 1.5rem;
+  box-shadow: 0 30px 60px -36px rgb(0 0 0 / 0.75);
+  scrollbar-width: thin;
+  scrollbar-color: rgb(40 55 57 / 0.35) transparent;
+}
+.tl-detalle:focus-visible {
+  outline: 3px solid var(--lime);
+  outline-offset: 3px;
+}
+.tl-detalle--hueco {
+  padding: clamp(1.25rem, 2.4vw, 2rem);
+  min-height: 28rem;
+}
+.tl-detalle__cabeza {
+  padding: clamp(1.25rem, 2.4vw, 2rem) clamp(1.25rem, 2.6vw, 2.25rem) 1.5rem;
+}
+.tl-detalle__titulo {
+  margin: 0;
+  font-family: var(--disp);
+  font-size: clamp(1.55rem, 1.05rem + 1.3vw, 2.35rem);
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+/* Flex y no rejilla: con tres datos en dos columnas la rejilla dejaba una
+   celda vacía (el fondo de las líneas, gris). Así la última fila se estira. */
+.tl-hechos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin: 1.4rem 0 0;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.tl-hechos__dato {
+  flex: 1 1 9.5rem;
+  padding: 0.8rem 1rem;
+}
+.tl-hechos__dato dt {
+  font-family: var(--disp);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tl-hechos__valor {
+  margin: 0.3rem 0 0;
+  font-family: var(--disp);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.tl-detalle__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-detalle__cuerpo {
+  display: grid;
+  gap: 1.75rem;
+  padding: 1.6rem clamp(1.25rem, 2.6vw, 2.25rem) 2rem;
+}
+.tl-bloque__titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: var(--disp);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+/* El punto del isotipo delante de cada bloque. */
+.tl-bloque__titulo::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.tl-bloque__texto {
+  max-width: 68ch;
+  margin: 0.6rem 0 0;
+  font-size: 1rem;
+  line-height: 1.7;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.tl-habilidades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-habilidades li {
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+/* La acción se queda al pie del panel mientras se lee (escritorio). */
+.tl-detalle__accion {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 1rem clamp(1.25rem, 2.6vw, 2.25rem) 1.15rem;
+  background: #fff;
+  border-radius: 0 0 1.5rem 1.5rem;
+}
+.tl-accion {
+  width: 100%;
+}
+.tl-aviso-rol {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 0.9rem;
+  font-size: 0.95rem;
+}
+/* Dentro del Drawer (móvil y tablet): el Drawer ya pone el relleno y el marco. */
+.tl-detalle--cajon {
+  border-radius: 0;
+  box-shadow: none;
+}
+.tl-detalle--cajon .tl-detalle__cabeza {
+  padding: 0 0 1.25rem;
+}
+.tl-detalle--cajon .tl-detalle__cuerpo {
+  padding: 1.25rem 0 0.5rem;
+}
+
+/* ---- vacío ---- */
+.tl-vacio {
+  margin-top: 1.25rem;
+  border-radius: 1.5rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+/* ---- cargar más ---- */
+.tl-mas {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  text-align: center;
+}
+.tl-mas__cuenta {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 0.8);
+  font-variant-numeric: tabular-nums;
+}
+.tl-mas__cuenta strong {
+  color: #fff;
+  font-weight: 700;
+}
+.tl-mas__barra {
+  position: relative;
+  display: block;
+  width: min(100%, 18rem);
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  overflow: hidden;
+}
+.tl-mas__barra > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--p, 0) * 100%);
+  border-radius: inherit;
+  background: var(--lime);
+  transition: width 0.4s var(--ease);
+}
+.tl-mas__boton[disabled] {
+  opacity: 0.75;
+  cursor: progress;
+}
+/* hm-btn enfoca con currentColor: en el botón lima es tinta sobre tinta. */
+.tl-mas .tl-mas__boton:focus-visible {
+  outline-color: #fff;
+}
+
+/* =====================================================================
+   4. CIERRE (naranja, texto tinta)
+   ===================================================================== */
+.tl-cierre {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+.tl-cierre__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.tl-cierre__arcos span {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  width: min(135vw, 2000px);
+  margin-left: calc(min(135vw, 2000px) / -2);
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(40 55 57 / 0.22);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  transform-origin: 50% 100%;
+}
+.tl-cierre__arcos span + span {
+  width: min(82vw, 1250px);
+  margin-left: calc(min(82vw, 1250px) / -2);
+  border-color: rgb(255 255 255 / 0.5);
+}
+.tl-cierre__dentro {
+  position: relative;
+}
+.tl-razones {
+  margin: clamp(2.5rem, 6vw, 4.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--ink);
+}
+.tl-razon {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 10fr);
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: baseline;
+  padding-block: clamp(1.25rem, 3vw, 2.5rem);
+  border-bottom: 1px solid rgb(40 55 57 / 0.35);
+}
+.tl-razon__texto {
+  margin: 0;
+  font-family: var(--disp);
+  font-size: clamp(1.5rem, 1rem + 2.6vw, 3.6rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.tl-num {
+  position: relative;
+  display: inline-block;
+  font-family: var(--disp);
+  font-size: clamp(2.4rem, 5vw, 5.25rem);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.tl-num > span {
+  display: block;
+}
+.tl-cierre__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: clamp(2.5rem, 5vw, 4rem);
+}
+/* hm-btn enfoca con currentColor: el blanco del botón tinta sobre naranja da
+   2.54. El anillo va en tinta (4.87). */
+.tl-cierre .hm-btn:focus-visible {
+  outline-color: var(--ink);
+}
+@media (max-width: 640px) {
+  .tl-razon {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
+  }
+}
+
+/* =====================================================================
+   5. MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* portada: al salir, cada plano a su velocidad y el punto cruza el puente
+       (llega al punto lima en el primer tercio: aún se ve) */
+    .tl-hero__arcos {
+      animation: tl-arcos linear both;
+      animation-timeline: --tl-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .tl-hero__corredor {
+      animation: tl-cruce linear both;
+      animation-timeline: --tl-hero;
+      animation-range: exit 0% exit 35%;
+    }
+    .tl-hero__pieza {
+      animation: tl-pieza linear both;
+      animation-timeline: --tl-hero;
+      animation-range: exit 0% exit 100%;
+    }
+
+    /* resultados: los arcos se asientan y la cifra sube */
+    .tl-bolsa__arco {
+      animation: tl-arco-asienta linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 45%;
+    }
+    .tl-cifra__n {
+      animation: tl-cifra linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 30%;
+    }
+    /* cada vacante aparece al entrar (la lista se desplaza con la página; el
+       detalle, que tiene su propio scroll, no lleva nada) */
+    .tl-lista__item {
+      animation: tl-sube linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+
+    /* cierre: números en contorno que se rellenan y arcos que crecen.
+       El contorno NO es un trazo sobre dígitos vacíos: Outfit dibuja el 1, el
+       2 y el 7 con 2 piezas solapadas (el 3, el 4 y el 5 con 3) y
+       -webkit-text-stroke traza cada pieza, así que a medio rellenar se veían
+       las costuras cruzando el «1». Es la técnica del INAKAT de /about: el
+       trazo (opaco y del doble de ancho) va debajo; una TAPA del color del
+       suelo (::after, el mismo número relleno en naranja) cubre su mitad
+       interior y todas las costuras, y el relleno en tinta va encima de todo.
+       Estado final (y sin scroll timelines): el número en tinta. */
+    .tl-num::before {
+      content: attr(data-t);
+      position: absolute;
+      inset: 0;
+      color: transparent;
+      -webkit-text-stroke: 3px var(--ink);
+    }
+    .tl-num::after {
+      content: attr(data-t);
+      position: absolute;
+      inset: 0;
+      color: var(--orange);
+      -webkit-text-stroke-width: 0;
+    }
+    .tl-num > span {
+      position: relative;
+      z-index: 1;
+      animation: tl-llenar linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 45%;
+    }
+    .tl-cierre__arcos span {
+      animation: tl-arco-crece linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 55%;
+    }
+  }
+}
+
+@keyframes tl-arcos {
+  to {
+    transform: translateY(14%) scale(1.05);
+  }
+}
+@keyframes tl-cruce {
+  from {
+    rotate: -42deg;
+  }
+  to {
+    rotate: 90deg;
+  }
+}
+@keyframes tl-pieza {
+  to {
+    transform: translateY(-18%) rotate(-2.5deg);
+  }
+}
+@keyframes tl-arco-asienta {
+  from {
+    transform: translateY(12%) rotate(-6deg);
+    opacity: 0.3;
+  }
+}
+@keyframes tl-cifra {
+  from {
+    transform: translateY(28%);
+    opacity: 0;
+  }
+}
+@keyframes tl-sube {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+}
+@keyframes tl-llenar {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes tl-arco-crece {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+
+/* Movimiento reducido: globals.css acorta duraciones; las entradas propias se
+   apagan aquí EXPLÍCITAMENTE para que el estado sea el final. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .tl-ventana,
+  .hm--js .tl-ventana img,
+  .hm--js .tl-hero__punto {
+    animation: none !important;
+  }
+  .tl-tarjeta:hover {
+    transform: none;
+  }
+}

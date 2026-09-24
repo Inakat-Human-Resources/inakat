@@ -2,10 +2,29 @@
 
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Lock, ArrowLeft, Loader2, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import Footer from '@/components/commons/Footer';
+import SiteMotion from '@/components/ui/SiteMotion';
+import TituloMascara from '@/components/ui/TituloMascara';
+import Button from '@/components/ui/Button';
+import FormField, { Input } from '@/components/ui/FormField';
+import {
+  AvisoAcceso,
+  BOTON_FANTASMA,
+  BOTON_NARANJA,
+  FormularioCargando,
+  MarcoAcceso,
+  PanelAcceso,
+} from '../login/_acceso/MarcoAcceso';
+import { CampoContrasena, RequisitosContrasena } from '../login/_acceso/CampoContrasena';
+import '../login/_acceso/acceso.css';
+
+// Campos del registro público: 48 px de alto y 16 px de letra (con menos,
+// Safari en iPhone amplía la página al enfocar el campo).
+const CONTROL = 'h-12 text-base';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -71,16 +90,91 @@ function ResetPasswordForm() {
     }
   };
 
+  // --- Presentación ---------------------------------------------------------
+  // AUTHUI-028: el API responde «Token inválido o expirado» cuando el enlace
+  // caducó, ya se usó o no existe. Volver a enviar el formulario no sirve de
+  // nada: en vez del aviso suelto se ofrece pedir un enlace nuevo. El estado es
+  // el mismo `error` de siempre; sólo cambia cómo se pinta.
+  const enlaceVencido = /token/i.test(error);
+
+  // Cuando el formulario se va (éxito o enlace vencido), el foco pasa al
+  // mensaje que lo sustituye en lugar de perderse.
+  const estadoRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (success || enlaceVencido) estadoRef.current?.focus();
+  }, [success, enlaceVencido]);
+
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">Token no proporcionado</h2>
-          <p className="text-gray-600 mb-4">
-            El enlace es inválido. Solicita uno nuevo.
-          </p>
-          <Link href="/forgot-password" className="text-blue-600 hover:underline">
+      <div>
+        <p className="hm-eyebrow">Enlace no válido</p>
+        <TituloMascara
+          como="h1"
+          className="ac-titulo mt-5"
+          renglones={[{ texto: 'Este enlace' }, { texto: 'no funciona.', contenido: <em>no funciona.</em> }]}
+        />
+        <p className="hm-lead mt-5">El enlace es inválido. Solicita uno nuevo.</p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link href="/forgot-password" className={BOTON_NARANJA} data-hm-magnet>
             Solicitar nuevo enlace
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </div>
+        <p className="mt-6 text-sm">
+          <Link href="/login" className="ac-enlace inline-flex items-center gap-1.5">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Volver a iniciar sesión
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div ref={estadoRef} tabIndex={-1} role="status" className="outline-none">
+        <p className="hm-eyebrow">Listo</p>
+        <TituloMascara
+          key="exito"
+          como="h1"
+          className="ac-titulo mt-5"
+          renglones={[{ texto: 'Contraseña' }, { texto: 'actualizada.', contenido: <em>actualizada.</em> }]}
+        />
+        <p className="hm-lead mt-5">
+          Tu contraseña fue restablecida correctamente. Serás redirigido al inicio de sesión en unos segundos.
+        </p>
+        <div className="mt-8">
+          <Link href="/login" className={BOTON_NARANJA}>
+            Iniciar sesión ahora
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (enlaceVencido) {
+    return (
+      <div ref={estadoRef} tabIndex={-1} role="alert" className="outline-none">
+        <p className="hm-eyebrow">Enlace caducado</p>
+        <TituloMascara
+          key="vencido"
+          como="h1"
+          className="ac-titulo mt-5"
+          renglones={[{ texto: 'Este enlace' }, { texto: 'ya no sirve.', contenido: <em>ya no sirve.</em> }]}
+        />
+        <p className="hm-lead mt-5">
+          Por seguridad, cada enlace sirve una sola vez y caduca en una hora. Pide uno nuevo y te lo
+          enviamos a tu correo.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link href="/forgot-password" className={BOTON_NARANJA} data-hm-magnet>
+            Solicitar nuevo enlace
+            <ArrowRight aria-hidden="true" />
+          </Link>
+          <Link href="/login" className={`${BOTON_FANTASMA} ac-atras`}>
+            <ArrowLeft aria-hidden="true" />
+            Volver a iniciar sesión
           </Link>
         </div>
       </div>
@@ -88,124 +182,112 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        {success ? (
-          <div role="status" className="text-center">
-            <CheckCircle className="mx-auto text-green-500 mb-4" size={48} />
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Contraseña actualizada</h2>
-            <p className="text-gray-600 mb-4">
-              Tu contraseña fue restablecida correctamente. Serás redirigido al login...
-            </p>
-            <Link href="/login" className="text-blue-600 hover:underline">
-              Ir al login
-            </Link>
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Restablecer contraseña</h1>
-            <p className="text-gray-600 mb-6">
-              Ingresa tu nueva contraseña.
-            </p>
+    <div>
+      <p className="hm-eyebrow">Recuperar acceso</p>
+      <TituloMascara
+        key="formulario"
+        como="h1"
+        className="ac-titulo mt-5"
+        renglones={[{ texto: 'Nueva' }, { texto: 'contraseña.', contenido: <em>contraseña.</em> }]}
+      />
+      <p className="hm-lead mt-5">Ingresa tu nueva contraseña.</p>
 
-            {error && (
-              <div role="alert" className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Nueva contraseña
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Mínimo 8 caracteres"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    // AUTHUI-025: botón sólo-icono sin nombre accesible.
-                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    aria-pressed={showPassword}
-                  >
-                    {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
-                  </button>
-                </div>
-                <p className="text-gray-500 text-xs mt-1">
-                  8+ caracteres, 1 mayúscula, 1 número
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                  Confirmar contraseña
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    id="confirmPassword"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Repite la contraseña"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="animate-spin" size={18} />
-                    Actualizando...
-                  </>
-                ) : (
-                  'Restablecer contraseña'
-                )}
-              </button>
-            </form>
-
-            <div className="mt-4 text-center">
-              <Link
-                href="/login"
-                className="text-sm text-gray-600 hover:underline flex items-center justify-center gap-1"
-              >
-                <ArrowLeft size={14} />
-                Volver al login
-              </Link>
-            </div>
-          </>
+      <div className="ac-tarjeta mt-8">
+        {error && (
+          <AvisoAcceso tono="error" className="mb-5">
+            {error}
+          </AvisoAcceso>
         )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormField
+            etiqueta="Nueva contraseña"
+            requerido
+            id="password"
+            ayuda={<RequisitosContrasena valor={password} />}
+          >
+            <CampoContrasena
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Mínimo 8 caracteres"
+              className={CONTROL}
+              // AUTHUI-025: botón sólo-icono con nombre accesible y estado.
+              visible={showPassword}
+              alAlternar={() => setShowPassword(!showPassword)}
+            />
+          </FormField>
+
+          <FormField etiqueta="Confirmar contraseña" requerido id="confirmPassword">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Repite la contraseña"
+              className={CONTROL}
+            />
+          </FormField>
+
+          <Button
+            variante="publico-naranja"
+            type="submit"
+            tamano="lg"
+            anchoCompleto
+            cargando={isSubmitting}
+            textoCargando="Actualizando…"
+            iconoFinal={ArrowRight}
+          >
+            Restablecer contraseña
+          </Button>
+        </form>
       </div>
+
+      <p className="mt-6 text-sm">
+        <Link href="/login" className="ac-enlace inline-flex items-center gap-1.5">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Volver a iniciar sesión
+        </Link>
+      </p>
     </div>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-gray-400" size={32} />
-      </div>
-    }>
-      <ResetPasswordForm />
-    </Suspense>
+    <>
+      <main className="hm">
+        <MarcoAcceso
+          panel={
+            <PanelAcceso
+              antetitulo="INAKAT"
+              frase={[{ texto: 'Un paso más' }, { texto: 'y vuelves a entrar.', em: true }]}
+              pie="Por seguridad, cada enlace sirve una sola vez y caduca en una hora."
+            />
+          }
+        >
+          {/* useSearchParams (el token) obliga a un límite de Suspense. */}
+          <Suspense
+            fallback={
+              <div>
+                <p className="hm-eyebrow">Recuperar acceso</p>
+                <TituloMascara
+                  como="h1"
+                  className="ac-titulo mt-5"
+                  renglones={[{ texto: 'Nueva' }, { texto: 'contraseña.', contenido: <em>contraseña.</em> }]}
+                />
+                <FormularioCargando className="mt-8" />
+              </div>
+            }
+          >
+            <ResetPasswordForm />
+          </Suspense>
+        </MarcoAcceso>
+      </main>
+      <Footer />
+      <SiteMotion />
+    </>
   );
 }

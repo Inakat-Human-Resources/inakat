@@ -1,9 +1,16 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+// RUTA: src/components/sections/talents/ApplyJobModal.tsx
+//
+// Postulación a una vacante desde la bolsa pública. Presentación con el Modal
+// del sistema (role="dialog", foco atrapado, Escape, portal, en móvil sube
+// desde abajo); la lógica es la de siempre: mismas vistas, mismas llamadas
+// (/api/profile, /api/applications/check, /api/upload, /api/applications) y
+// mismos cuerpos.
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  X,
   AlertCircle,
   CheckCircle,
   User,
@@ -13,9 +20,15 @@ import {
   FileText,
   AlertTriangle,
   Briefcase,
-  ArrowRight
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
 import { isSafeHttpUrl } from '@/lib/sanitize';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import FormField, { Input, Textarea } from '@/components/ui/FormField';
+import { cn } from '@/lib/utils';
+import { fechaLarga } from '@/lib/fechas';
 
 // Sólo http(s) absoluto llega al href del CV; un dominio suelto se fuerza a
 // https y cualquier otro esquema se anula (mismo criterio que los paneles).
@@ -62,6 +75,37 @@ const REQUIRED_FIELDS = ['nombre', 'apellidoPaterno', 'telefono', 'cvUrl'];
 
 type ModalView = 'loading' | 'not_logged_in' | 'profile_incomplete' | 'confirm_apply' | 'already_applied' | 'manual_form';
 
+/** id del formulario sin cuenta (su botón de envío vive en el pie del modal). */
+const ID_FORM_MANUAL = 'form-aplicar-sin-cuenta';
+
+/** Círculo con el icono de cada vista (decorativo). */
+function IconoVista({ icono: Icono, tono }: { icono: typeof User; tono: 'exito' | 'aviso' | 'info' | 'neutro' }) {
+  const colores = {
+    exito: 'bg-lime-tint text-lime-dark',
+    aviso: 'bg-orange-tint text-orange-dark',
+    info: 'bg-teal-tint text-teal',
+    neutro: 'bg-mist text-ink-muted',
+  }[tono];
+  return (
+    <span className={cn('mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full', colores)} aria-hidden="true">
+      <Icono className="h-8 w-8" />
+    </span>
+  );
+}
+
+/** Aviso de error dentro del modal (se anuncia al momento). */
+function AvisoError({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark"
+    >
+      <AlertCircle className="mt-px h-[18px] w-[18px] flex-none" aria-hidden="true" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 const ApplyJobModal = ({
   jobId,
   jobTitle,
@@ -72,15 +116,9 @@ const ApplyJobModal = ({
 }: ApplyJobModalProps) => {
   const router = useRouter();
 
-  // A11y (#59): cerrar con la tecla Escape mientras el modal está abierto.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  // A11y (#59): Escape cierra el modal. Ahora lo hace el Modal del sistema
+  // (sólo la capa de arriba lo atiende, así no cierra de paso el panel de
+  // detalle que queda debajo en el móvil).
 
   // Vista actual del modal
   const [view, setView] = useState<ModalView>('loading');
@@ -107,6 +145,12 @@ const ApplyJobModal = ({
   });
   const [cvFile, setCvFile] = useState<File | null>(null);
 
+  // Presentación: al cambiar de vista, el foco va a su encabezado (el lector
+  // anuncia el nuevo estado) o, en el formulario, al primer campo. Sin esto el
+  // botón pulsado desaparecía y el foco caía al <body>.
+  const encabezadoRef = useRef<HTMLHeadingElement>(null);
+  const nombreRef = useRef<HTMLInputElement>(null);
+
   // Cargar perfil cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
@@ -129,6 +173,15 @@ const ApplyJobModal = ({
       setCvFile(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || view === 'loading') return;
+    const t = window.setTimeout(() => {
+      if (!applicationSent && view === 'manual_form') nombreRef.current?.focus();
+      else encabezadoRef.current?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [isOpen, view, applicationSent]);
 
   const loadProfileAndCheck = async () => {
     setView('loading');
@@ -353,409 +406,323 @@ const ApplyJobModal = ({
     onClose();
   };
 
-  if (!isOpen) return null;
+  // Encabezado de cada vista: recibe el foco al cambiar de vista.
+  const claseEncabezado = 'font-display text-lg font-semibold text-ink outline-none';
+
+  // Pie del modal según la vista (cancelar primero; la acción principal, al final).
+  let pie: React.ReactNode = undefined;
+  if (!applicationSent && view === 'confirm_apply' && profile?.candidate) {
+    pie = (
+      <>
+        <Button variante="contorno" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button
+          icono={CheckCircle}
+          onClick={handleQuickApply}
+          cargando={isSubmitting}
+          textoCargando="Enviando…"
+        >
+          Confirmar
+        </Button>
+      </>
+    );
+  } else if (!applicationSent && view === 'manual_form') {
+    pie = (
+      <>
+        <Button
+          variante="contorno"
+          onClick={() => {
+            setShowManualForm(false);
+            setView('not_logged_in');
+          }}
+        >
+          Atrás
+        </Button>
+        <Button type="submit" form={ID_FORM_MANUAL} cargando={isSubmitting} textoCargando="Enviando…">
+          Enviar aplicación
+        </Button>
+      </>
+    );
+  } else if (!applicationSent && view === 'profile_incomplete') {
+    pie = (
+      <Button icono={FileText} iconoFinal={ArrowRight} onClick={goToProfile}>
+        Ir a mi perfil
+      </Button>
+    );
+  } else if (!applicationSent && view === 'already_applied' && existingApplication) {
+    pie = (
+      <Button variante="secundario" icono={Briefcase} onClick={() => router.push('/my-applications')}>
+        Ver mis aplicaciones
+      </Button>
+    );
+  }
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 fade-in-fast"
-      onClick={onClose}
+    <Modal
+      abierto={isOpen}
+      alCerrar={onClose}
+      titulo={view === 'manual_form' ? 'Aplicar a vacante' : 'Postularme'}
+      subtitulo={`${jobTitle} · ${company}`}
+      tamano="md"
+      // Con el formulario a medias, un clic fuera no debe tirar lo escrito.
+      cerrarAlPulsarFondo={view !== 'manual_form'}
+      pie={pie}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="apply-modal-title"
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto"
-      >
-        {/* Header */}
-        <div className="flex justify-between items-start p-6 border-b">
-          <div>
-            <h2 id="apply-modal-title" className="text-xl font-bold text-gray-900">
-              {view === 'manual_form' ? 'Aplicar a Vacante' : 'Postularme'}
-            </h2>
-            <p className="text-gray-600 mt-1 text-sm">
-              {jobTitle} - {company}
+      {/* Vista: Aplicación enviada exitosamente */}
+      {applicationSent && (
+        <div className="py-6 text-center" role="status">
+          <IconoVista icono={CheckCircle} tono="exito" />
+          <h3 ref={encabezadoRef} tabIndex={-1} className={cn(claseEncabezado, 'text-xl')}>
+            ¡Aplicación Enviada!
+          </h3>
+          <p className="mt-2 text-sm text-ink-muted">
+            Tu postulación fue enviada exitosamente. El reclutador revisará tu perfil pronto.
+          </p>
+          <p className="mt-4 rounded-xl bg-lime-tint px-4 py-3 text-sm font-medium text-lime-dark">
+            Puedes revisar el estado de tus aplicaciones en &quot;Mis Aplicaciones&quot;
+          </p>
+        </div>
+      )}
+
+      {/* Vista: Cargando */}
+      {!applicationSent && view === 'loading' && (
+        <div className="py-8 text-center" role="status">
+          <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-teal" aria-hidden="true" />
+          <p className="text-sm text-ink-muted">Verificando tu perfil…</p>
+        </div>
+      )}
+
+      {/* Vista: No logueado */}
+      {!applicationSent && view === 'not_logged_in' && !showManualForm && (
+        <div className="py-2 text-center">
+          {/* Si la comprobación falló, se dice (antes el error quedaba oculto). */}
+          {error && <AvisoError>{error}</AvisoError>}
+          <IconoVista icono={User} tono="neutro" />
+          <h3 ref={encabezadoRef} tabIndex={-1} className={claseEncabezado}>
+            Inicia sesión para aplicar
+          </h3>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
+            Con tu cuenta podrás postularte con un solo clic usando tu perfil guardado.
+          </p>
+
+          <div className="mt-6 space-y-3">
+            <Button icono={LogIn} onClick={goToLogin} anchoCompleto tamano="lg">
+              Iniciar sesión
+            </Button>
+            <Button variante="contorno" icono={UserPlus} onClick={goToRegister} anchoCompleto tamano="lg">
+              Registrarme como candidato
+            </Button>
+
+            <div className="relative py-2" aria-hidden="true">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-line" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-white px-3 font-serif text-base italic text-ink-muted">o</span>
+              </div>
+            </div>
+
+            <Button
+              variante="fantasma"
+              iconoFinal={ArrowRight}
+              onClick={() => {
+                setShowManualForm(true);
+                setView('manual_form');
+              }}
+            >
+              Aplicar sin cuenta
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Vista: Perfil incompleto */}
+      {!applicationSent && view === 'profile_incomplete' && (
+        <div className="py-2 text-center">
+          <IconoVista icono={AlertTriangle} tono="aviso" />
+          <h3 ref={encabezadoRef} tabIndex={-1} className={claseEncabezado}>
+            Completa tu perfil
+          </h3>
+          <p className="mt-2 text-sm text-ink-muted">
+            Para postularte con un clic, necesitas completar la siguiente información:
+          </p>
+
+          <div className="mt-5 rounded-xl border border-orange/40 bg-orange-tint p-4 text-left">
+            <p className="mb-2 text-sm font-semibold text-orange-dark">Campos faltantes:</p>
+            <ul className="space-y-1.5">
+              {missingFields.map((field, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-sm text-orange-dark">
+                  <span className="h-1.5 w-1.5 flex-none rounded-full bg-orange-dark" aria-hidden="true" />
+                  {field}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Vista: Ya aplicó */}
+      {!applicationSent && view === 'already_applied' && existingApplication && (
+        <div className="py-2 text-center">
+          <IconoVista icono={Briefcase} tono="info" />
+          <h3 ref={encabezadoRef} tabIndex={-1} className={claseEncabezado}>
+            Ya te postulaste
+          </h3>
+          <p className="mt-2 text-sm text-ink-muted">Ya enviaste tu aplicación a esta vacante.</p>
+
+          <dl className="mt-5 rounded-xl bg-teal-tint p-4 text-sm text-teal-dark">
+            <div className="flex flex-wrap justify-center gap-x-1.5">
+              <dt className="font-medium">Estado actual:</dt>
+              <dd className="font-semibold">{existingApplication.statusLabel}</dd>
+            </div>
+            <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 text-[13px]">
+              <dt>Fecha de aplicación:</dt>
+              <dd>
+                {fechaLarga(existingApplication.appliedAt)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
+      {/* Vista: Confirmar postulación (perfil completo) */}
+      {!applicationSent && view === 'confirm_apply' && profile?.candidate && (
+        <div className="py-1">
+          <div className="mb-5 text-center">
+            <IconoVista icono={CheckCircle} tono="exito" />
+            <h3 ref={encabezadoRef} tabIndex={-1} className={claseEncabezado}>
+              ¿Deseas postularte?
+            </h3>
+            <p className="mt-2 text-sm text-ink-muted">
+              Tu información se enviará automáticamente desde tu perfil.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="text-gray-400 hover:text-gray-600 rounded-full"
-          >
-            <X size={24} aria-hidden="true" />
-          </button>
+
+          {/* Datos a enviar */}
+          <div className="mb-5 rounded-xl border border-line bg-paper p-4">
+            <h4 className="mb-3 font-display text-sm font-semibold text-ink">Datos a enviar:</h4>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Nombre:</dt>
+                <dd className="text-right font-medium text-ink">
+                  {[
+                    profile.candidate.nombre,
+                    profile.candidate.apellidoPaterno,
+                    profile.candidate.apellidoMaterno
+                  ].filter(Boolean).join(' ')}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Email:</dt>
+                <dd className="min-w-0 break-all text-right font-medium text-ink">{profile.email}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Teléfono:</dt>
+                <dd className="text-right font-medium tabular-nums text-ink">{profile.candidate.telefono}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-ink-muted">CV:</dt>
+                <dd>
+                  <a
+                    href={(profile.candidate.cvUrl && ensureUrl(profile.candidate.cvUrl)) || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-teal underline-offset-2 hover:underline"
+                  >
+                    Ver mi CV
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="sr-only">(se abre en una pestaña nueva)</span>
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          {error && <AvisoError>{error}</AvisoError>}
+
+          <p className="text-center text-[13px] text-ink-muted">
+            ¿Datos incorrectos?{' '}
+            <button
+              type="button"
+              onClick={goToProfile}
+              className="font-medium text-teal underline underline-offset-2 hover:text-ink"
+            >
+              Editar mi perfil
+            </button>
+          </p>
         </div>
+      )}
 
-        {/* Content */}
-        <div className="p-6">
-          {/* Vista: Aplicación enviada exitosamente */}
-          {applicationSent && (
-            <div className="text-center py-8">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-10 h-10 text-green-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
-                ¡Aplicación Enviada!
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Tu postulación fue enviada exitosamente. El reclutador revisará tu perfil pronto.
-              </p>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="text-green-800 text-sm font-medium">
-                  Puedes revisar el estado de tus aplicaciones en &quot;Mis Aplicaciones&quot;
-                </p>
-              </div>
-            </div>
-          )}
+      {/* Vista: Formulario manual */}
+      {!applicationSent && view === 'manual_form' && (
+        <form id={ID_FORM_MANUAL} onSubmit={handleManualSubmit} className="py-1">
+          {error && <AvisoError>{error}</AvisoError>}
 
-          {/* Vista: Cargando */}
-          {!applicationSent && view === 'loading' && (
-            <div className="text-center py-8">
-              <Loader2 className="w-12 h-12 animate-spin text-button-orange mx-auto mb-4" />
-              <p className="text-gray-600">Verificando tu perfil...</p>
-            </div>
-          )}
+          <div className="space-y-4">
+            <FormField etiqueta="Nombre completo" requerido>
+              <Input
+                ref={nombreRef}
+                type="text"
+                value={formData.candidateName}
+                onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
+                placeholder="Juan Pérez García"
+                autoComplete="name"
+              />
+            </FormField>
 
-          {/* Vista: No logueado */}
-          {!applicationSent && view === 'not_logged_in' && !showManualForm && (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <User className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Inicia sesión para aplicar
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Con tu cuenta podrás postularte con un solo clic usando tu perfil guardado.
-              </p>
+            <FormField etiqueta="Email" requerido>
+              <Input
+                type="email"
+                value={formData.candidateEmail}
+                onChange={(e) => setFormData({ ...formData, candidateEmail: e.target.value })}
+                placeholder="juan.perez@email.com"
+                autoComplete="email"
+              />
+            </FormField>
 
-              <div className="space-y-3">
-                <button
-                  onClick={goToLogin}
-                  className="w-full flex items-center justify-center gap-2 bg-button-orange text-white py-3 rounded-lg hover:bg-opacity-90 font-semibold"
-                >
-                  <LogIn size={20} />
-                  Iniciar Sesión
-                </button>
+            <FormField etiqueta="Teléfono" opcional>
+              <Input
+                type="tel"
+                value={formData.candidatePhone}
+                onChange={(e) => setFormData({ ...formData, candidatePhone: e.target.value })}
+                placeholder="81 1234 5678"
+                autoComplete="tel"
+              />
+            </FormField>
 
-                <button
-                  onClick={goToRegister}
-                  className="w-full flex items-center justify-center gap-2 border-2 border-button-orange text-button-orange py-3 rounded-lg hover:bg-orange-50 font-semibold"
-                >
-                  <UserPlus size={20} />
-                  Registrarme como Candidato
-                </button>
+            <FormField etiqueta="CV" opcional ayuda="PDF, DOC o DOCX, máximo 4 MB.">
+              <Input
+                type="file"
+                onChange={(e) => setCvFile(e.target.files?.[0] || null)}
+                accept=".pdf,.doc,.docx"
+                className="h-auto cursor-pointer py-2 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-display file:text-[13px] file:font-semibold file:text-white hover:file:bg-teal"
+              />
+            </FormField>
 
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">o</span>
-                  </div>
-                </div>
+            <FormField etiqueta="Carta de presentación" opcional>
+              <Textarea
+                value={formData.coverLetter}
+                onChange={(e) => setFormData({ ...formData, coverLetter: e.target.value })}
+                placeholder="Cuéntanos por qué eres el candidato ideal..."
+                rows={4}
+              />
+            </FormField>
+          </div>
 
-                <button
-                  onClick={() => {
-                    setShowManualForm(true);
-                    setView('manual_form');
-                  }}
-                  className="w-full text-gray-600 py-2 hover:text-gray-900 text-sm"
-                >
-                  Aplicar sin cuenta →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Vista: Perfil incompleto */}
-          {!applicationSent && view === 'profile_incomplete' && (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-yellow-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Completa tu perfil
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Para postularte con un clic, necesitas completar la siguiente información:
-              </p>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
-                <p className="text-sm font-medium text-yellow-800 mb-2">
-                  Campos faltantes:
-                </p>
-                <ul className="space-y-1">
-                  {missingFields.map((field, idx) => (
-                    <li key={idx} className="text-sm text-yellow-700 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-yellow-600 rounded-full"></span>
-                      {field}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <button
-                onClick={goToProfile}
-                className="w-full flex items-center justify-center gap-2 bg-button-orange text-white py-3 rounded-lg hover:bg-opacity-90 font-semibold"
-              >
-                <FileText size={20} />
-                Ir a Mi Perfil
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          )}
-
-          {/* Vista: Ya aplicó */}
-          {!applicationSent && view === 'already_applied' && existingApplication && (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Briefcase className="w-8 h-8 text-blue-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Ya te postulaste
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Ya enviaste tu aplicación a esta vacante.
-              </p>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                  <span className="font-medium">Estado actual:</span>{' '}
-                  <span className="font-semibold">{existingApplication.statusLabel}</span>
-                </p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Fecha de aplicación:{' '}
-                  {new Date(existingApplication.appliedAt).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </p>
-              </div>
-
-              <button
-                onClick={() => router.push('/my-applications')}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold"
-              >
-                Ver Mis Aplicaciones
-              </button>
-            </div>
-          )}
-
-          {/* Vista: Confirmar postulación (perfil completo) */}
-          {!applicationSent && view === 'confirm_apply' && profile?.candidate && (
-            <div className="py-4">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  ¿Deseas postularte?
-                </h3>
-                <p className="text-gray-600 text-sm">
-                  Tu información se enviará automáticamente desde tu perfil.
-                </p>
-              </div>
-
-              {/* Preview de datos */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                  Datos a enviar:
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Nombre:</span>
-                    <span className="font-medium text-gray-900">
-                      {[
-                        profile.candidate.nombre,
-                        profile.candidate.apellidoPaterno,
-                        profile.candidate.apellidoMaterno
-                      ].filter(Boolean).join(' ')}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Email:</span>
-                    <span className="font-medium text-gray-900">{profile.email}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Teléfono:</span>
-                    <span className="font-medium text-gray-900">{profile.candidate.telefono}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">CV:</span>
-                    <a
-                      href={(profile.candidate.cvUrl && ensureUrl(profile.candidate.cvUrl)) || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      Ver mi CV
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
-                  <AlertCircle size={18} />
-                  {error}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={onClose}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleQuickApply}
-                  disabled={isSubmitting}
-                  className="flex-1 px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={20} />
-                      Confirmar
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center mt-4">
-                ¿Datos incorrectos?{' '}
-                <button onClick={goToProfile} className="text-button-orange hover:underline">
-                  Editar mi perfil
-                </button>
-              </p>
-            </div>
-          )}
-
-          {/* Vista: Formulario manual */}
-          {!applicationSent && view === 'manual_form' && (
-            <form onSubmit={handleManualSubmit} className="py-2">
-              {error && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2">
-                    Nombre Completo *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.candidateName}
-                    onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
-                    placeholder="Juan Pérez García"
-                    className="w-full p-3 border border-gray-300 rounded-lg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.candidateEmail}
-                    onChange={(e) => setFormData({ ...formData, candidateEmail: e.target.value })}
-                    placeholder="juan.perez@email.com"
-                    className="w-full p-3 border border-gray-300 rounded-lg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.candidatePhone}
-                    onChange={(e) => setFormData({ ...formData, candidatePhone: e.target.value })}
-                    placeholder="81 1234 5678"
-                    className="w-full p-3 border border-gray-300 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">
-                    CV (opcional)
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) => setCvFile(e.target.files?.[0] || null)}
-                    accept=".pdf,.doc,.docx"
-                    className="w-full p-3 border border-gray-300 rounded-lg"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    PDF, DOC, DOCX (máx. 4MB)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">
-                    Carta de Presentación (opcional)
-                  </label>
-                  <textarea
-                    value={formData.coverLetter}
-                    onChange={(e) => setFormData({ ...formData, coverLetter: e.target.value })}
-                    placeholder="Cuéntanos por qué eres el candidato ideal..."
-                    rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-lg resize-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowManualForm(false);
-                    setView('not_logged_in');
-                  }}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-                >
-                  Atrás
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    'Enviar Aplicación'
-                  )}
-                </button>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center mt-4">
-                ¿Ya tienes cuenta?{' '}
-                <button type="button" onClick={goToLogin} className="text-button-orange hover:underline">
-                  Inicia sesión
-                </button>
-              </p>
-            </form>
-          )}
-        </div>
-      </div>
-    </div>
+          <p className="mt-5 text-center text-[13px] text-ink-muted">
+            ¿Ya tienes cuenta?{' '}
+            <button
+              type="button"
+              onClick={goToLogin}
+              className="font-medium text-teal underline underline-offset-2 hover:text-ink"
+            >
+              Inicia sesión
+            </button>
+          </p>
+        </form>
+      )}
+    </Modal>
   );
 };
 

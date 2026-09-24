@@ -1,11 +1,33 @@
 // RUTA: src/app/contact/page.tsx
+//
+// Contacto en el registro PÚBLICO «Arco» (estilos en contact.css, prefijo ct-).
+// La lógica es la de siempre, sin tocar: mismo estado, mismo POST /api/contact
+// con el mismo cuerpo, mismos mensajes y mismo detalle de errores por campo.
+// Cambia la presentación: titular a escala de encuadre, los canales directos
+// como filas grandes (en móvil van ANTES del formulario: WhatsApp y llamar son
+// lo más rápido desde un teléfono) y el formulario con los FormField del
+// sistema (etiqueta visible, ayuda enlazada, obligatorio anunciado).
 'use client';
 
+import './contact.css';
 import React, { useState, FormEvent } from 'react';
 import Link from 'next/link';
-import { useInView } from '@/hooks/useInView';
-import { Mail, Phone, MessageCircle, Instagram } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  ArrowUpRight,
+  CheckCircle2,
+  Instagram,
+  Loader2,
+  Mail,
+  MessageCircle,
+  Phone,
+} from 'lucide-react';
 import Footer from '@/components/commons/Footer';
+import SiteMotion from '@/components/ui/SiteMotion';
+import TituloMascara from '@/components/ui/TituloMascara';
+import FormField, { Input, Textarea } from '@/components/ui/FormField';
+import { CONTACTO } from '@/lib/nav-publica';
 
 interface FormData {
   nombre: string;
@@ -15,8 +37,6 @@ interface FormData {
 }
 
 export default function ContactPage() {
-  const { ref, isInView } = useInView(0.1);
-
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     email: '',
@@ -87,261 +107,226 @@ export default function ContactPage() {
   };
 
   return (
-    <main className="min-h-screen">
-      <section
-        ref={ref as React.RefObject<HTMLDivElement>}
-        className="bg-custom-beige py-16 md:py-24"
-      >
-        <div className="container mx-auto px-4">
-          {/* Section title */}
-          <h1
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-4`}
-          >
-            Contáctanos
-          </h1>
-          <p
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-text-black/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
-            style={{ transitionDelay: '100ms' }}
-          >
-            ¿Tienes preguntas sobre nuestros servicios? Escríbenos y te
-            responderemos lo antes posible.
-          </p>
+    <>
+      <main className="hm">
+        <section className="hm-suelo--arena ct" aria-labelledby="ct-titulo">
+          <div className="ct__arcos" aria-hidden="true">
+            <span className="hm-arc hm-arc--a" />
+            <span className="hm-arc hm-arc--b" />
+            <span className="hm-arc hm-arc--c" />
+          </div>
 
-          {/* Two-column layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            {/* Left column: Contact info */}
-            <div
-              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-title-dark rounded-2xl p-8 md:p-10`}
-              style={{ transitionDelay: '150ms' }}
-            >
-              <h2 className="font-display text-2xl font-bold text-white mb-8">
-                Información de Contacto
-              </h2>
+          <div className="hm-wrap">
+            <div className="ct__cabeza">
+              <div>
+                <p className="hm-eyebrow hm-entra">Contacto</p>
+                <TituloMascara
+                  como="h1"
+                  id="ct-titulo"
+                  className="hm-display mt-5"
+                  renglones={[{ texto: 'Contáctanos' }]}
+                />
+              </div>
+              <p className="hm-lead hm-entra" style={{ '--i': 1 } as React.CSSProperties}>
+                ¿Tienes preguntas sobre nuestros servicios? Escríbenos y te
+                responderemos lo antes posible.
+              </p>
+            </div>
 
-              <div className="space-y-6">
-                {/* Email */}
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-5 h-5 text-button-green" />
-                  </div>
-                  <div>
-                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
-                      Email
-                    </p>
-                    <a
-                      href="mailto:info@inakat.com"
-                      className="text-white hover:text-button-green transition-colors"
-                    >
-                      info@inakat.com
+            <div className="ct__rejilla">
+              {/* Canales directos */}
+              <div className="hm-entra" style={{ '--i': 2 } as React.CSSProperties}>
+                <h2 className="ct__subtitulo">Información de contacto</h2>
+                <ul className="ct__lista">
+                  <li>
+                    <a className="ct-canal" href={`mailto:${CONTACTO.email}`}>
+                      <span className="ct-canal__icono" aria-hidden="true">
+                        <Mail />
+                      </span>
+                      <span>
+                        <span className="ct-canal__etiqueta">Email</span>
+                        <span className="ct-canal__valor">{CONTACTO.email}</span>
+                      </span>
+                      <ArrowUpRight className="ct-canal__flecha" aria-hidden="true" />
                     </a>
-                  </div>
-                </div>
-
-                {/* Phone */}
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                    <Phone className="w-5 h-5 text-button-green" />
-                  </div>
-                  <div>
-                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
-                      Teléfono
-                    </p>
-                    <a
-                      href="tel:+528116312490"
-                      className="text-white hover:text-button-green transition-colors"
-                    >
-                      +52 811 631 2490
+                  </li>
+                  <li>
+                    <a className="ct-canal" href={CONTACTO.telefonoHref}>
+                      <span className="ct-canal__icono" aria-hidden="true">
+                        <Phone />
+                      </span>
+                      <span>
+                        <span className="ct-canal__etiqueta">Teléfono</span>
+                        <span className="ct-canal__valor">{CONTACTO.telefono}</span>
+                      </span>
+                      <ArrowUpRight className="ct-canal__flecha" aria-hidden="true" />
                     </a>
-                  </div>
-                </div>
-
-                {/* WhatsApp */}
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                    <MessageCircle className="w-5 h-5 text-button-green" />
-                  </div>
-                  <div>
-                    <p className="text-white/50 text-xs uppercase tracking-wider mb-1">
-                      WhatsApp
-                    </p>
+                  </li>
+                  <li>
                     <a
-                      href="https://wa.me/528116312490"
+                      className="ct-canal"
+                      href={CONTACTO.whatsapp}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:text-button-green transition-colors"
                     >
-                      Enviar mensaje
+                      <span className="ct-canal__icono" aria-hidden="true">
+                        <MessageCircle />
+                      </span>
+                      <span>
+                        <span className="ct-canal__etiqueta">WhatsApp</span>
+                        <span className="ct-canal__valor">
+                          Enviar mensaje
+                          <span className="sr-only"> (se abre en otra pestaña)</span>
+                        </span>
+                      </span>
+                      <ArrowUpRight className="ct-canal__flecha" aria-hidden="true" />
                     </a>
+                  </li>
+                </ul>
+
+                <div className="ct__redes">
+                  <p className="ct__redes-titulo">Síguenos</p>
+                  <a
+                    href={CONTACTO.whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="WhatsApp (se abre en otra pestaña)"
+                  >
+                    <MessageCircle aria-hidden="true" />
+                  </a>
+                  <a
+                    href={CONTACTO.instagram}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Instagram (se abre en otra pestaña)"
+                  >
+                    <Instagram aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+
+              {/* El formulario, en una hoja blanca */}
+              <div className="ct-hoja hm-entra" style={{ '--i': 3 } as React.CSSProperties}>
+                <h2 className="ct-hoja__titulo">
+                  Escríbenos<em>.</em>
+                </h2>
+                <p className="ct-hoja__intro">
+                  Contáctanos para impulsar el futuro de tu empresa con talento
+                  altamente calificado.
+                </p>
+
+                {/* Región viva fija: el éxito se anuncia sin mover el foco. El
+                    error va en role="alert" (se anuncia al momento). */}
+                <div role="status" aria-live="polite">
+                  {submitStatus.type === 'success' && (
+                    <p className="ct-aviso ct-aviso--exito">
+                      <CheckCircle2 aria-hidden="true" />
+                      {submitStatus.message}
+                    </p>
+                  )}
+                </div>
+                {submitStatus.type === 'error' && (
+                  <div role="alert" className="ct-aviso ct-aviso--error">
+                    <AlertCircle aria-hidden="true" />
+                    {submitStatus.message}
                   </div>
-                </div>
-              </div>
+                )}
 
-              {/* Social icons */}
-              <div className="mt-10 pt-8 border-t border-white/10">
-                <p className="text-white/50 text-xs uppercase tracking-wider mb-4">
-                  Síguenos
-                </p>
-                <div className="flex gap-3">
-                  <a
-                    href="https://wa.me/528116312490"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
-                    aria-label="WhatsApp"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                  </a>
-                  <a
-                    href="https://www.instagram.com/inakatmx/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-button-green hover:text-white transition-all"
-                    aria-label="Instagram"
-                  >
-                    <Instagram className="w-5 h-5" />
-                  </a>
-                </div>
-              </div>
-            </div>
+                <form className="ct-form" onSubmit={handleSubmit}>
+                  <FormField etiqueta="Nombre" requerido id="nombre">
+                    <Input
+                      type="text"
+                      name="nombre"
+                      value={formData.nombre}
+                      onChange={handleChange}
+                      placeholder="Tu nombre completo"
+                      autoComplete="name"
+                      className="h-12"
+                    />
+                  </FormField>
 
-            {/* Right column: Form */}
-            <div
-              className={`animate-on-scroll ${isInView ? 'in-view' : ''} bg-white rounded-2xl p-8 md:p-10 shadow-sm`}
-              style={{ transitionDelay: '300ms' }}
-            >
-              <h2 className="font-display text-2xl font-bold text-title-dark mb-2">
-                Escríbenos
-              </h2>
-              <p className="text-text-black/60 text-sm mb-6">
-                Contáctanos para impulsar el futuro de tu empresa con talento
-                altamente calificado.
-              </p>
+                  <div className="ct-form__par">
+                    <FormField etiqueta="Correo electrónico" requerido id="email">
+                      <Input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="tu@correo.com"
+                        autoComplete="email"
+                        className="h-12"
+                      />
+                    </FormField>
 
-              {/* Status message */}
-              {submitStatus.type && (
-                <div
-                  className={`mb-6 p-4 rounded-lg text-sm ${
-                    submitStatus.type === 'success'
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
-                  }`}
-                >
-                  {submitStatus.message}
-                </div>
-              )}
+                    <FormField
+                      etiqueta="Teléfono"
+                      opcional
+                      id="telefono"
+                      ayuda="10 dígitos, por ejemplo 8112345678."
+                    >
+                      <Input
+                        type="tel"
+                        name="telefono"
+                        value={formData.telefono}
+                        onChange={handleChange}
+                        maxLength={20}
+                        autoComplete="tel"
+                        className="h-12"
+                      />
+                    </FormField>
+                  </div>
 
-              {/* Form */}
-              <form className="space-y-5" onSubmit={handleSubmit}>
-                <div>
-                  <label
-                    htmlFor="nombre"
-                    className="block text-sm font-semibold text-title-dark mb-1.5"
-                  >
-                    Nombre
-                  </label>
-                  <input
-                    type="text"
-                    id="nombre"
-                    name="nombre"
-                    value={formData.nombre}
-                    onChange={handleChange}
-                    placeholder="Tu nombre completo"
-                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-semibold text-title-dark mb-1.5"
-                  >
-                    E-mail
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="tu@email.com"
-                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="telefono"
-                    className="block text-sm font-semibold text-title-dark mb-1.5"
-                  >
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    id="telefono"
-                    name="telefono"
-                    value={formData.telefono}
-                    onChange={handleChange}
-                    placeholder="10 dígitos, ej. 8112345678"
-                    maxLength={20}
-                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="mensaje"
-                    className="block text-sm font-semibold text-title-dark mb-1.5"
-                  >
-                    Mensaje
-                  </label>
-                  <textarea
+                  {/* La API exige al menos 10 caracteres (contactMessageSchema):
+                      se dice antes de enviar, no sólo en el error. */}
+                  <FormField
+                    etiqueta="Mensaje"
+                    requerido
                     id="mensaje"
-                    name="mensaje"
-                    value={formData.mensaje}
-                    onChange={handleChange}
-                    placeholder="Escribe tu mensaje..."
-                    className="w-full p-3 bg-white text-text-black border border-gray-200 rounded-lg focus:border-button-green focus:ring-2 focus:ring-button-green/20 outline-none transition-all"
-                    rows={4}
-                    required
-                  />
-                </div>
-
-                {/* El aviso declaraba una aceptación sin poner los documentos
-                    a disposición: ahora son enlaces reales. */}
-                <p className="text-xs text-text-black/50">
-                  *Al dar click en el botón, aceptas nuestros{' '}
-                  <Link
-                    href="/terms"
-                    className="underline hover:text-button-dark-green"
+                    ayuda="Al menos 10 caracteres."
                   >
-                    términos y condiciones
-                  </Link>{' '}
-                  y{' '}
-                  <Link
-                    href="/privacy"
-                    className="underline hover:text-button-dark-green"
-                  >
-                    política de privacidad
-                  </Link>
-                  .
-                </p>
+                    <Textarea
+                      name="mensaje"
+                      value={formData.mensaje}
+                      onChange={handleChange}
+                      placeholder="Cuéntanos qué necesitas…"
+                      rows={5}
+                    />
+                  </FormField>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-button-orange text-white font-semibold py-4 rounded-full hover:scale-105 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  {isSubmitting ? 'Enviando...' : 'Enviar Mensaje'}
-                </button>
-              </form>
+                  {/* El aviso declaraba una aceptación sin poner los documentos
+                      a disposición: son enlaces reales. */}
+                  <p className="ct-form__aviso">
+                    *Al dar click en el botón, aceptas nuestros{' '}
+                    <Link href="/terms">términos y condiciones</Link> y{' '}
+                    <Link href="/privacy">política de privacidad</Link>.
+                  </p>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    aria-busy={isSubmitting || undefined}
+                    className="hm-btn hm-btn--orange ct-form__enviar"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                        Enviando…
+                      </>
+                    ) : (
+                      <>
+                        Enviar mensaje
+                        <ArrowRight aria-hidden="true" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
-
+        </section>
+      </main>
       <Footer />
-    </main>
+      <SiteMotion />
+    </>
   );
 }

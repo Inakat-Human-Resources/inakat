@@ -29,6 +29,26 @@ global.fetch = mockFetch;
 // Mock de alert
 global.alert = jest.fn();
 
+// jsdom no implementa matchMedia; SiteMotion (el movimiento del registro
+// público) lo consulta en su efecto.
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+  }
+});
+
 describe('RegisterPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -68,7 +88,8 @@ describe('RegisterPage', () => {
     it('debería renderizar el formulario de registro', async () => {
       render(<RegisterPage />);
 
-      expect(screen.getByText('Crear Cuenta')).toBeInTheDocument();
+      // El titular va partido en máscaras: su nombre accesible es el aria-label.
+      expect(screen.getByRole('heading', { level: 1, name: /crea tu cuenta/i })).toBeInTheDocument();
       expect(screen.getByText(/Paso 1 de 6/)).toBeInTheDocument();
     });
 
@@ -96,8 +117,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       // Click en Siguiente
       fireEvent.click(screen.getByText('Siguiente'));
@@ -124,8 +145,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'invalid-email');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       fireEvent.click(screen.getByText('Siguiente'));
 
@@ -140,8 +161,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'DifferentPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'DifferentPass123');
 
       fireEvent.click(screen.getByText('Siguiente'));
 
@@ -157,8 +178,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       fireEvent.click(screen.getByText('Siguiente'));
 
@@ -201,8 +222,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       // Navegar al paso 4
       fireEvent.click(screen.getByText('Siguiente')); // Paso 2
@@ -216,7 +237,7 @@ describe('RegisterPage', () => {
 
       // Verificar que se muestra la opción de agregar experiencia
       expect(screen.getByText(/No hay experiencias agregadas/)).toBeInTheDocument();
-      expect(screen.getByText('Agregar Experiencia')).toBeInTheDocument();
+      expect(screen.getByText('Agregar experiencia')).toBeInTheDocument();
     });
 
     it('debería permitir agregar experiencias', async () => {
@@ -225,8 +246,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       fireEvent.click(screen.getByText('Siguiente'));
       await waitFor(() => expect(screen.getByText(/Paso 2 de 6/)).toBeInTheDocument());
@@ -238,7 +259,7 @@ describe('RegisterPage', () => {
       await waitFor(() => expect(screen.getByText(/Paso 4 de 6/)).toBeInTheDocument());
 
       // Agregar experiencia
-      fireEvent.click(screen.getByText('Agregar Experiencia'));
+      fireEvent.click(screen.getByText('Agregar experiencia'));
 
       await waitFor(() => {
         expect(screen.getByText('Experiencia 1')).toBeInTheDocument();
@@ -255,7 +276,7 @@ describe('RegisterPage', () => {
       await waitFor(() => {
         expect(screen.getByText(/Paso 6 de 6/)).toBeInTheDocument();
         expect(screen.getByText(/No hay documentos agregados/)).toBeInTheDocument();
-        expect(screen.getByText('Agregar Documento')).toBeInTheDocument();
+        expect(screen.getByText('Agregar documento')).toBeInTheDocument();
       });
     });
 
@@ -269,7 +290,7 @@ describe('RegisterPage', () => {
       });
 
       // Agregar documento
-      fireEvent.click(screen.getByText('Agregar Documento'));
+      fireEvent.click(screen.getByText('Agregar documento'));
 
       await waitFor(() => {
         expect(screen.getByText('Documento 1')).toBeInTheDocument();
@@ -285,8 +306,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       // Saltar al paso 6
       fireEvent.click(screen.getByText(/Omitir y crear cuenta con datos básicos/));
@@ -321,8 +342,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       fireEvent.click(screen.getByText(/Omitir y crear cuenta con datos básicos/));
 
@@ -369,8 +390,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'existing@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 
       fireEvent.click(screen.getByText(/Omitir y crear cuenta con datos básicos/));
 
@@ -397,7 +418,7 @@ describe('RegisterPage', () => {
       render(<RegisterPage />);
 
       expect(screen.getByText('¿Ya tienes una cuenta?')).toBeInTheDocument();
-      expect(screen.getByText('INICIAR SESIÓN')).toBeInTheDocument();
+      expect(screen.getByText('Iniciar sesión')).toBeInTheDocument();
 
       const loginLink = screen.getByRole('link', { name: /INICIAR SESIÓN/i });
       expect(loginLink).toHaveAttribute('href', '/login');
@@ -411,8 +432,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'testpass123');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'testpass123');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'testpass123');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'testpass123');
 
       fireEvent.click(screen.getByText('Siguiente'));
 
@@ -427,8 +448,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPassword');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPassword');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPassword');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPassword');
 
       fireEvent.click(screen.getByText('Siguiente'));
 
@@ -443,8 +464,8 @@ describe('RegisterPage', () => {
       await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
       await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
       await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-      await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'Test1');
-      await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'Test1');
+      await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'Test1');
+      await userEvent.type(screen.getByPlaceholderText('Repítela'), 'Test1');
 
       fireEvent.click(screen.getByText('Siguiente'));
 

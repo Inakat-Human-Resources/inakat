@@ -1,10 +1,17 @@
 // RUTA: src/components/sections/aboutus/ExpertsSection.tsx
+//
+// /about · 6. Expertos (suelo arena). Cada experto asoma por una ventana en
+// arco (el puente del isotipo); al pasar, el punto aparece a su pie. La ficha
+// se abre en el Modal del sistema: role="dialog", foco atrapado, Escape,
+// scroll de fondo bloqueado y el foco vuelve a la tarjeta al cerrar.
+// Estilos: src/app/about/about.css (ab-).
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image, { StaticImageData } from 'next/image';
-import { useInView } from '@/hooks/useInView';
-import { X, Play } from 'lucide-react';
+import { ArrowUpRight, Play } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import { clasesBoton } from '@/components/ui/Button';
 import imgGuillermo from '@/assets/images/2-about/guillermo-sanchez.png';
 import imgAlexandra from '@/assets/images/2-about/alexandra-fetisova.png';
 import imgOmar from '@/assets/images/2-about/omar-garcia.png';
@@ -88,170 +95,129 @@ const experts: Expert[] = [
 ];
 
 const ExpertsSection = () => {
-  const { ref, isInView } = useInView(0.1);
   const [selectedExpert, setSelectedExpert] = useState<Expert | null>(null);
   // Tarjeta que abrió el modal: al cerrar hay que devolverle el foco (a11y).
+  // El Modal ya devuelve el foco a lo que lo tenía al abrir, pero Safari no
+  // enfoca un botón al pulsarlo: sin esta referencia, el foco caía en <body>.
   const tarjetaOrigenRef = useRef<HTMLButtonElement | null>(null);
-  const botonCerrarRef = useRef<HTMLButtonElement>(null);
 
   const cerrarModal = useCallback(() => setSelectedExpert(null), []);
 
-  // Comportamiento de diálogo: Escape cierra, el foco entra al modal y vuelve
-  // a la tarjeta al cerrar, y el fondo no se desplaza mientras está abierto.
+  // Al cerrar, el foco vuelve a la tarjeta que abrió la ficha.
   useEffect(() => {
-    if (!selectedExpert) return;
-
-    const handleKeyDown = (evento: KeyboardEvent) => {
-      if (evento.key === 'Escape') cerrarModal();
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    botonCerrarRef.current?.focus();
-
-    const overflowPrevio = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = overflowPrevio;
-      tarjetaOrigenRef.current?.focus();
-    };
-  }, [selectedExpert, cerrarModal]);
+    if (selectedExpert) return;
+    const origen = tarjetaOrigenRef.current;
+    if (!origen) return;
+    tarjetaOrigenRef.current = null;
+    origen.focus({ preventScroll: true });
+  }, [selectedExpert]);
 
   return (
     <>
-      <section
-        ref={ref as React.RefObject<HTMLDivElement>}
-        className="bg-custom-beige py-16 md:py-24"
-      >
-        <div className="container mx-auto px-4">
-          {/* Section title */}
-          <h2
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} font-display text-3xl md:text-4xl lg:text-5xl font-bold text-title-dark text-center mb-4`}
-          >
-            Conoce a los Expertos
-          </h2>
-          <p
-            className={`animate-on-scroll ${isInView ? 'in-view' : ''} text-text-black/60 text-lg text-center mb-14 max-w-2xl mx-auto`}
-            style={{ transitionDelay: '100ms' }}
-          >
-            Profesionales dedicados a encontrar el talento que tu empresa
-            necesita.
-          </p>
-
-          {/* Experts grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 max-w-6xl mx-auto">
-            {experts.map((expert, index) => (
-              // El reveal vive en el envoltorio: cuando .animate-on-scroll.in-view
-              // se aplicaba al propio botón, su transform fijo anulaba el
-              // hover:-translate-y-1 y la tarjeta nunca se elevaba.
-              <div
-                key={index}
-                className={`animate-on-scroll ${isInView ? 'in-view' : ''}`}
-                style={{ transitionDelay: `${index * 80}ms` }}
-              >
-                <button
-                  // Guarda la tarjeta de origen para devolverle el foco al cerrar.
-                  onClick={(evento) => { tarjetaOrigenRef.current = evento.currentTarget; setSelectedExpert(expert); }}
-                  className="w-full h-full bg-white rounded-2xl p-6 md:p-7 shadow-sm hover:shadow-lg transition-all text-center cursor-pointer hover:-translate-y-1"
-                >
-                  <div className="w-28 h-28 md:w-36 md:h-36 lg:w-40 lg:h-40 mx-auto mb-4 rounded-full overflow-hidden bg-custom-beige">
-                    {/* Esta sección está muy por debajo del pliegue: con
-                        priority competía en el <head> con la imagen del hero. */}
-                    <Image
-                      src={expert.image}
-                      alt={expert.name}
-                      width={320}
-                      height={320}
-                      sizes="(min-width: 1024px) 160px, (min-width: 768px) 144px, 112px"
-                      quality={85}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <h3 className="font-display font-bold text-title-dark text-base md:text-lg">
-                    {expert.name}
-                  </h3>
-                  <p className="text-button-green text-sm mt-1">{expert.role}</p>
-                </button>
-              </div>
-            ))}
+      <section className="hm-suelo--arena ab-expertos" aria-labelledby="ab-expertos-t">
+        <div className="hm-wrap ab-expertos__rejilla">
+          {/* El encabezado es la primera celda de la rejilla (ocupa dos
+              columnas): así las filas de 10 expertos salen completas en 2, 3,
+              4 y 5 columnas. */}
+          <div className="ab-expertos__cabeza">
+            <p className="hm-eyebrow">Especialistas</p>
+            <h2 id="ab-expertos-t" className="hm-h2">
+              Conoce a los <em>expertos</em>
+            </h2>
+            <p className="ab-expertos__lead">
+              Profesionales dedicados a encontrar el talento que tu empresa
+              necesita.
+            </p>
           </div>
+
+          {experts.map((expert) => (
+            // El revelado (hm-rv, ligado al scroll) vive en el envoltorio: si
+            // estuviera en el propio botón, su transform anularía el hover.
+            <div key={expert.name} className="hm-rv">
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                // Guarda la tarjeta de origen para devolverle el foco al cerrar.
+                onClick={(evento) => { tarjetaOrigenRef.current = evento.currentTarget; setSelectedExpert(expert); }}
+                className="ab-experto"
+              >
+                <span className="ab-experto__ventana">
+                  {/* Muy por debajo del pliegue: en diferido, para no competir
+                      con la imagen de la portada. El nombre ya va en texto:
+                      la foto es decorativa aquí. */}
+                  <Image
+                    src={expert.image}
+                    alt=""
+                    width={400}
+                    height={500}
+                    sizes="(min-width: 1320px) 250px, (min-width: 960px) 22vw, (min-width: 700px) 30vw, 46vw"
+                    quality={85}
+                    loading="lazy"
+                  />
+                </span>
+                <span className="ab-experto__nombre">{expert.name}</span>
+                <span className="ab-experto__rol">{expert.role}</span>
+                <span className="ab-experto__ver" aria-hidden="true">
+                  Ver perfil
+                  <ArrowUpRight />
+                </span>
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Expert detail modal */}
-      {selectedExpert && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={cerrarModal}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="experto-nombre"
-            className="bg-white rounded-2xl p-6 md:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <button
-              ref={botonCerrarRef}
-              onClick={cerrarModal}
-              className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 transition-colors"
-              aria-label="Cerrar"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-
-            {/* Expert info */}
-            <div className="flex flex-col items-center text-center">
-              <div className="w-32 h-32 rounded-full overflow-hidden bg-custom-beige mb-4">
-                <Image
-                  src={selectedExpert.image}
-                  alt={selectedExpert.name}
-                  width={128}
-                  height={128}
-                  quality={90}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <h3
-                id="experto-nombre"
-                className="font-display text-xl font-bold text-title-dark"
-              >
-                {selectedExpert.name}
-              </h3>
-              <p className="text-button-green text-sm mt-1 mb-4">
-                {selectedExpert.role}
-              </p>
-              <p className="text-text-black/70 leading-relaxed mb-6">
-                {selectedExpert.bio || 'Descripción próximamente.'}
-              </p>
-
-              {/* Video button */}
+      {/* Ficha del experto: Modal del sistema (Capa al final de <body>). */}
+      <Modal
+        abierto={selectedExpert !== null}
+        alCerrar={cerrarModal}
+        titulo={selectedExpert?.name ?? ''}
+        subtitulo={selectedExpert?.role}
+        tamano="lg"
+        pie={
+          selectedExpert && (
+            <>
+              {/* Video: enlace externo si existe; si no, aviso en texto (un
+                  botón deshabilitado no se puede enfocar ni explica nada). */}
               {selectedExpert.videoUrl ? (
                 <a
                   href={selectedExpert.videoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                  className={clasesBoton({ variante: 'secundario' })}
                 >
-                  <Play className="w-4 h-4" />
+                  <Play aria-hidden="true" />
                   Ver video
+                  <span className="sr-only"> (se abre en otra pestaña)</span>
                 </a>
               ) : (
-                <button
-                  disabled
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed"
-                >
-                  <Play className="w-4 h-4" />
+                <p className="inline-flex items-center gap-2 text-sm text-ink-muted">
+                  <Play className="h-4 w-4" aria-hidden="true" />
                   Video próximamente
-                </button>
+                </p>
               )}
+            </>
+          )
+        }
+      >
+        {selectedExpert && (
+          <div className="ab-ficha">
+            <div className="ab-ficha__foto">
+              <Image
+                src={selectedExpert.image}
+                alt={`Fotografía de ${selectedExpert.name}`}
+                width={288}
+                height={360}
+                sizes="144px"
+                quality={90}
+              />
             </div>
+            <p className={selectedExpert.bio ? 'ab-ficha__bio' : 'ab-ficha__bio ab-ficha__bio--vacia'}>
+              {selectedExpert.bio || 'Descripción próximamente.'}
+            </p>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </>
   );
 };

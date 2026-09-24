@@ -1,0 +1,1018 @@
+/* RUTA: src/app/companies/companies.css
+   /companies — «Arco» para empresas. Prefijo emp-.
+
+   La página que convierte. Extiende el concepto de la portada (un punto = la
+   persona, un arco = el puente) con cinco composiciones propias:
+
+   | Sección     | Suelo   | Gesto                                                   |
+   |-------------|---------|---------------------------------------------------------|
+   | Portada     | arena   | titular en escalera + ventana en medio punto (el puente) |
+   | Garantías   | naranja | tres promesas a toda escala, el punto numera cada una    |
+   | Razones     | teal    | seis arcos que pasan de lado en una escena fijada        |
+   | Proceso     | papel   | el punto cruza el arco y enciende cada paso              |
+   | Registro    | tinta   | formulario por pasos; los arcos crecen desde el pie      |
+
+   Reglas (las de site.css y home.css):
+   - Sólo se animan transform, opacity y clip-path.
+   - Lo ligado al scroll vive dentro de @supports (animation-timeline: view()) y
+     prefers-reduced-motion: no-preference. Sin soporte, sin JS o con movimiento
+     reducido, el estado natural es el FINAL: todo se lee.
+   - Las entradas al cargar cuelgan de .hm--js (SiteMotion la pone sólo con la
+     pestaña visible: en una pestaña de fondo un `both` dejaría el contenido
+     congelado en su fotograma inicial).
+   - Esta hoja se carga DESPUÉS de site.css, pero para no depender del orden los
+     ajustes a una primitiva hm- van con un selector de dos clases.
+
+   Contrastes medidos (WCAG 2.x): tinta/arena 9.91 · tinta/naranja 4.87 ·
+   tinta/papel 11.35 · tinta/lima 5.67 · blanco/teal 7.38 · blanco/tinta 12.38 ·
+   lima/tinta 5.67 · naranja/tinta 4.87 · blanco 75 %/tinta 7.73 ·
+   tinta 85 %/papel 7.23 · blanco 84 %/teal 5.77. */
+
+/* globals.css declara `section { overflow: hidden }`: convierte cada <section>
+   en contenedor de scroll y mata el `position: sticky` de dentro. Las dos
+   secciones que fijan algo (la escena de razones y la columna del registro) lo
+   devuelven; las que sólo recortan usan `overflow: clip`, que recorta sin crear
+   contenedor de scroll. */
+.emp-razones,
+.emp-registro {
+  overflow: visible;
+}
+
+/* Paralaje del puntero: .hm-plane (site.css); SiteMotion escribe --mx/--my en [data-hm-hero]. */
+
+/* =====================================================================
+   1. PORTADA — titular en escalera y la ventana en medio punto
+   ===================================================================== */
+.emp-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  view-timeline-name: --emp-hero;
+  min-height: calc(100svh - var(--nav));
+  display: flex;
+  align-items: center;
+  padding-block: clamp(2.25rem, 6svh, 5rem) clamp(3rem, 8svh, 6rem);
+}
+.emp-hero__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --f: -8;
+}
+.emp-hero__inner {
+  position: relative;
+}
+/* «Encuentra al talento» mide ≈ 8.4 em en Outfit 800: a 10 vw cabe en el
+   ancho útil en todos los anchos (1440 → 140 px, 1176 de 1338; 1024 → 98 px;
+   390 → 36.8 px, 309 de 350). 2.3rem abajo para que a 360 no se parta. */
+.emp-hero .emp-hero__titulo {
+  margin-top: clamp(1rem, 2.6svh, 1.75rem);
+  font-size: clamp(2.3rem, calc(10vw - 4px), 9.25rem);
+}
+/* La escalera: cada renglón baja un peldaño, como quien cruza el puente. */
+.emp-hero__r2 {
+  margin-left: 0.85em;
+}
+.emp-hero__r3 {
+  margin-left: 1.9em;
+}
+.emp-hero__r3 em {
+  font-size: 1.1em;
+  letter-spacing: -0.03em;
+}
+
+/* Alineado ARRIBA: así la entradilla y los botones quedan en el primer pliegue
+   a 1440×900 aunque la ventana baje un poco más. */
+.emp-hero__pie {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: clamp(2rem, 5vw, 5.5rem);
+  align-items: start;
+  margin-top: clamp(1.75rem, 5svh, 3.5rem);
+}
+.emp-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: clamp(1.4rem, 3.6svh, 2.25rem);
+}
+
+.emp-hero__marco {
+  position: relative;
+  margin: 0;
+  --f: 14;
+}
+/* El suelo sobre el que se apoya el puente. */
+.emp-hero__marco::after {
+  content: '';
+  position: absolute;
+  left: -5%;
+  right: -5%;
+  bottom: 0;
+  height: 2px;
+  background: var(--ink);
+}
+.emp-hero__ventana {
+  position: relative;
+  aspect-ratio: 2 / 1;
+  border-radius: 999px 999px 0 0;
+  overflow: hidden;
+  background: var(--teal);
+  box-shadow: 0 40px 80px -44px rgb(40 55 57 / 0.6);
+}
+/* La foto (4188×1635, con esquinas redondeadas y verdes quemadas en el
+   archivo) cubre el medio punto sin ampliarse: el recorte 2:1 deja fuera las
+   cuatro esquinas y centra a las dos personas. */
+.emp-hero__ventana img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 56% 50%;
+}
+.emp-hero__punto {
+  width: 15%;
+  left: -6%;
+  bottom: 14%;
+  background: var(--orange);
+}
+.emp-hero__punto2 {
+  width: 6%;
+  right: 7%;
+  top: -4%;
+  background: var(--lime);
+}
+.emp-hero__sello {
+  position: absolute;
+  right: 4%;
+  bottom: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--disp);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.emp-hero__sello::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--lime);
+}
+
+/* Entradas al cargar (cuelgan de .hm--js). */
+.hm--js .emp-hero__ventana {
+  animation: emp-descubre 1.4s var(--ease) 0.35s both;
+}
+.hm--js .emp-hero__ventana img {
+  animation: emp-asienta 2s var(--ease) 0.35s both;
+}
+.hm--js .emp-hero__punto {
+  animation: hm-pop 0.9s var(--ease) 1.05s both;
+}
+.hm--js .emp-hero__punto2 {
+  animation: hm-pop 0.9s var(--ease) 1.2s both;
+}
+@keyframes emp-descubre {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes emp-asienta {
+  from {
+    transform: scale(1.2);
+  }
+}
+
+@media (max-width: 899px) {
+  .emp-hero {
+    align-items: flex-start;
+  }
+  .emp-hero__pie {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .emp-hero__r2 {
+    margin-left: 0.5em;
+  }
+  .emp-hero__r3 {
+    margin-left: 1em;
+  }
+  .emp-hero__marco {
+    width: min(100%, 34rem);
+    margin-left: auto;
+  }
+}
+
+/* =====================================================================
+   2. GARANTÍAS — tres promesas a toda escala sobre naranja
+   ===================================================================== */
+.emp-garantias {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+.emp-garantias__arco {
+  position: absolute;
+  z-index: -1;
+  right: -22vw;
+  top: -30%;
+  width: min(70vw, 1000px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid rgb(40 55 57 / 0.2);
+  pointer-events: none;
+}
+.emp-garantias__lista {
+  margin: clamp(2rem, 5vw, 3.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 2px solid var(--ink);
+}
+.emp-garantia {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 2.75rem);
+  align-items: center;
+  padding-block: clamp(1.25rem, 3vw, 2.6rem);
+  border-bottom: 1px solid var(--ink);
+}
+/* El punto (la persona) numera cada promesa: naranja sobre tinta, 4.87:1. */
+.emp-garantia__n {
+  display: grid;
+  place-items: center;
+  width: clamp(2.75rem, 5.6vw, 5.25rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--orange);
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(0.95rem, 0.7rem + 0.9vw, 1.5rem);
+  letter-spacing: -0.02em;
+}
+.emp-garantia__t {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.85rem, 0.8rem + 4.5vw, 5.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+.emp-garantia__t em {
+  letter-spacing: -0.02em;
+}
+
+/* =====================================================================
+   3. RAZONES — seis arcos. Base: rejilla. Con soporte, en escritorio y con
+   movimiento permitido: escena fijada que pasa de lado.
+   ===================================================================== */
+.emp-razones {
+  position: relative;
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+.emp-razones__cabeza {
+  display: grid;
+  gap: 1.2rem;
+  max-width: 62rem;
+}
+.emp-razones__pista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: clamp(1rem, 2vw, 1.5rem);
+  max-width: 1480px;
+  margin: clamp(2.5rem, 6vw, 4.5rem) auto 0;
+  padding: 0 var(--gut);
+  list-style: none;
+}
+/* Cada razón es una ventana en arco. `container-type` para que el arco mida
+   medio ancho de SU tarjeta (50cqw) en la rejilla y en la pista. */
+.emp-razon {
+  position: relative;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 clamp(1.25rem, 2vw, 1.75rem) clamp(1.6rem, 2.6vw, 2.1rem);
+  border-radius: 999px 999px 1.5rem 1.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  /* El hover usa `translate` (no `transform`): el revelado hm-rv anima
+     `transform` y así no se pisan. */
+  transition: translate 0.45s var(--ease);
+}
+.emp-razon:nth-child(3n + 2) {
+  background: var(--lime);
+}
+.emp-razon:nth-child(3n + 3) {
+  background: var(--sand);
+}
+.emp-razon__arco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  height: 50cqw;
+  min-height: 7.5rem;
+}
+.emp-razon__n {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.emp-razon__icono {
+  display: grid;
+  place-items: center;
+  width: 3.75rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--lime);
+  transition: background-color 0.3s ease, color 0.3s ease, transform 0.45s var(--ease);
+}
+.emp-razon__icono svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+.emp-razon__t {
+  margin-top: 1.25rem;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.2rem, 1rem + 0.7vw, 1.55rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.emp-razon__d {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+@media (hover: hover) {
+  .emp-razon:hover {
+    translate: 0 -6px;
+  }
+  .emp-razon:hover .emp-razon__icono {
+    background: var(--orange);
+    color: var(--ink);
+    transform: scale(1.06);
+  }
+}
+/* El puente de avance sólo existe en la escena fijada. */
+.emp-razones__puente {
+  display: none;
+}
+.emp-razones__desliza {
+  display: none;
+}
+/* Móvil y tableta: seis arcos apilados serían 2 400 px de scroll; pasan a un
+   carrusel con deslizamiento nativo (scroll-snap). El contenedor desplazable
+   recibe el foco con teclado en los navegadores actuales, y el orden de
+   lectura es el mismo. Nada ligado al scroll: vale con movimiento reducido. */
+@media (max-width: 899px) {
+  .emp-razones__pista {
+    display: flex;
+    gap: 1rem;
+    margin-top: clamp(2rem, 6vw, 3rem);
+    padding: 0 var(--gut) 1.25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--gut);
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.45) transparent;
+  }
+  .emp-razon {
+    flex: 0 0 min(78vw, 20rem);
+    scroll-snap-align: start;
+  }
+  /* Dentro de un contenedor que se desplaza de lado, el revelado vertical no
+     tiene sentido. */
+  .emp-razones__pista .emp-razon.hm-rv {
+    animation: none;
+  }
+  .emp-razones__desliza {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-inline: var(--gut);
+    font-family: var(--disp);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgb(255 255 255 / 0.84);
+  }
+  .emp-razones__desliza svg {
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+/* =====================================================================
+   4. PROCESO — el punto cruza el arco y enciende cada paso
+   Un arco REBAJADO: el círculo del isotipo con el centro hundido bajo el
+   tablero. La geometría (--hundido, --cuerda, --lista, --pie) y la posición
+   de cada marca (--x, --y en radios) las pone CompanyProcessSection; aquí
+   sólo se escala con --R. Presupuesto a 1440×900: cabecera + arco + pasos
+   ≈ 800 px de 856 visibles; a 1024×768, ≈ 695 de 704.
+   ===================================================================== */
+.emp-proceso {
+  position: relative;
+  overflow: clip;
+  padding-block: clamp(4rem, 8vw, 7rem) clamp(4.5rem, 9vw, 8rem);
+}
+.emp-proceso__cabeza {
+  display: grid;
+  justify-items: center;
+  gap: 1.2rem;
+  max-width: 60rem;
+  margin-inline: auto;
+  text-align: center;
+}
+.emp-proceso__cabeza .hm-h2 em {
+  color: var(--teal);
+}
+/* --R: radio del círculo. La cuerda (≈ 1.73 R) cabe siempre en el ancho útil
+   (÷ 1.8 deja sitio a la barra de desplazamiento, que 100vw incluye). */
+.emp-proceso__escena {
+  --R: min(calc((100vw - 2 * var(--gut)) / 1.8), 26rem);
+  margin-top: clamp(2.5rem, 4.5vw, 4rem);
+  view-timeline-name: --emp-proc;
+}
+/* Escritorio: además, el alto manda. Con 64svh de radio el arco mide ≤ 32svh
+   y los pasos entran en la misma pantalla; con 26rem de suelo las columnas no
+   bajan de ~177 px en pantallas muy bajas. */
+@media (min-width: 900px) {
+  .emp-proceso__escena {
+    --R: min(calc((100vw - 2 * var(--gut)) / 1.8), max(26rem, min(37rem, 64svh)));
+  }
+}
+/* La caja del arco: tan ancha como la cuerda y tan alta como la flecha. */
+.emp-arco {
+  position: relative;
+  width: calc(var(--R) * var(--cuerda));
+  height: calc(var(--R) * (1 - var(--hundido)));
+  margin-inline: auto;
+}
+/* Recorta los anillos a ras del tablero (por arriba y a los lados deja 3 px
+   de holgura para no morder el trazo). */
+.emp-arco__vano {
+  position: absolute;
+  inset: -3px -3px 0;
+  overflow: hidden;
+}
+/* Círculos completos, concéntricos, con el centro hundido bajo el tablero.
+   top: 3px compensa la holgura del vano: el trazo exterior roza la cima. */
+.emp-arco__anillo {
+  --r: var(--R);
+  position: absolute;
+  left: 50%;
+  top: calc(3px + var(--R) - var(--r));
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  margin-left: calc(var(--r) * -1);
+  border: 2px solid rgb(40 55 57 / 0.3);
+  border-radius: 50%;
+}
+.emp-arco__anillo--in {
+  --r: calc(var(--R) * 0.84);
+  border-color: rgb(159 187 47 / 0.75);
+}
+.emp-arco__suelo {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  bottom: 0;
+  height: 2px;
+  background: var(--ink);
+}
+/* Puente colgante: de cada marca baja un tirante hasta el tablero, justo sobre
+   la columna de su paso. */
+.emp-arco__tirante {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% + var(--R) * var(--x) - 1px);
+  width: 2px;
+  height: calc(var(--R) * var(--y));
+  background: rgb(40 55 57 / 0.3);
+  /* baja desde la marca */
+  transform-origin: 50% 0;
+}
+/* Cada marca, sobre la circunferencia (--x, --y en radios). */
+.emp-arco__marca {
+  --m: clamp(2.1rem, 3.4vw, 3rem);
+  position: absolute;
+  z-index: 2;
+  left: calc(50% + var(--R) * var(--x) - var(--m) / 2);
+  bottom: calc(var(--R) * var(--y) - var(--m) / 2);
+  display: grid;
+  place-items: center;
+  width: var(--m);
+  height: var(--m);
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: calc(var(--m) * 0.42);
+}
+/* Paso ya cruzado: teal con el número en blanco (7.38:1). */
+.emp-arco__marca::after {
+  content: attr(data-n);
+  position: absolute;
+  inset: -2px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+}
+/* La persona: el punto naranja, en la punta de un brazo que gira desde el
+   centro hundido del círculo. En reposo, al pie derecho: ya cruzó. */
+.emp-arco__corredor {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(var(--R) * var(--hundido) * -1);
+  width: 0;
+  height: var(--R);
+  transform-origin: 50% 100%;
+  transform: rotate(var(--pie));
+}
+.emp-arco__corredor::before {
+  --d: clamp(1.5rem, 2.8vw, 2.4rem);
+  content: '';
+  position: absolute;
+  left: calc(var(--d) / -2);
+  top: calc(var(--d) / -2);
+  width: var(--d);
+  height: var(--d);
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 8px rgb(244 134 2 / 0.22);
+}
+
+.emp-pasos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.75rem, 3vw, 2.5rem) clamp(1.25rem, 3vw, 2.5rem);
+  max-width: 56rem;
+  margin: clamp(2.5rem, 5vw, 3.5rem) auto 0;
+  padding: 0;
+  list-style: none;
+}
+.emp-paso__n {
+  display: block;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--teal);
+}
+.emp-paso__t {
+  margin-top: 0.6rem;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(1.2rem, 1rem + 0.6vw, 1.5rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.emp-paso__d {
+  margin-top: 0.55rem;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: rgb(40 55 57 / 0.85);
+}
+@media (max-width: 599px) {
+  .emp-pasos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Escritorio: los cuatro pasos van bajo el tablero, cada uno debajo de su
+   marca y su tirante. La lista mide --lista radios y las marcas caen sobre el
+   centro de cada cuarto; sin hueco entre columnas (el aire va por dentro de
+   cada paso) para que ese centro sea exacto. */
+@media (min-width: 900px) {
+  .emp-pasos {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 0;
+    width: calc(var(--R) * var(--lista));
+    max-width: none;
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+    text-align: center;
+  }
+  .emp-paso {
+    padding-inline: clamp(0.6rem, 1.4vw, 1.25rem);
+  }
+}
+
+/* =====================================================================
+   5. REGISTRO — columna fija + formulario por pasos
+   ===================================================================== */
+.emp-registro {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(5rem, 11vw, 10rem);
+}
+.emp-registro__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: clip;
+  pointer-events: none;
+}
+.emp-registro__arco {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  aspect-ratio: 2 / 1;
+  width: min(160vw, 2400px);
+  margin-left: calc(min(160vw, 2400px) / -2);
+  border: 2px solid rgb(159 187 47 / 0.35);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  /* crecen desde el suelo, no desde su centro */
+  transform-origin: 50% 100%;
+}
+.emp-registro__arco--b {
+  width: min(100vw, 1500px);
+  margin-left: calc(min(100vw, 1500px) / -2);
+  border-color: rgb(244 134 2 / 0.45);
+}
+.emp-registro__rejilla {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(2.5rem, 5vw, 5.5rem);
+  align-items: start;
+}
+.emp-registro__lado :focus-visible {
+  /* Sobre tinta el teal del foco no se ve (2.3:1): lima, 5.67:1. */
+  outline-color: var(--lime);
+}
+.emp-registro__voz {
+  margin-top: clamp(1.5rem, 3vw, 2.25rem);
+  max-width: 22ch;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.5rem, 1.1rem + 1.3vw, 2.35rem);
+  line-height: 1.15;
+  color: var(--lime);
+}
+.emp-registro__mano {
+  margin-top: clamp(2rem, 4vw, 2.75rem);
+  padding-top: 1.5rem;
+  border-top: 1px solid rgb(255 255 255 / 0.2);
+}
+.emp-registro__mano h3 {
+  font-family: var(--disp);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.75);
+}
+.emp-registro__mano ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.emp-registro__mano li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+.emp-registro__mano li::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--lime);
+  flex: none;
+}
+.emp-registro__mano small {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.875rem;
+  color: rgb(255 255 255 / 0.75);
+}
+.emp-registro__contacto {
+  margin-top: 1.75rem;
+  font-size: 0.95rem;
+  color: rgb(255 255 255 / 0.75);
+}
+.emp-registro__contacto a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 0.35);
+  text-underline-offset: 0.3em;
+}
+.emp-registro__contacto a:hover {
+  color: var(--lime);
+  text-decoration-color: currentColor;
+}
+.emp-registro__contacto svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* La tarjeta del formulario: blanca, porque los pares de los campos (borde
+   line-strong 3.83, placeholder ink-muted 5.85, error 6.57) se midieron sobre
+   blanco. La legibilidad no se negocia en el registro público. */
+.emp-form {
+  position: relative;
+  background: #fff;
+  color: var(--ink);
+  border-radius: clamp(1.25rem, 2.5vw, 2rem);
+  padding: clamp(1.25rem, 3.2vw, 2.75rem);
+  box-shadow: 0 50px 100px -50px rgb(0 0 0 / 0.65);
+  scroll-margin-top: calc(var(--nav) + 1rem);
+}
+/* Cada paso aparece con una micro-transición (no ligada al scroll). Pasa al
+   quitarse `hidden` (display: none → block reinicia la animación). Cuelga de
+   .hm--js por la trampa de la pestaña de fondo. */
+@media (prefers-reduced-motion: no-preference) {
+  .hm--js .emp-panel {
+    animation: emp-panel 0.45s var(--ease) backwards;
+  }
+}
+@keyframes emp-panel {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .emp-registro__rejilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* La columna sólo se fija si cabe entera en pantalla. */
+@media (min-width: 1024px) and (min-height: 820px) {
+  .emp-registro__lado {
+    position: sticky;
+    top: calc(var(--nav) + 2rem);
+  }
+}
+
+/* =====================================================================
+   MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* portada: al salir, los planos se separan a velocidades distintas */
+    .emp-hero__arcos {
+      animation: emp-hero-arcos linear both;
+      animation-timeline: --emp-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .emp-hero__r1 {
+      animation: emp-hero-r1 linear both;
+      animation-timeline: --emp-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .emp-hero__r3 {
+      animation: emp-hero-r3 linear both;
+      animation-timeline: --emp-hero;
+      animation-range: exit 0% exit 100%;
+    }
+    .emp-hero__marco {
+      animation: emp-hero-marco linear both;
+      animation-timeline: --emp-hero;
+      animation-range: exit 0% exit 100%;
+    }
+
+    /* garantías: el punto de cada promesa aparece al llegar */
+    .emp-garantia__n {
+      animation: emp-pop linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 30%;
+    }
+    .emp-garantias__arco {
+      animation: emp-gira linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+
+    /* proceso: la persona cruza el puente (de pie a pie, −pie → +pie); cada
+       marca se llena al pasar, su tirante baja y su paso se enciende. Un mismo
+       tramo (cover 30 % → 58 %) para todo; --f es la fracción del arco donde
+       está cada marca. Con la escena rebajada (≈ 500 px a 1440), el cruce
+       termina con arco y pasos enteros en pantalla. */
+    .emp-arco__corredor {
+      animation: emp-corre linear both;
+      animation-timeline: --emp-proc;
+      animation-range: cover 30% cover 58%;
+    }
+    .emp-arco__marca::after {
+      animation: emp-marca linear both;
+      animation-timeline: --emp-proc;
+      animation-range: cover calc(30% + var(--f) * 28%) cover calc(31.5% + var(--f) * 28%);
+    }
+    .emp-arco__tirante {
+      animation: emp-tirante linear both;
+      animation-timeline: --emp-proc;
+      animation-range: cover calc(30% + var(--f) * 28%) cover calc(33% + var(--f) * 28%);
+    }
+    .emp-paso {
+      animation: emp-paso linear both;
+      animation-timeline: --emp-proc;
+      animation-range: cover calc(29% + var(--f) * 28%) cover calc(33% + var(--f) * 28%);
+    }
+
+    /* registro: los arcos crecen desde el pie al llegar a él (cada arco con
+       su propia línea de tiempo: la sección es muy alta y un tramo de la
+       sección entera los terminaría antes de verlos) */
+    .emp-registro__arco {
+      animation: emp-arco-crece linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 40%;
+    }
+  }
+
+  /* razones: la escena se fija y la pista pasa de lado. Sólo si cabe (ancho y
+     alto) y con movimiento permitido; si no, queda la rejilla. */
+  @media (prefers-reduced-motion: no-preference) and (min-width: 900px) and (min-height: 680px) {
+    .emp-razones {
+      --w: clamp(16rem, min(25vw, 42svh), 23rem);
+      /* Recorrido = ancho de la pista (n tarjetas + huecos + medianiles) menos
+         la pantalla, ×1.3 para leer sin prisa; nunca negativo (en pantallas
+         donde caben las seis, la escena no se mueve). */
+      height: calc(
+        100svh + max(0px, (var(--n, 6) * var(--w) + (var(--n, 6) - 1) * 1.5rem + 2 * var(--gut) - 100vw) * 1.3)
+      );
+      padding-block: 0;
+      view-timeline-name: --emp-razones;
+    }
+    .emp-razones__escena {
+      position: sticky;
+      top: var(--nav);
+      height: calc(100svh - var(--nav));
+      overflow: clip;
+      container-type: inline-size;
+      display: grid;
+      /* minmax(0, 1fr): sin esto la pista (max-content) ensancharía la columna
+         y la cabecera se iría a la derecha. La pista desborda su celda y la
+         escena la recorta. */
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      padding-block: clamp(1.75rem, 5svh, 3.5rem) clamp(1.25rem, 3.5svh, 2.5rem);
+    }
+    .emp-razones__pista {
+      display: flex;
+      align-items: center;
+      width: max-content;
+      max-width: none;
+      margin: 0;
+      gap: 1.5rem;
+      animation: emp-pista linear both;
+      animation-timeline: --emp-razones;
+      animation-range: contain 0% contain 100%;
+    }
+    .emp-razon {
+      flex: none;
+      width: var(--w);
+    }
+    .emp-razones__puente {
+      display: block;
+      position: relative;
+      height: 2px;
+      margin-inline: var(--gut);
+      background: rgb(255 255 255 / 0.22);
+      overflow-x: clip;
+    }
+    .emp-razones__avance {
+      position: absolute;
+      inset: 0;
+      background: var(--lime);
+      animation: emp-avance linear both;
+      animation-timeline: --emp-razones;
+      animation-range: contain 0% contain 100%;
+    }
+    .emp-razones__avance::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin-top: -7px;
+      border-radius: 50%;
+      background: var(--orange);
+    }
+  }
+}
+
+@keyframes emp-hero-arcos {
+  to {
+    transform: translateY(16%) scale(1.06);
+  }
+}
+@keyframes emp-hero-r1 {
+  to {
+    transform: translateX(-7%);
+    opacity: 0.3;
+  }
+}
+@keyframes emp-hero-r3 {
+  to {
+    transform: translateX(9%);
+  }
+}
+@keyframes emp-hero-marco {
+  to {
+    transform: translateY(-12%) scale(1.05);
+  }
+}
+@keyframes emp-pop {
+  from {
+    transform: scale(0);
+  }
+}
+@keyframes emp-gira {
+  from {
+    transform: translateY(16%) scale(0.85);
+  }
+  to {
+    transform: translateY(-16%) scale(1.05);
+  }
+}
+@keyframes emp-pista {
+  to {
+    transform: translateX(min(0px, calc(-100% + 100cqw)));
+  }
+}
+@keyframes emp-avance {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes emp-corre {
+  from {
+    transform: rotate(calc(var(--pie) * -1));
+  }
+  to {
+    transform: rotate(var(--pie));
+  }
+}
+@keyframes emp-marca {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+@keyframes emp-tirante {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes emp-paso {
+  from {
+    opacity: 0.3;
+    transform: translateY(14px);
+  }
+}
+@keyframes emp-arco-crece {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+
+/* Movimiento reducido: las entradas se apagan EXPLÍCITAMENTE (la regla global
+   de globals.css sólo acorta duraciones) para que el estado sea el final. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .emp-hero__ventana,
+  .hm--js .emp-hero__ventana img,
+  .hm--js .emp-hero__punto,
+  .hm--js .emp-hero__punto2,
+  .hm--js .emp-panel {
+    animation: none !important;
+  }
+  .emp-razon,
+  .emp-razon__icono {
+    transition: none;
+  }
+}
