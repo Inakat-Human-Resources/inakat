@@ -1,7 +1,42 @@
+// RUTA: src/components/company/CompanyJobsTable.tsx
 'use client';
 
+/**
+ * «Mis vacantes» del panel de empresa: pestañas por estado + DataTable.
+ *
+ * La lógica es la de siempre (qué vacante cae en qué pestaña, cuándo se puede
+ * editar, qué acción aparece con cada estado); cambió la presentación:
+ * - pestañas del sistema (Tabs, con flechas) en vez de botones sueltos;
+ * - tabla con orden y paginación en el cliente, que en móvil pasa a tarjetas;
+ * - la acción del estado (Publicar, Reanudar) a la vista, «Ver» como icono y
+ *   el resto (Editar, Pausar, cerrar) en el menú «⋯» de la fila.
+ */
+
 import { useState } from 'react';
-import { Edit2, Eye, XCircle, Pause, Play, Users, Clock, AlertTriangle, Send, CheckCircle, Ban } from 'lucide-react';
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  Clock,
+  Eye,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Send,
+  Users,
+} from 'lucide-react';
+import Card from '@/components/ui/Card';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import DataTable, { type Columna, type OrdenTabla } from '@/components/ui/DataTable';
+import StatusBadge, { Badge } from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import EmptyState from '@/components/ui/EmptyState';
+import { paginacionLocal } from '@/components/ui/Pagination';
+import MenuAcciones, { type OpcionMenu } from '@/components/ui/MenuAcciones';
+import { fechaCorta } from '@/lib/fechas';
+import { etiquetaTipoTrabajo } from '@/lib/tipos-trabajo';
 
 interface Job {
   id: number;
@@ -30,9 +65,44 @@ interface CompanyJobsTableProps {
   onResume?: (jobId: number) => void;
   onViewCandidates?: (jobId: number, jobTitle: string) => void;
   onPublish?: (jobId: number) => void;
+  /** Candidatos por revisar de cada vacante (jobId → cuántos), de jobStats del panel. */
+  porRevisar?: Record<number, number>;
+  /** Acción del estado vacío: publicar una vacante. */
+  onCreate?: () => void;
 }
 
 type JobTab = 'active' | 'paused' | 'expired' | 'draft' | 'closed';
+
+/** Filas por página. */
+const POR_PAGINA = 20;
+
+const MODALIDAD: Record<string, string> = { remote: 'Remoto', hybrid: 'Híbrido' };
+const modalidad = (workMode: string) => MODALIDAD[workMode] ?? 'Presencial';
+
+// Estado vacío de cada pestaña. OJO: ningún texto repite «Activas» (la prueba
+// e2e del panel busca ese texto y debe encontrar sólo la pestaña).
+const VACIOS: Record<JobTab, { titulo: string; descripcion: string }> = {
+  active: {
+    titulo: 'No tienes vacantes publicadas',
+    descripcion: 'Cuando publiques una vacante, aparecerá aquí con sus candidatos.',
+  },
+  paused: {
+    titulo: 'No tienes vacantes en pausa',
+    descripcion: 'Una vacante en pausa deja de recibir candidatos hasta que la reanudes.',
+  },
+  expired: {
+    titulo: 'No tienes vacantes expiradas',
+    descripcion: 'Las vacantes que pasen su fecha de expiración aparecerán aquí.',
+  },
+  draft: {
+    titulo: 'No tienes borradores',
+    descripcion: 'Los borradores se guardan sin gastar créditos; los publicas cuando quieras.',
+  },
+  closed: {
+    titulo: 'Aún no has cerrado ninguna vacante',
+    descripcion: 'Aquí quedan las vacantes cerradas por contratación o canceladas.',
+  },
+};
 
 export default function CompanyJobsTable({
   jobs,
@@ -42,9 +112,14 @@ export default function CompanyJobsTable({
   onPause,
   onResume,
   onViewCandidates,
-  onPublish
+  onPublish,
+  porRevisar,
+  onCreate,
 }: CompanyJobsTableProps) {
   const [activeTab, setActiveTab] = useState<JobTab>('active');
+  // Presentación: orden y página de la tabla (la API ya las manda por fecha, desc).
+  const [orden, setOrden] = useState<OrdenTabla>({ columna: 'createdAt', direccion: 'desc' });
+  const [pagina, setPagina] = useState(1);
 
   // Determinar si un job está expirado
   const isExpired = (job: Job) => {
@@ -92,262 +167,299 @@ export default function CompanyJobsTable({
 
   const filteredJobs = categorizedJobs[activeTab];
 
-  const tabs: { key: JobTab; label: string; count: number; color: string }[] = [
-    { key: 'active', label: 'Activas', count: categorizedJobs.active.length, color: 'green' },
-    { key: 'paused', label: 'En pausa', count: categorizedJobs.paused.length, color: 'yellow' },
-    // { key: 'expired', label: 'Expiradas', count: categorizedJobs.expired.length, color: 'orange' }, // TODO: Habilitar cuando se implemente expiración automática
-    { key: 'draft', label: 'Borradores', count: categorizedJobs.draft.length, color: 'gray' },
-    { key: 'closed', label: 'Cerradas', count: categorizedJobs.closed.length, color: 'red' }
+  const tabs: { key: JobTab; label: string; count: number }[] = [
+    { key: 'active', label: 'Activas', count: categorizedJobs.active.length },
+    { key: 'paused', label: 'En pausa', count: categorizedJobs.paused.length },
+    // { key: 'expired', label: 'Expiradas', count: categorizedJobs.expired.length }, // TODO: Habilitar cuando se implemente expiración automática
+    { key: 'draft', label: 'Borradores', count: categorizedJobs.draft.length },
+    { key: 'closed', label: 'Cerradas', count: categorizedJobs.closed.length }
   ];
-
-  const getStatusBadge = (job: Job) => {
-    if (isExpired(job)) {
-      return (
-        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800 flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3" />
-          Expirada
-        </span>
-      );
-    }
-
-    // Si está cerrada, mostrar el motivo
-    if (job.status === 'closed') {
-      if (job.closedReason === 'success') {
-        return (
-          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" />
-            Contratación exitosa
-          </span>
-        );
-      } else {
-        return (
-          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600 flex items-center gap-1">
-            <Ban className="w-3 h-3" />
-            Cancelada
-          </span>
-        );
-      }
-    }
-
-    const badges: Record<string, { bg: string; text: string; label: string }> = {
-      active: { bg: 'bg-green-100', text: 'text-green-800', label: 'Activa' },
-      paused: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'En pausa' },
-      draft: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Borrador' }
-    };
-
-    const badge = badges[job.status] || badges.draft;
-
-    return (
-      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   const getApplicationCount = (job: Job) => {
     return job.applicationCount ?? job._count?.applications ?? 0;
   };
 
-  return (
-    <div className="bg-white rounded-lg shadow-md border border-gray-200">
-      {/* Header con tabs */}
-      <div className="p-4 md:p-6 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">Mis Vacantes</h2>
-          <span className="text-xs md:text-sm text-gray-500">{jobs.length} total</span>
-        </div>
+  // Fecha corta del panel (src/lib/fechas): «23 sep 2026».
+  const formatDate = (dateString: string) => fechaCorta(dateString);
 
-        {/* Tabs - scrollable en móvil */}
-        <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-          <div className="flex gap-2 min-w-max md:flex-wrap">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3 md:px-4 py-2 text-xs md:text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-1.5 md:gap-2 whitespace-nowrap ${
-                  activeTab === tab.key
-                    ? 'bg-button-orange text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {tab.label}
-                <span className={`px-1.5 md:px-2 py-0.5 text-xs rounded-full ${
-                  activeTab === tab.key
-                    ? 'bg-white/20 text-white'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+  // Estado con color Y texto. Los casos propios de la empresa (expirada,
+  // cerrada por contratación o cancelada) llevan su etiqueta e icono.
+  const getStatusBadge = (job: Job) => {
+    if (isExpired(job)) {
+      return (
+        <Badge tono="aviso" icono={AlertTriangle}>
+          Expirada
+        </Badge>
+      );
+    }
+    if (job.status === 'closed') {
+      return job.closedReason === 'success' ? (
+        <Badge tono="exito" icono={CheckCircle2}>
+          Contratación exitosa
+        </Badge>
+      ) : (
+        <Badge tono="neutro" icono={Ban}>
+          Cancelada
+        </Badge>
+      );
+    }
+    const etiquetas: Record<string, string> = { active: 'Activa', paused: 'En pausa', draft: 'Borrador' };
+    const estado = etiquetas[job.status] ? job.status : 'draft';
+    return <StatusBadge estado={estado} etiqueta={etiquetas[estado]} />;
+  };
 
-      {/* Lista de vacantes en formato cards */}
-      <div className="p-4 space-y-4">
-        {filteredJobs.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-lg font-medium">No hay vacantes en esta categoría</p>
-            <p className="text-sm">Las vacantes que crees aparecerán aquí</p>
+  // ---------------------------------------------------------------------------
+  // Orden y página (presentación)
+  // ---------------------------------------------------------------------------
+  const ordenarPor = (columna: string) => {
+    setOrden((o) =>
+      o.columna === columna
+        ? { columna, direccion: o.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: columna === 'title' ? 'asc' : 'desc' }
+    );
+    setPagina(1);
+  };
+
+  const ordenadas = [...filteredJobs].sort((a, b) => {
+    let comparacion = 0;
+    if (orden.columna === 'title') comparacion = a.title.localeCompare(b.title, 'es');
+    else if (orden.columna === 'candidatos') comparacion = getApplicationCount(a) - getApplicationCount(b);
+    else comparacion = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    return orden.direccion === 'asc' ? comparacion : -comparacion;
+  });
+  const filas = ordenadas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+
+  const cambiarPestana = (id: string) => {
+    setActiveTab(id as JobTab);
+    setPagina(1);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Acciones de cada fila (mismas condiciones que antes)
+  // ---------------------------------------------------------------------------
+  const opcionesDe = (job: Job): OpcionMenu[] => {
+    const opciones: OpcionMenu[] = [];
+    if (onEdit && job.status !== 'closed' && canEdit(job)) {
+      opciones.push({
+        id: 'editar',
+        etiqueta: 'Editar',
+        icono: Pencil,
+        detalle: getEditTimeRemaining(job) ?? undefined,
+        alElegir: () => onEdit(job.id),
+      });
+    }
+    if (onPause && job.status === 'active' && !isExpired(job)) {
+      opciones.push({ id: 'pausar', etiqueta: 'Pausar', icono: Pause, alElegir: () => onPause(job.id) });
+    }
+    if (onClose && (job.status === 'active' || job.status === 'paused')) {
+      opciones.push(
+        {
+          id: 'exitosa',
+          etiqueta: 'Cerrar: contratación exitosa',
+          icono: CheckCircle2,
+          detalle: 'Encontraste a la persona que buscabas',
+          alElegir: () => onClose(job.id, 'success'),
+        },
+        {
+          id: 'cancelar',
+          etiqueta: 'Cancelar vacante',
+          icono: Ban,
+          detalle: 'Se cierra sin haber contratado',
+          peligro: true,
+          alElegir: () => onClose(job.id, 'cancelled'),
+        }
+      );
+    }
+    return opciones;
+  };
+
+  const columnas: Columna<Job>[] = [
+    {
+      id: 'title',
+      encabezado: 'Vacante',
+      ordenable: true,
+      enTarjeta: 'titulo',
+      className: 'min-w-[13rem]',
+      celda: (job) => {
+        const restante = getEditTimeRemaining(job);
+        return (
+          <div className="min-w-0">
+            <p className="font-semibold leading-snug text-ink">{job.title}</p>
+            <p className="mt-0.5 text-[13px] text-ink-muted">
+              {job.location}
+              <span className="mx-1.5" aria-hidden="true">·</span>
+              {modalidad(job.workMode)}
+            </p>
+            {/* La columna «Creada» se esconde en tablas estrechas: el aviso de
+                edición sube aquí mientras tanto. */}
+            {restante && (
+              <p data-solo-bajo="md" className="mt-1 flex items-center gap-1 text-xs font-medium text-orange-dark">
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                {restante}
+              </p>
+            )}
           </div>
-        ) : (
-          filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
+        );
+      },
+    },
+    // Móvil: la tarjeta es la vacante (con su ciudad y modalidad) + UNA línea
+    // «estado · candidatos · fecha» y el salario; los iconos arriba a la
+    // derecha. ~150 px por vacante en vez de ~250 con un par por columna.
+    {
+      id: 'status',
+      encabezado: 'Estado',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (job) => getStatusBadge(job),
+    },
+    {
+      id: 'candidatos',
+      encabezado: 'Candidatos',
+      ordenable: true,
+      enTarjeta: 'meta',
+      // La cifra y «N por revisar» en UNA línea: apiladas, la fila pasaba de
+      // 87 px (/company/dashboard). Con la tabla estrecha se esconden otras
+      // columnas antes (Salario, Creada), así que cabe.
+      unaLinea: true,
+      celda: (job) => {
+        const total = getApplicationCount(job);
+        const nuevos = porRevisar?.[job.id] ?? 0;
+        return (
+          <div className="flex flex-nowrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onViewCandidates?.(job.id, job.title)}
+              className="group inline-flex h-8 items-center gap-1.5 rounded-full bg-teal-tint px-3 font-display text-sm font-semibold tabular-nums text-teal-dark transition-colors duration-150 hover:bg-teal hover:text-white"
+              title="Ver candidatos de esta vacante"
+              aria-label={`Ver candidatos de ${job.title}: ${total}`}
             >
-              {/* Layout responsive: stack en móvil, row en desktop */}
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                {/* Info principal */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <h3 className="text-base md:text-lg font-semibold text-gray-900 break-words">{job.title}</h3>
-                    {getStatusBadge(job)}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 md:gap-4 text-sm text-gray-600">
-                    <span>{job.location}</span>
-                    <span className="hidden md:inline text-gray-300">|</span>
-                    <span>{job.salary}</span>
-                    <span className="hidden md:inline text-gray-300">|</span>
-                    <span className="hidden sm:inline">{job.jobType}</span>
-                    <span className="hidden md:inline text-gray-300">|</span>
-                    <span>{job.workMode === 'remote' ? 'Remoto' : job.workMode === 'hybrid' ? 'Híbrido' : 'Presencial'}</span>
-                  </div>
-                </div>
+              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              {total}
+            </button>
+            {nuevos > 0 && (
+              <Badge tono="aviso" tamano="sm">
+                {nuevos} por revisar
+              </Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'salary',
+      encabezado: 'Salario',
+      ocultarBajo: 'xl',
+      // El rango en un solo renglón: partido, «MXN» caía solo en la línea de
+      // abajo. En la tarjeta de móvil sí puede partir (lo decide DataTable).
+      unaLinea: true,
+      celda: (job) => (
+        <div className="min-w-0">
+          <p className="tabular-nums text-ink">{job.salary}</p>
+          <p className="text-xs text-ink-muted">{etiquetaTipoTrabajo(job.jobType)}</p>
+        </div>
+      ),
+    },
+    {
+      id: 'createdAt',
+      encabezado: 'Creada',
+      ordenable: true,
+      ocultarBajo: 'md',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (job) => {
+        const restante = getEditTimeRemaining(job);
+        return (
+          <div>
+            <p className="tabular-nums text-ink">{formatDate(job.createdAt)}</p>
+            {restante && (
+              <p className="mt-1 flex items-center gap-1 text-xs font-medium text-orange-dark">
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                {restante}
+              </p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      // En la tarjeta: los iconos (Ver, «⋯») arriba a la derecha; con
+      // «Publicar» o «Reanudar» (botones con texto) DataTable los baja al pie.
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (job) => (
+        // Sin flex-wrap: con w-px la columna tomaría el ancho del botón más
+        // ancho y apilaría las acciones.
+        <div className="flex items-center justify-end gap-1">
+          {/* Publicar borrador */}
+          {onPublish && job.status === 'draft' && (
+            <Button variante="secundario" tamano="sm" icono={Send} onClick={() => onPublish(job.id)}>
+              Publicar
+            </Button>
+          )}
+          {onResume && job.status === 'paused' && (
+            <Button variante="contorno" tamano="sm" icono={Play} onClick={() => onResume(job.id)}>
+              Reanudar
+            </Button>
+          )}
+          {onView && (
+            <IconButton etiqueta={`Ver detalle de ${job.title}`} icono={Eye} tamano="sm" onClick={() => onView(job.id)} />
+          )}
+          <MenuAcciones etiqueta={`Más acciones para ${job.title}`} opciones={opcionesDe(job)} />
+        </div>
+      ),
+    },
+  ];
 
-                {/* Métricas - horizontal en móvil, vertical en desktop */}
-                <div className="flex items-center justify-start md:justify-end gap-4 md:gap-6">
-                  {/* Candidatos - Clickeable */}
-                  <button
-                    onClick={() => onViewCandidates?.(job.id, job.title)}
-                    className="text-center group cursor-pointer"
-                    title="Ver candidatos de esta vacante"
-                  >
-                    <div className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-blue-100 text-blue-700 rounded-full font-bold text-base md:text-lg group-hover:bg-blue-200 group-hover:scale-110 transition-all duration-200">
-                      {getApplicationCount(job)}
-                    </div>
-                    <span className="text-xs text-gray-500 mt-1 block group-hover:text-blue-600 transition-colors">
-                      Candidatos
-                    </span>
-                  </button>
+  const vacio = VACIOS[activeTab];
 
-                  {/* Fecha de publicación */}
-                  <div className="text-center">
-                    <div className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-gray-100 text-gray-600 rounded-full">
-                      <Clock className="w-4 h-4 md:w-5 md:h-5" />
-                    </div>
-                    <span className="text-xs text-gray-500 mt-1 block">{formatDate(job.createdAt)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Acciones - wrap en móvil */}
-              <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-                {onView && (
-                  <button
-                    onClick={() => onView(job.id)}
-                    className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Ver
-                  </button>
-                )}
-
-                {onEdit && job.status !== 'closed' && canEdit(job) && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onEdit(job.id)}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Editar
-                    </button>
-                    {getEditTimeRemaining(job) && (
-                      <span className="text-xs text-orange-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {getEditTimeRemaining(job)}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Publicar borrador */}
-                {onPublish && job.status === 'draft' && (
-                  <button
-                    onClick={() => onPublish(job.id)}
-                    className="px-3 py-1.5 text-sm text-white bg-button-green hover:bg-green-700 rounded-lg transition-colors flex items-center gap-1 font-medium"
-                  >
-                    <Send className="w-4 h-4" />
-                    Publicar
-                  </button>
-                )}
-
-                {/* Pausar/Reanudar */}
-                {onPause && job.status === 'active' && !isExpired(job) && (
-                  <button
-                    onClick={() => onPause(job.id)}
-                    className="px-3 py-1.5 text-sm text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors flex items-center gap-1"
-                  >
-                    <Pause className="w-4 h-4" />
-                    Pausar
-                  </button>
-                )}
-
-                {onResume && job.status === 'paused' && (
-                  <button
-                    onClick={() => onResume(job.id)}
-                    className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-1"
-                  >
-                    <Play className="w-4 h-4" />
-                    Reanudar
-                  </button>
-                )}
-
-                {/* Cerrar - Dos opciones */}
-                {onClose && (job.status === 'active' || job.status === 'paused') && (
-                  <>
-                    <button
-                      onClick={() => onClose(job.id, 'success')}
-                      className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-1"
-                      title="Cerrar vacante por contratación exitosa"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Exitosa
-                    </button>
-                    <button
-                      onClick={() => onClose(job.id, 'cancelled')}
-                      className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
-                      title="Cancelar vacante sin contratar"
-                    >
-                      <Ban className="w-4 h-4" />
-                      Cancelar
-                    </button>
-                  </>
-                )}
-
-                {job.status === 'closed' && (
-                  <span className={`text-xs italic px-3 py-1.5 ${
-                    job.closedReason === 'success' ? 'text-green-600' : 'text-gray-400'
-                  }`}>
-                    {job.closedReason === 'success' ? '✓ Contratación exitosa' : 'Vacante cancelada'}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+  return (
+    <Card
+      titulo="Mis vacantes"
+      descripcion={`${jobs.length} ${jobs.length === 1 ? 'vacante' : 'vacantes'} en total`}
+      sinRelleno
+    >
+      <Tabs
+        idBase="vacantes"
+        etiqueta="Vacantes por estado"
+        activa={activeTab}
+        alCambiar={cambiarPestana}
+        pestanas={tabs.map((tab) => ({ id: tab.key, etiqueta: tab.label, contador: tab.count }))}
+        className="px-3"
+      />
+      <PanelPestana idBase="vacantes" id={activeTab} activa={activeTab} className="pt-0">
+        <DataTable
+          // Sin repetir «Mis vacantes» ni el nombre de la pestaña: la prueba e2e
+          // del panel exige que esos textos aparezcan una sola vez.
+          etiqueta="Vacantes de la pestaña elegida"
+          columnas={columnas}
+          filas={filas}
+          claveFila={(job) => job.id}
+          orden={orden}
+          alOrdenar={ordenarPor}
+          alActivarFila={onView ? (job) => onView(job.id) : undefined}
+          paginacion={paginacionLocal(ordenadas.length, pagina, POR_PAGINA)}
+          alCambiarPagina={setPagina}
+          etiquetaTotal="vacantes"
+          vacio={
+            <EmptyState
+              frase="Todavía nada por aquí."
+              titulo={vacio.titulo}
+              descripcion={vacio.descripcion}
+              accion={
+                onCreate && (activeTab === 'active' || activeTab === 'draft') ? (
+                  <Button variante="contorno" tamano="sm" icono={Plus} onClick={onCreate}>
+                    Publicar vacante
+                  </Button>
+                ) : undefined
+              }
+            />
+          }
+        />
+      </PanelPestana>
+    </Card>
   );
 }

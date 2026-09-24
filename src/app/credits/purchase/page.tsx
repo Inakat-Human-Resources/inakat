@@ -2,11 +2,47 @@
 
 'use client';
 
+/**
+ * Compra de créditos (empresa): elegir paquete → código de descuento → pagar
+ * con el Brick de tarjeta de Mercado Pago.
+ *
+ * Registro de aplicación (docs/DISENO.md): PageHeader → Stepper de dos pasos
+ * (el paso es `showCheckout`, el mismo estado de siempre) → paquetes, código y
+ * resumen → pago. La lógica es la de siempre: GET /api/credit-packages,
+ * POST /api/discount-codes/validate, el descuento calculado aquí (PAGO-023),
+ * el montaje del Brick cuando el SDK avisa (PAGO-024) y POST
+ * /api/credits/purchases con el precio que ve el comprador (PAGO-006). El
+ * Brick lo pinta Mercado Pago dentro de #mp-checkout-container: aquí sólo se
+ * viste su contenedor.
+ */
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
-import { Loader2, AlertCircle, Tag, X, Check } from 'lucide-react';
+import {
+  Loader2,
+  AlertCircle,
+  Tag,
+  X,
+  Check,
+  ArrowLeft,
+  ArrowRight,
+  CreditCard,
+  Lock,
+  RefreshCw,
+  Info
+} from 'lucide-react';
 import { notifyAuthChanged } from '@/lib/auth-events';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import FormField, { Input } from '@/components/ui/FormField';
+import EmptyState from '@/components/ui/EmptyState';
+import Stepper from '@/components/ui/Stepper';
+import Toast from '@/components/ui/Toast';
+import Skeleton from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
 
 interface CreditPackage {
   id: number;
@@ -30,6 +66,12 @@ interface DiscountInfo {
 // SIEMPRE — y el cobro real sale de la tabla CreditPackage, así que el precio
 // anunciado podía no ser el cobrado. Si los paquetes no cargan, ahora se avisa
 // en vez de enseñar precios que quizá no existen.
+
+/** Los dos pasos de la compra (presentación de `showCheckout`). */
+const PASOS = [
+  { id: 'paquete', etiqueta: 'Paquete', descripcion: 'Elige cuántos créditos' },
+  { id: 'pago', etiqueta: 'Pago', descripcion: 'Pago seguro con Mercado Pago' }
+];
 
 export default function PurchaseCreditsPage() {
   const router = useRouter();
@@ -290,7 +332,10 @@ export default function PurchaseCreditsPage() {
       if (data.success) {
         if (data.status === 'approved') {
           // Mostrar mensaje con info de descuento si aplica
-          let message = `¡Compra exitosa! Se agregaron ${data.creditsAdded} créditos.`;
+          let message =
+            data.creditsAdded === 1
+              ? '¡Compra exitosa! Se agregó 1 crédito.'
+              : `¡Compra exitosa! Se agregaron ${data.creditsAdded} créditos.`;
           if (data.discount) {
             message += ` Ahorraste $${data.discount.discountAmount.toLocaleString()} con tu código de descuento.`;
           }
@@ -328,6 +373,20 @@ export default function PurchaseCreditsPage() {
     }).format(price);
   };
 
+  // "10 créditos" en UN solo texto: la cifra suelta sólo vive en la tarjeta
+  // del paquete (los tests la buscan por su número).
+  const creditosDe = (n: number) => `${n} ${n === 1 ? 'crédito' : 'créditos'}`;
+
+  // Rejilla de paquetes según cuántos hay (como antes: 1 y 2 centrados).
+  const rejillaPaquetes =
+    packages.length === 1
+      ? 'grid-cols-1 max-w-[16rem]'
+      : packages.length === 2
+        ? 'grid-cols-2 max-w-xl'
+        : packages.length === 3
+          ? 'grid-cols-2 sm:grid-cols-3'
+          : 'grid-cols-2 lg:grid-cols-4';
+
   return (
     <>
       {/* Cargar SDK de Mercado Pago */}
@@ -339,152 +398,192 @@ export default function PurchaseCreditsPage() {
         onError={() => setSdkError(true)}
       />
 
-      <div className="min-h-screen bg-custom-beige py-12 md:py-20">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <h1 className="text-2xl md:text-4xl font-bold text-title-dark mb-6 md:mb-8">
-            Comprar Créditos
-          </h1>
+      <PageHeader
+        antetitulo="Créditos"
+        titulo="Comprar créditos"
+        remate="para tus vacantes"
+        descripcion="Elige un paquete, aplica tu código si tienes uno y paga con Mercado Pago."
+      />
 
-          {/* Notificación */}
-          {notification.type && (
-            <div
-              className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
-                notification.type === 'success'
-                  ? 'bg-green-100 text-green-800 border border-green-300'
-                  : 'bg-red-100 text-red-800 border border-red-300'
-              }`}
-            >
-              <span>{notification.message}</span>
-              <button
-                onClick={() => setNotification({ type: null, message: '' })}
-                className="ml-4 hover:opacity-70 text-xl"
-              >
-                ×
-              </button>
+      <Stepper
+        pasos={PASOS}
+        actual={showCheckout ? 1 : 0}
+        alIrA={() => setShowCheckout(false)}
+        className="mb-6 sm:max-w-sm"
+      />
+
+      {/* Notificación: fija arriba para que se vea aunque se esté al pie del
+          formulario de pago; se queda hasta que se cierra (como antes). */}
+      <Toast
+        tono={notification.type === 'success' ? 'exito' : 'error'}
+        mensaje={notification.type ? notification.message : null}
+        alCerrar={() => setNotification({ type: null, message: '' })}
+        duracion={0}
+      />
+
+      {/* PAGO-006: si los paquetes no cargan hay que decirlo. Antes el
+          mensaje se guardaba en el estado pero no se pintaba en ninguna
+          parte, así que el comprador sólo veía "no hay paquetes". */}
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-start gap-2 text-sm font-medium text-danger-dark">
+            <AlertCircle size={18} className="mt-px flex-none" aria-hidden="true" />
+            {error}
+          </p>
+          <Button
+            variante="contorno"
+            tamano="sm"
+            icono={RefreshCw}
+            onClick={fetchPackages}
+            disabled={loadingPackages}
+            className="self-start sm:self-auto"
+          >
+            Reintentar
+          </Button>
+        </div>
+      )}
+
+      {!showCheckout ? (
+        // scroll-mb: por debajo de 1024 px, al llegar con Tab a un campo o
+        // botón del pie, el navegador lo deja por encima de la barra fija de
+        // «Continuar al pago» en vez de debajo (WCAG 2.4.11).
+        <div className="space-y-6 max-lg:[&_:is(a,button,input)]:scroll-mb-24">
+          {/* Selección de Paquete */}
+          {loadingPackages ? (
+            <div role="status" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              <span className="sr-only">Cargando paquetes…</span>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex flex-col items-center rounded-xl border border-line bg-white px-4 py-6 shadow-ap-1">
+                  <Skeleton className="h-10 w-14" />
+                  <Skeleton className="mt-2 h-3.5 w-16" />
+                  <Skeleton className="mt-4 h-6 w-24" />
+                  <Skeleton className="mt-2 h-3 w-20" />
+                </div>
+              ))}
             </div>
-          )}
+          ) : packages.length === 0 ? (
+            !error && (
+              <Card>
+                <EmptyState
+                  frase="Por ahora, nada que elegir."
+                  titulo="No hay paquetes disponibles en este momento."
+                  descripcion="Escríbenos a info@inakat.com y te ayudamos a comprar créditos."
+                />
+              </Card>
+            )
+          ) : (
+            <section aria-labelledby="titulo-paquetes" className="[overflow:visible]">
+              <h2 id="titulo-paquetes" className="mb-1 font-display text-base font-semibold text-ink">
+                Elige tu paquete
+              </h2>
+              <p className="mb-5 text-sm text-ink-muted">Precios en pesos mexicanos (MXN).</p>
+              <div role="group" aria-labelledby="titulo-paquetes" className={cn('grid gap-3 sm:gap-4', rejillaPaquetes)}>
+                {packages.map((pkg) => {
+                  // Calcular precio con descuento para este paquete
+                  const pkgDiscount = discountInfo
+                    ? Math.round(pkg.price * (discountInfo.discountPercent / 100))
+                    : 0;
+                  const pkgFinalPrice = pkg.price - pkgDiscount;
+                  const seleccionado = selectedPackageId === pkg.id;
 
-          {/* PAGO-006: si los paquetes no cargan hay que decirlo. Antes el
-              mensaje se guardaba en el estado pero no se pintaba en ninguna
-              parte, así que el comprador sólo veía "no hay paquetes". */}
-          {error && (
-            <div className="mb-6 p-4 rounded-lg border border-red-300 bg-red-50 text-red-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <span className="text-sm">{error}</span>
+                  return (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      aria-pressed={seleccionado}
+                      onClick={() => setSelectedPackageId(pkg.id)}
+                      className={cn(
+                        'relative flex flex-col items-center rounded-xl border bg-white px-3 pb-5 pt-7 text-center transition-[border-color,box-shadow,background-color] duration-150 sm:px-4',
+                        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal',
+                        seleccionado
+                          ? 'border-teal bg-teal-tint/40 shadow-ap-2 ring-1 ring-teal'
+                          : 'border-line-strong shadow-ap-1 hover:border-ink'
+                      )}
+                    >
+                      {/* El punto: marca el paquete elegido con forma, no sólo con color. */}
+                      <span
+                        className={cn(
+                          'absolute left-3 top-3 h-4 w-4 rounded-full border-2 bg-white transition-[border-width,border-color] duration-150',
+                          seleccionado ? 'border-[5px] border-teal' : 'border-line-strong'
+                        )}
+                        aria-hidden="true"
+                      />
+
+                      {pkg.badge === 'MÁS POPULAR' && (
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-orange px-2.5 py-1 font-display text-[11px] font-bold leading-none tracking-wide text-ink">
+                          MÁS POPULAR
+                        </span>
+                      )}
+
+                      {pkg.badge === 'PROMOCIÓN' && (
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink px-2.5 py-1 font-display text-[11px] font-bold leading-none tracking-wide text-white">
+                          PROMOCIÓN
+                        </span>
+                      )}
+
+                      {/* El nombre del paquete, el mismo que sale en «Tu compra». */}
+                      <span className="mb-2 max-w-full text-balance font-display text-sm font-semibold leading-tight text-ink">
+                        {pkg.name}
+                      </span>
+                      <span className="font-display text-4xl font-bold leading-none tracking-tight text-ink tabular-nums sm:text-5xl">
+                        {pkg.credits}
+                      </span>
+                      <span className="mt-1.5 text-sm text-ink-muted">
+                        {pkg.credits === 1 ? 'crédito' : 'créditos'}
+                      </span>
+
+                      {/* Precio con descuento */}
+                      {discountInfo ? (
+                        <>
+                          <span className="mt-4 text-sm text-ink-muted line-through tabular-nums">
+                            {formatPrice(pkg.price)}
+                          </span>
+                          <span className="font-display text-xl font-semibold text-ink tabular-nums sm:text-2xl">
+                            {formatPrice(pkgFinalPrice)}
+                          </span>
+                          <span className="mt-0.5 text-xs font-semibold text-lime-dark">
+                            Ahorras {formatPrice(pkgDiscount)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="mt-4 font-display text-xl font-semibold text-ink tabular-nums sm:text-2xl">
+                          {formatPrice(pkg.price)}
+                        </span>
+                      )}
+
+                      <span className="mt-1 text-xs text-ink-muted tabular-nums">
+                        {formatPrice(Math.round(pkgFinalPrice / pkg.credits))} / crédito
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              <button
-                onClick={fetchPackages}
-                disabled={loadingPackages}
-                className="px-4 py-2 bg-button-orange text-white rounded-lg text-sm font-semibold hover:bg-opacity-90 disabled:opacity-50 self-start sm:self-auto"
-              >
-                Reintentar
-              </button>
-            </div>
+            </section>
           )}
 
-          {!showCheckout ? (
-            <>
-              {/* Selección de Paquete */}
-              {loadingPackages ? (
-                <div className="flex justify-center items-center py-12">
-                  <Loader2 className="animate-spin text-button-orange" size={40} />
-                  <span className="ml-3 text-gray-600">Cargando paquetes...</span>
-                </div>
-              ) : packages.length === 0 ? (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
-                  <AlertCircle className="mx-auto text-yellow-600 mb-2" size={40} />
-                  <p className="text-yellow-800">No hay paquetes disponibles en este momento.</p>
-                </div>
-              ) : (
-                <div className={`grid grid-cols-2 gap-3 sm:gap-6 mb-8 ${
-                  packages.length === 1 ? 'grid-cols-1 md:grid-cols-1 max-w-sm mx-auto' :
-                  packages.length === 2 ? 'md:grid-cols-2 max-w-2xl mx-auto' :
-                  packages.length === 3 ? 'md:grid-cols-3' :
-                  'lg:grid-cols-4'
-                }`}>
-                  {packages.map((pkg) => {
-                    // Calcular precio con descuento para este paquete
-                    const pkgDiscount = discountInfo
-                      ? Math.round(pkg.price * (discountInfo.discountPercent / 100))
-                      : 0;
-                    const pkgFinalPrice = pkg.price - pkgDiscount;
-
-                    return (
-                      <div
-                        key={pkg.id}
-                        onClick={() => setSelectedPackageId(pkg.id)}
-                        className={`
-                          relative bg-white rounded-xl p-4 sm:p-6 cursor-pointer border-2 transition-all
-                          ${
-                            selectedPackageId === pkg.id
-                              ? 'border-button-orange shadow-lg scale-[1.02] sm:scale-105'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }
-                        `}
-                      >
-                        {pkg.badge === 'MÁS POPULAR' && (
-                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-button-orange text-white px-2 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap">
-                            MÁS POPULAR
-                          </div>
-                        )}
-
-                        {pkg.badge === 'PROMOCIÓN' && (
-                          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-2 sm:px-4 py-1 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap">
-                            PROMOCIÓN
-                          </div>
-                        )}
-
-                        <div className="text-center">
-                          <h3 className="text-3xl sm:text-5xl font-bold text-title-dark mb-1 sm:mb-2">
-                            {pkg.credits}
-                          </h3>
-                          <p className="text-gray-600 mb-2 sm:mb-4 text-sm">
-                            {pkg.credits === 1 ? 'crédito' : 'créditos'}
-                          </p>
-
-                          {/* Precio con descuento */}
-                          {discountInfo ? (
-                            <div>
-                              <p className="text-sm sm:text-lg text-gray-400 line-through">
-                                {formatPrice(pkg.price)}
-                              </p>
-                              <p className="text-xl sm:text-3xl font-bold text-button-green mb-1">
-                                {formatPrice(pkgFinalPrice)}
-                              </p>
-                              <p className="text-xs sm:text-sm text-green-600 font-medium">
-                                Ahorras {formatPrice(pkgDiscount)}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-xl sm:text-3xl font-bold text-button-orange mb-2">
-                              {formatPrice(pkg.price)}
-                            </p>
-                          )}
-
-                          <p className="text-xs sm:text-sm text-gray-500 mt-2">MXN</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formatPrice(Math.round(pkgFinalPrice / pkg.credits))} / crédito
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
+          {packages.length > 0 && (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
               {/* Código de Descuento */}
-              {packages.length > 0 && (
-                <div className="bg-white rounded-xl p-4 sm:p-6 mb-8 max-w-xl mx-auto">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Tag className="w-5 h-5 text-button-orange flex-shrink-0" />
-                    <h3 className="font-semibold text-gray-900 text-sm sm:text-base">¿Tienes un código de descuento?</h3>
-                  </div>
-
+              <Card
+                titulo={
+                  <span className="inline-flex items-center gap-2">
+                    <Tag size={18} className="flex-none text-orange-dark" aria-hidden="true" />
+                    ¿Tienes un código de descuento?
+                  </span>
+                }
+              >
+                <div aria-live="polite">
                   {!discountInfo ? (
-                    <div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
+                    <FormField
+                      etiqueta="Código de descuento"
+                      ayuda="Si un asesor de INAKAT te compartió un código, escríbelo aquí."
+                      error={discountError}
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
                           type="text"
                           value={discountCodeInput}
                           onChange={(e) => {
@@ -492,242 +591,270 @@ export default function PurchaseCreditsPage() {
                             setDiscountError(null);
                           }}
                           placeholder="Ej: EDUARDO10"
-                          className={`flex-1 px-4 py-3 border rounded-lg uppercase font-mono ${
-                            discountError ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="font-mono uppercase sm:flex-1"
                           onKeyPress={(e) => e.key === 'Enter' && handleValidateCode()}
                         />
-                        <button
+                        <Button
+                          variante="secundario"
                           onClick={handleValidateCode}
                           disabled={validatingCode || !discountCodeInput.trim()}
-                          className="px-6 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2 w-full sm:w-auto"
+                          cargando={validatingCode}
                         >
-                          {validatingCode ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            'Aplicar'
-                          )}
-                        </button>
+                          Aplicar
+                        </Button>
                       </div>
-
-                      {discountError && (
-                        <div className="mt-3 flex items-center gap-2 text-red-600">
-                          <AlertCircle className="w-4 h-4" />
-                          <span className="text-sm">{discountError}</span>
-                        </div>
-                      )}
-                    </div>
+                    </FormField>
                   ) : (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-green-100 rounded-full">
-                            <Check className="w-5 h-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-green-800">
-                              ¡{discountInfo.discountPercent}% de descuento aplicado!
-                            </p>
-                            <p className="text-sm text-green-600">
-                              Código: <span className="font-mono font-bold">{discountInfo.code}</span>
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={handleRemoveCode}
-                          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                          title="Quitar código"
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-lime/50 bg-lime-tint px-4 py-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-lime text-ink"
+                          aria-hidden="true"
                         >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-
-                      {selectedPkg && (
-                        <div className="mt-4 pt-4 border-t border-green-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                          <div>
-                            <p className="text-xs text-gray-500">Precio original</p>
-                            <p className="text-lg line-through text-gray-400">
-                              {formatPrice(originalPrice)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Tu descuento</p>
-                            <p className="text-lg font-bold text-red-500">
-                              -{formatPrice(discountAmount)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Tu precio</p>
-                            <p className="text-lg font-bold text-green-600">
-                              {formatPrice(finalPrice)}
-                            </p>
-                          </div>
+                          <Check className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-lime-dark">
+                            ¡{discountInfo.discountPercent}% de descuento aplicado!
+                          </p>
+                          <p className="text-sm text-ink">
+                            Código: <span className="font-mono font-bold">{discountInfo.code}</span>
+                          </p>
                         </div>
-                      )}
+                      </div>
+                      <IconButton etiqueta="Quitar código" icono={X} tamano="sm" onClick={handleRemoveCode} />
                     </div>
                   )}
                 </div>
-              )}
+              </Card>
 
-              {/* Botón Continuar */}
-              {packages.length > 0 && selectedPkg && (
-                <div className="text-center">
-                  <button
-                    onClick={() => setShowCheckout(true)}
-                    disabled={loadingPackages}
-                    className="bg-button-orange text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-opacity-90 transition-colors disabled:opacity-50"
-                  >
-                    Continuar al Pago →
-                  </button>
-                </div>
+              {/* Resumen y botón Continuar */}
+              {selectedPkg && (
+                <Card titulo="Tu compra" className="lg:row-span-2">
+                  <dl className="space-y-2.5 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">Paquete</dt>
+                      <dd className="text-right font-medium text-ink">
+                        {`${selectedPkg.name} · ${creditosDe(selectedPkg.credits)}`}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">Precio</dt>
+                      <dd className="tabular-nums text-ink">{formatPrice(originalPrice)}</dd>
+                    </div>
+                    {discountInfo && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt className="text-ink-muted">{`Descuento (${discountInfo.code})`}</dt>
+                        <dd className="tabular-nums font-medium text-lime-dark">{`−${formatPrice(discountAmount)}`}</dd>
+                      </div>
+                    )}
+                    <div className="flex items-baseline justify-between gap-3 border-t border-line pt-3">
+                      <dt className="font-display font-semibold text-ink">Total</dt>
+                      <dd className="font-display text-2xl font-bold tabular-nums text-ink">
+                        {formatPrice(finalPrice)} <span className="text-xs font-medium text-ink-muted">MXN</span>
+                      </dd>
+                    </div>
+                  </dl>
+                  {/* La acción de la página. En escritorio, al pie de esta
+                      tarjeta; por debajo de 1024 px la MISMA pieza pasa a barra
+                      fija abajo con el total (como la de /create-job), para no
+                      tener que bajar dos pantallas, tras el cupón, a buscarla.
+                      Un solo botón en el DOM. Fixed y no sticky: la rejilla que
+                      la contiene empieza al pie de la primera pantalla y un
+                      sticky no se vería hasta llegar a ella. */}
+                  <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-10px_24px_-18px_rgba(40,55,57,0.55)] sm:px-6 lg:static lg:z-auto lg:mt-5 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+                    <div className="flex items-center justify-between gap-4 lg:block">
+                      <p className="min-w-0 lg:hidden">
+                        <span className="block truncate text-xs text-ink-muted">
+                          {`Total · ${creditosDe(selectedPkg.credits)}`}
+                        </span>
+                        <span className="font-display text-xl font-bold tabular-nums leading-tight text-ink">
+                          {formatPrice(finalPrice)}
+                        </span>{' '}
+                        <span className="text-xs font-medium text-ink-muted">MXN</span>
+                      </p>
+                      <Button
+                        iconoFinal={ArrowRight}
+                        onClick={() => setShowCheckout(true)}
+                        disabled={loadingPackages}
+                        className="flex-none lg:h-12 lg:w-full lg:px-5 lg:text-base lg:[&_svg]:h-5 lg:[&_svg]:w-5"
+                      >
+                        Continuar al pago
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-muted">
+                    <Lock size={12} aria-hidden="true" />
+                    Pago seguro procesado por Mercado Pago
+                  </p>
+                </Card>
               )}
 
               {/* Info adicional */}
-              <div className="mt-12 bg-white rounded-xl p-6">
-                <h2 className="text-2xl font-bold mb-4">
-                  ¿Cómo funcionan los créditos?
-                </h2>
-                <ul className="space-y-3 text-gray-700">
-                  <li className="flex items-start gap-2">
-                    <span className="text-button-orange font-bold">✓</span>
+              <Card
+                titulo={
+                  <span className="inline-flex items-center gap-2">
+                    <Info size={18} className="flex-none text-teal" aria-hidden="true" />
+                    ¿Cómo funcionan los créditos?
+                  </span>
+                }
+              >
+                <ul className="space-y-3 text-sm text-ink">
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="mt-0.5 flex-none text-lime-dark" aria-hidden="true" />
                     <span>
                       Los créditos se usan para publicar vacantes. El costo varía según el perfil y seniority.
                     </span>
                   </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-button-orange font-bold">✓</span>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="mt-0.5 flex-none text-lime-dark" aria-hidden="true" />
                     <span>
                       Los créditos no expiran y puedes usarlos cuando los
                       necesites
                     </span>
                   </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-button-orange font-bold">✓</span>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="mt-0.5 flex-none text-lime-dark" aria-hidden="true" />
                     <span>Paquetes más grandes = mejor precio por crédito</span>
                   </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-button-orange font-bold">✓</span>
+                  <li className="flex items-start gap-2.5">
+                    <Check size={16} className="mt-0.5 flex-none text-lime-dark" aria-hidden="true" />
                     <span>
                       Métodos de pago: Tarjeta, OXXO, transferencia bancaria
                     </span>
                   </li>
                 </ul>
-              </div>
-            </>
-          ) : selectedPkg ? (
-            <>
-              {/* Resumen de compra */}
-              <div className="bg-white rounded-xl p-6 mb-6">
-                <h2 className="text-2xl font-bold mb-4">Resumen de Compra</h2>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <p className="text-gray-600">Paquete seleccionado:</p>
-                    <p className="text-xl font-bold">
-                      {selectedPkg.name} - {selectedPkg.credits}{' '}
-                      {selectedPkg.credits === 1 ? 'crédito' : 'créditos'}
-                    </p>
-
-                    {/* Mostrar código de descuento si aplica */}
-                    {discountInfo && (
-                      <div className="mt-2 flex items-center gap-2 text-green-600">
-                        <Tag className="w-4 h-4" />
-                        <span className="text-sm font-medium">
-                          Código {discountInfo.code} aplicado ({discountInfo.discountPercent}% desc.)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    {discountInfo ? (
-                      <div>
-                        <p className="text-gray-600">Precio original:</p>
-                        <p className="text-xl text-gray-400 line-through">
-                          {formatPrice(originalPrice)}
-                        </p>
-                        <p className="text-gray-600 mt-2">Tu precio:</p>
-                        <p className="text-3xl font-bold text-button-green">
-                          {formatPrice(finalPrice)}
-                        </p>
-                        <p className="text-sm text-green-600 font-medium">
-                          Ahorras {formatPrice(discountAmount)}
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-gray-600">Total:</p>
-                        <p className="text-3xl font-bold text-button-orange">
-                          {formatPrice(originalPrice)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowCheckout(false)}
-                  className="text-gray-600 hover:text-gray-800 mt-4"
-                >
-                  ← Cambiar paquete
-                </button>
-              </div>
-
-              {/* Contenedor del Brick de Mercado Pago */}
-              <div className="bg-white rounded-xl p-6 shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Información de Pago</h2>
-
-                {/* PAGO-024: mientras el SDK no esté listo se avisa, en vez de
-                    dejar un hueco en blanco sin explicación. */}
-                {sdkError ? (
-                  <div className="p-4 rounded-lg border border-red-300 bg-red-50 text-red-800 flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm">
-                      No se pudo cargar el formulario de pago de Mercado Pago. Revisa tu
-                      conexión o desactiva el bloqueador de anuncios y recarga la página.
-                    </span>
-                  </div>
-                ) : !sdkReady ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="animate-spin text-button-orange" size={32} />
-                    <span className="ml-3 text-gray-600">Cargando formulario de pago...</span>
-                  </div>
-                ) : null}
-
-                {/* Aquí se renderiza el Brick */}
-                <div id="mp-checkout-container"></div>
-
-                {loading && (
-                  <div className="text-center mt-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-button-orange mx-auto"></div>
-                    <p className="text-gray-600 mt-2">Procesando pago...</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Métodos de pago aceptados */}
-              <div className="mt-6 text-center text-gray-600 text-sm">
-                <p>
-                  Aceptamos tarjetas de crédito/débito, OXXO, transferencia
-                  bancaria
-                </p>
-                <p className="mt-2">
-                  Pago seguro procesado por Mercado Pago
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
-              <AlertCircle className="mx-auto text-yellow-600 mb-2" size={40} />
-              <p className="text-yellow-800">No se ha seleccionado ningún paquete.</p>
-              <button
-                onClick={() => setShowCheckout(false)}
-                className="mt-4 text-blue-600 hover:underline"
-              >
-                ← Volver a seleccionar paquete
-              </button>
+              </Card>
             </div>
           )}
+
+          {/* Hueco del alto de la barra fija de «Continuar al pago» (sólo
+              por debajo de 1024 px): sin él, lo último de la página quedaba
+              debajo de la barra. */}
+          {packages.length > 0 && selectedPkg && <div aria-hidden="true" className="h-16 lg:hidden" />}
         </div>
-      </div>
+      ) : selectedPkg ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+          {/* Resumen de compra: primero en el orden de lectura (qué pagas y
+              luego cómo); en escritorio va a la derecha y se queda a la vista. */}
+          <div className="lg:sticky lg:top-20 lg:order-2">
+            <Card titulo="Resumen de compra">
+              <p className="text-sm text-ink-muted">Paquete seleccionado</p>
+              <p className="font-display text-lg font-semibold text-ink">
+                {`${selectedPkg.name} - ${creditosDe(selectedPkg.credits)}`}
+              </p>
+
+              {/* Mostrar código de descuento si aplica */}
+              {discountInfo && (
+                <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-lime-dark">
+                  <Tag size={14} className="flex-none" aria-hidden="true" />
+                  Código {discountInfo.code} aplicado ({discountInfo.discountPercent}% desc.)
+                </p>
+              )}
+
+              <dl className="mt-4 space-y-2.5 border-t border-line pt-4 text-sm">
+                {discountInfo ? (
+                  <>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">Precio original</dt>
+                      <dd className="tabular-nums text-ink-muted line-through">{formatPrice(originalPrice)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-ink-muted">Ahorras</dt>
+                      <dd className="tabular-nums font-medium text-lime-dark">{formatPrice(discountAmount)}</dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3 border-t border-line pt-3">
+                      <dt className="font-display font-semibold text-ink">Tu precio</dt>
+                      <dd className="font-display text-2xl font-bold tabular-nums text-ink">{formatPrice(finalPrice)}</dd>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="font-display font-semibold text-ink">Total</dt>
+                    <dd className="font-display text-2xl font-bold tabular-nums text-ink">{formatPrice(originalPrice)}</dd>
+                  </div>
+                )}
+              </dl>
+
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={ArrowLeft}
+                onClick={() => setShowCheckout(false)}
+                className="mt-5"
+              >
+                Cambiar paquete
+              </Button>
+            </Card>
+
+            {/* Métodos de pago aceptados */}
+            <div className="mt-4 space-y-1 px-1 text-center text-[13px] text-ink-muted">
+              <p>
+                Aceptamos tarjetas de crédito/débito, OXXO, transferencia
+                bancaria
+              </p>
+              <p className="inline-flex items-center gap-1.5">
+                <Lock size={12} aria-hidden="true" />
+                Pago seguro procesado por Mercado Pago
+              </p>
+            </div>
+          </div>
+
+          {/* Contenedor del Brick de Mercado Pago */}
+          <Card
+            titulo={
+              <span className="inline-flex items-center gap-2">
+                <CreditCard size={18} className="flex-none text-teal" aria-hidden="true" />
+                Información de pago
+              </span>
+            }
+            className="lg:order-1"
+          >
+            {/* PAGO-024: mientras el SDK no esté listo se avisa, en vez de
+                dejar un hueco en blanco sin explicación. */}
+            {sdkError ? (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark"
+              >
+                <AlertCircle size={18} className="mt-px flex-none" aria-hidden="true" />
+                <span>
+                  No se pudo cargar el formulario de pago de Mercado Pago. Revisa tu
+                  conexión o desactiva el bloqueador de anuncios y recarga la página.
+                </span>
+              </div>
+            ) : !sdkReady ? (
+              <div role="status" className="flex items-center justify-center gap-3 py-10 text-sm text-ink-muted">
+                <Loader2 className="h-6 w-6 animate-spin text-teal" aria-hidden="true" />
+                Cargando formulario de pago…
+              </div>
+            ) : null}
+
+            {/* Aquí se renderiza el Brick (lo pinta Mercado Pago: no se toca por dentro) */}
+            <div id="mp-checkout-container"></div>
+
+            {loading && (
+              <div role="status" className="mt-4 flex items-center justify-center gap-3 text-sm font-medium text-ink">
+                <Loader2 className="h-5 w-5 animate-spin text-teal" aria-hidden="true" />
+                Procesando pago…
+              </div>
+            )}
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <EmptyState
+            titulo="No se ha seleccionado ningún paquete."
+            accion={
+              <Button variante="contorno" icono={ArrowLeft} onClick={() => setShowCheckout(false)}>
+                Volver a seleccionar paquete
+              </Button>
+            }
+          />
+        </Card>
+      )}
     </>
   );
 }

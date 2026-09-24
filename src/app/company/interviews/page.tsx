@@ -2,23 +2,39 @@
 
 'use client';
 
+/**
+ * Entrevistas de la empresa: las solicitudes que INAKAT coordina con cada
+ * candidato, en tres pestañas (pendientes, agendadas, pasadas).
+ *
+ * Registro de aplicación (docs/DISENO.md). Misma carga y mismos filtros de
+ * siempre; cambió la presentación: una agenda (fecha a la izquierda, qué y con
+ * quién en medio, estado a la derecha), la próxima entrevista destacada arriba
+ * y los horarios que propusiste visibles mientras INAKAT coordina.
+ */
+
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
-  Calendar,
-  Clock,
-  Video,
-  MapPin,
-  ChevronLeft,
-  Loader2,
   AlertCircle,
-  CheckCircle,
   Briefcase,
-  User,
+  Calendar,
+  CalendarX,
+  Clock,
   ExternalLink,
-  MessageSquare
+  Hourglass,
+  MapPin,
+  MessageSquare,
+  RefreshCw,
+  Users,
+  Video,
 } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import { Badge, type TonoBadge } from '@/components/ui/Badge';
+import Button, { clasesBoton } from '@/components/ui/Button';
+import EmptyState from '@/components/ui/EmptyState';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
 
 type TabType = 'pending' | 'scheduled' | 'past';
 
@@ -37,8 +53,8 @@ interface InterviewRequest {
   scheduledEnd: string | null;
   location: string | null;
   meetingUrl: string | null;
-  // PRIVACIDAD (#50/#51): `adminNotes` son «Notas internas del admin» y ya no
-  // se envían a la empresa; declararlas aquí sólo invitaba a volver a pintarlas.
+  // PRIVACIDAD (#50/#51): las notas internas del admin ya no se envían a la
+  // empresa; declararlas aquí sólo invitaba a volver a pintarlas.
   createdAt: string;
   application: {
     id: number;
@@ -55,7 +71,6 @@ interface InterviewRequest {
 }
 
 export default function CompanyInterviewsPage() {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('pending');
   const [interviews, setInterviews] = useState<InterviewRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,10 +107,10 @@ export default function CompanyInterviewsPage() {
       (i.status === 'confirmed' && i.scheduledStart && new Date(i.scheduledStart) < now)
   );
 
-  const tabData: Record<TabType, { label: string; interviews: InterviewRequest[]; color: string }> = {
-    pending: { label: 'Pendientes', interviews: pendingInterviews, color: 'yellow' },
-    scheduled: { label: 'Agendadas', interviews: scheduledInterviews, color: 'green' },
-    past: { label: 'Pasadas', interviews: pastInterviews, color: 'gray' },
+  const tabData: Record<TabType, { label: string; interviews: InterviewRequest[] }> = {
+    pending: { label: 'Pendientes', interviews: pendingInterviews },
+    scheduled: { label: 'Agendadas', interviews: scheduledInterviews },
+    past: { label: 'Pasadas', interviews: pastInterviews },
   };
 
   const currentInterviews = tabData[activeTab].interviews;
@@ -110,221 +125,318 @@ export default function CompanyInterviewsPage() {
     return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getStatusBadge = (interview: InterviewRequest) => {
-    if (interview.status === 'pending') {
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">En coordinación</span>;
-    }
-    if (interview.status === 'confirmed') {
-      if (interview.scheduledStart && new Date(interview.scheduledStart) < now) {
-        return <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">Realizada</span>;
-      }
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Confirmada</span>;
-    }
-    if (interview.status === 'cancelled') {
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Cancelada</span>;
-    }
-    if (interview.status === 'rejected') {
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">Rechazada</span>;
-    }
-    return null;
+  // Un horario propuesto ('2026-09-24' + '10:00'), leído como fecha LOCAL.
+  const formatSlot = (slot: { date: string; time: string }) => {
+    const [y, m, d] = slot.date.split('-').map(Number);
+    const fecha = y && m && d ? new Date(y, m - 1, d) : null;
+    const dia = fecha
+      ? fecha.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+      : slot.date;
+    return `${dia}, ${slot.time}`;
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-3 mb-2">
-            <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <Calendar className="w-6 h-6 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900">Mis Entrevistas</h1>
-          </div>
-          <p className="text-gray-500 ml-8">Seguimiento de tus solicitudes de entrevista</p>
+  // Estado con color Y texto (el vocabulario de siempre).
+  const getStatusBadge = (interview: InterviewRequest) => {
+    let estado: { etiqueta: string; tono: TonoBadge } | null = null;
+    if (interview.status === 'pending') estado = { etiqueta: 'En coordinación', tono: 'aviso' };
+    else if (interview.status === 'confirmed') {
+      estado =
+        interview.scheduledStart && new Date(interview.scheduledStart) < now
+          ? { etiqueta: 'Realizada', tono: 'neutro' }
+          : { etiqueta: 'Confirmada', tono: 'exito' };
+    } else if (interview.status === 'cancelled') estado = { etiqueta: 'Cancelada', tono: 'peligro' };
+    else if (interview.status === 'rejected') estado = { etiqueta: 'Rechazada', tono: 'peligro' };
+    if (!estado) return null;
+    return <Badge tono={estado.tono}>{estado.etiqueta}</Badge>;
+  };
+
+  // La casilla de la izquierda de cada fila: el día (confirmadas) o el estado.
+  const casilla = (interview: InterviewRequest) => {
+    if (interview.status === 'confirmed' && interview.scheduledStart) {
+      const inicio = new Date(interview.scheduledStart);
+      const futura = inicio >= now;
+      return (
+        <div
+          className={cn(
+            'flex h-12 w-12 flex-none flex-col items-center justify-center rounded-xl text-center sm:h-16 sm:w-16',
+            // teal-dark sobre teal-tint 8.18 · tinta sobre niebla 10.35
+            futura ? 'bg-teal-tint text-teal-dark' : 'bg-mist text-ink'
+          )}
+          aria-hidden="true"
+        >
+          <span className="font-display text-xl font-bold leading-none tabular-nums sm:text-2xl">{inicio.getDate()}</span>
+          <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide sm:mt-1 sm:text-[11px]">
+            {inicio.toLocaleDateString('es-MX', { month: 'short' })}
+          </span>
         </div>
+      );
+    }
+    const Icono = interview.status === 'pending' ? Hourglass : CalendarX;
+    return (
+      <div
+        className={cn(
+          'flex h-12 w-12 flex-none items-center justify-center rounded-xl sm:h-16 sm:w-16',
+          interview.status === 'pending' ? 'bg-orange-tint text-orange-dark' : 'bg-mist text-ink-muted'
+        )}
+        aria-hidden="true"
+      >
+        <Icono className="h-5 w-5 sm:h-6 sm:w-6" />
       </div>
+    );
+  };
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b">
-          {(Object.keys(tabData) as TabType[]).map(tab => {
-            const count = tabData[tab].interviews.length;
-            const isActive = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tabData[tab].label}
-                {count > 0 && (
-                  <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
-                    isActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+  // Enlace de la videollamada con aspecto de botón (abre en otra pestaña).
+  const enlaceReunion = (interview: InterviewRequest, tamano: 'sm' | 'md' = 'sm') =>
+    interview.type === 'videocall' && interview.meetingUrl ? (
+      <a
+        href={interview.meetingUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        // En móvil el texto puede partirse: con nowrap se salía de la columna a 360 px.
+        className={cn(clasesBoton({ variante: 'secundario', tamano }), 'h-auto whitespace-normal py-1.5 text-left', tamano === 'md' ? 'min-h-10' : 'min-h-8')}
+      >
+        <ExternalLink aria-hidden="true" />
+        Unirse a la videoconferencia
+        <span className="sr-only"> (se abre en otra pestaña)</span>
+      </a>
+    ) : null;
+
+  // La próxima entrevista agendada (la más cercana en el tiempo).
+  const proxima = [...scheduledInterviews].sort(
+    (a, b) => new Date(a.scheduledStart as string).getTime() - new Date(b.scheduledStart as string).getTime()
+  )[0];
+
+  if (loading) {
+    return <SkeletonPagina conCifras={false} />;
+  }
+
+  return (
+    <>
+      {/* Antetítulo del panel de empresa (el de perfil e integraciones):
+          «Reclutamiento» es el grupo del menú de admin, no de este. */}
+      <PageHeader
+        antetitulo="Empresa"
+        titulo="Entrevistas"
+        remate="con tus candidatos"
+        descripcion="Seguimiento de tus solicitudes de entrevista. INAKAT coordina la fecha y la hora con cada candidato y te avisa cuando quedan confirmadas."
+      />
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-center gap-2 text-sm font-medium text-danger-dark">
+            <AlertCircle className="h-[18px] w-[18px] flex-none" aria-hidden="true" />
+            {error}
+          </p>
+          <Button
+            variante="contorno"
+            tamano="sm"
+            icono={RefreshCw}
+            onClick={() => {
+              setError('');
+              fetchInterviews();
+            }}
+          >
+            Reintentar
+          </Button>
         </div>
+      )}
 
-        {/* Content */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-500">Cargando entrevistas...</span>
+      {/* La próxima entrevista, a la vista sin buscarla */}
+      {!error && proxima && proxima.scheduledStart && (
+        <Card className="mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            {casilla(proxima)}
+            <div className="min-w-0 flex-1">
+              <h2 className="inline-flex items-center gap-2 font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange" aria-hidden="true" />
+                Próxima entrevista
+              </h2>
+              <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">
+                {proxima.application.candidateName}
+                <span className="font-body text-sm font-normal text-ink-muted"> · {proxima.application.job.title}</span>
+              </p>
+              <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink">
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-teal" aria-hidden="true" />
+                  {formatDate(proxima.scheduledStart)}
+                </span>
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  <Clock className="h-4 w-4 text-teal" aria-hidden="true" />
+                  {formatTime(proxima.scheduledStart)}
+                  {proxima.scheduledEnd && ` - ${formatTime(proxima.scheduledEnd)}`}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  {proxima.type === 'videocall' ? (
+                    <Video className="h-4 w-4 text-teal" aria-hidden="true" />
+                  ) : (
+                    <MapPin className="h-4 w-4 text-teal" aria-hidden="true" />
+                  )}
+                  {proxima.type === 'videocall' ? 'Videoconferencia' : 'Presencial'}
+                </span>
+              </p>
+              {proxima.type === 'presential' && proxima.location && (
+                <p className="mt-1 text-sm text-ink-muted">{proxima.location}</p>
+              )}
+            </div>
+            {enlaceReunion(proxima, 'md')}
           </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <p className="text-red-700">{error}</p>
-          </div>
-        ) : currentInterviews.length === 0 ? (
-          <div className="text-center py-20">
-            <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">No hay entrevistas {tabData[activeTab].label.toLowerCase()}</p>
-            <p className="text-gray-400 text-sm mt-1">
-              {activeTab === 'pending'
-                ? 'Cuando solicites una entrevista desde el pipeline de candidatos, aparecerá aquí.'
-                : activeTab === 'scheduled'
-                ? 'Las entrevistas confirmadas por INAKAT aparecerán aquí.'
-                : 'Las entrevistas pasadas y canceladas aparecerán aquí.'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {currentInterviews.map(interview => (
-              <div key={interview.id} className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  {/* Left: Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span className="font-semibold text-gray-900">{interview.application.candidateName}</span>
-                      {getStatusBadge(interview)}
-                    </div>
+        </Card>
+      )}
 
-                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                      <Briefcase className="w-3.5 h-3.5" />
-                      <span>{interview.application.job.title}</span>
-                    </div>
+      {/* Con error no hay lista: «no se pudo cargar» no es «no hay entrevistas». */}
+      {!error && (
+        <Card sinRelleno>
+          <h2 className="sr-only">Solicitudes de entrevista</h2>
+          <Tabs
+            idBase="entrevistas"
+            etiqueta="Entrevistas por estado"
+            activa={activeTab}
+            alCambiar={(id) => setActiveTab(id as TabType)}
+            pestanas={(Object.keys(tabData) as TabType[]).map((tab) => ({
+              id: tab,
+              etiqueta: tabData[tab].label,
+              contador: tabData[tab].interviews.length,
+            }))}
+            className="px-3"
+          />
 
-                    {interview.topic && (
-                      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{interview.topic}</span>
+          <PanelPestana idBase="entrevistas" id={activeTab} activa={activeTab} className="pt-0">
+            {currentInterviews.length === 0 ? (
+              <EmptyState
+                frase="Todavía nada por aquí."
+                titulo={`No hay entrevistas ${tabData[activeTab].label.toLowerCase()}`}
+                descripcion={
+                  activeTab === 'pending'
+                    ? 'Cuando solicites una entrevista desde el pipeline de candidatos, aparecerá aquí.'
+                    : activeTab === 'scheduled'
+                    ? 'Las entrevistas confirmadas por INAKAT aparecerán aquí.'
+                    : 'Las entrevistas pasadas y canceladas aparecerán aquí.'
+                }
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {currentInterviews.map(interview => (
+                  <li key={interview.id} className="flex gap-3 px-4 py-4 transition-colors duration-150 hover:bg-paper/60 sm:gap-4 sm:px-5">
+                    {casilla(interview)}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h3 className="font-display font-semibold text-ink">{interview.application.candidateName}</h3>
+                        {getStatusBadge(interview)}
                       </div>
-                    )}
 
-                    {/* Pending: show coordination message */}
-                    {interview.status === 'pending' && (
-                      <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                        <p className="text-sm text-yellow-800">
-                          Tu solicitud está siendo coordinada por <strong>INAKAT</strong>. Te notificaremos cuando se confirme la fecha y hora.
-                        </p>
-                        <p className="text-xs text-yellow-600 mt-1">
-                          Solicitada el {formatDate(interview.createdAt)}
-                        </p>
-                      </div>
-                    )}
+                      <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted">
+                        <Briefcase className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                        <span className="truncate">{interview.application.job.title}</span>
+                      </p>
 
-                    {/* Confirmed/Past: show schedule details */}
-                    {interview.status === 'confirmed' && interview.scheduledStart && (
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center gap-4 flex-wrap">
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <Calendar className="w-4 h-4 text-blue-500" />
-                            <span className="font-medium text-gray-800">{formatDate(interview.scheduledStart)}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <Clock className="w-4 h-4 text-blue-500" />
-                            <span className="text-gray-700">
+                      {interview.topic && (
+                        <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted">
+                          <MessageSquare className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                          <span>{interview.topic}</span>
+                        </p>
+                      )}
+
+                      {/* Pending: show coordination message */}
+                      {interview.status === 'pending' && (
+                        <div className="mt-3 rounded-lg border border-orange/30 bg-orange-tint/60 px-3 py-2.5">
+                          <p className="text-sm text-ink">
+                            Tu solicitud está siendo coordinada por <strong>INAKAT</strong>. Te notificaremos cuando se confirme la fecha y hora.
+                          </p>
+                          {interview.availableSlots?.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs font-medium text-ink-muted">
+                                Horarios que propusiste · {interview.duration} min
+                                {interview.type === 'videocall' ? ' · videollamada' : ' · presencial'}
+                              </p>
+                              <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                                {interview.availableSlots.map((slot) => (
+                                  <li key={`${slot.date}-${slot.time}`}>
+                                    <Badge tono="neutro" sinPunto tamano="sm" className="bg-white tabular-nums">
+                                      {formatSlot(slot)}
+                                    </Badge>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <p className="mt-2 text-xs text-ink-muted">
+                            Solicitada el {formatDate(interview.createdAt)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Confirmed/Past: show schedule details */}
+                      {interview.status === 'confirmed' && interview.scheduledStart && (
+                        <div className="mt-3 space-y-2">
+                          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                            <span className="inline-flex items-center gap-1.5 font-medium text-ink">
+                              <Calendar className="h-4 w-4 text-teal" aria-hidden="true" />
+                              {formatDate(interview.scheduledStart)}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 tabular-nums text-ink">
+                              <Clock className="h-4 w-4 text-teal" aria-hidden="true" />
                               {formatTime(interview.scheduledStart)}
                               {interview.scheduledEnd && ` - ${formatTime(interview.scheduledEnd)}`}
                             </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-sm">
-                            {interview.type === 'videocall' ? (
-                              <Video className="w-4 h-4 text-purple-500" />
-                            ) : (
-                              <MapPin className="w-4 h-4 text-green-500" />
-                            )}
-                            <span className="text-gray-600">
+                            <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                              {interview.type === 'videocall' ? (
+                                <Video className="h-4 w-4" aria-hidden="true" />
+                              ) : (
+                                <MapPin className="h-4 w-4" aria-hidden="true" />
+                              )}
                               {interview.type === 'videocall' ? 'Videoconferencia' : 'Presencial'}
                             </span>
-                          </div>
+                            {interview.participants && interview.participants.length > 0 && (
+                              <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                                <Users className="h-4 w-4" aria-hidden="true" />
+                                {interview.participants.map((p) => p.nombre).join(', ')}
+                              </span>
+                            )}
+                          </p>
+
+                          {/* Location */}
+                          {interview.type === 'presential' && interview.location && (
+                            <p className="flex items-start gap-1.5 text-sm text-ink-muted">
+                              <MapPin className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                              <span>{interview.location}</span>
+                            </p>
+                          )}
+
+                          {/* Meeting URL */}
+                          {enlaceReunion(interview)}
                         </div>
+                      )}
 
-                        {/* Meeting URL */}
-                        {interview.type === 'videocall' && interview.meetingUrl && (
-                          <a
-                            href={interview.meetingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Unirse a la videoconferencia
-                          </a>
-                        )}
+                      {/* Cancelled */}
+                      {interview.status === 'cancelled' && (
+                        <p className="mt-3 rounded-lg border border-danger/20 bg-danger-tint/60 px-3 py-2 text-sm text-danger-dark">
+                          Esta entrevista fue cancelada.
+                        </p>
+                      )}
 
-                        {/* Location */}
-                        {interview.type === 'presential' && interview.location && (
-                          <div className="flex items-center gap-1.5 text-sm text-gray-600">
-                            <MapPin className="w-3.5 h-3.5" />
-                            <span>{interview.location}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Cancelled */}
-                    {interview.status === 'cancelled' && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p className="text-sm text-red-700">Esta entrevista fue cancelada.</p>
-                      </div>
-                    )}
-
-                    {/* Rejected: sólo 'cancelled' tenía bloque, así que una
-                        solicitud rechazada se quedaba sin ninguna explicación
-                        en la tarjeta. */}
-                    {interview.status === 'rejected' && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p className="text-sm text-red-700">
+                      {/* Rejected: sólo 'cancelled' tenía bloque, así que una
+                          solicitud rechazada se quedaba sin ninguna explicación
+                          en la tarjeta. */}
+                      {interview.status === 'rejected' && (
+                        <p className="mt-3 rounded-lg border border-danger/20 bg-danger-tint/60 px-3 py-2 text-sm text-danger-dark">
                           INAKAT no pudo agendar esta entrevista con los horarios
                           propuestos. Puedes enviar una nueva solicitud con otras
                           opciones.
                         </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: Date badge for scheduled interviews */}
-                  {interview.status === 'confirmed' && interview.scheduledStart && new Date(interview.scheduledStart) >= now && (
-                    <div className="flex-shrink-0 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-center min-w-[100px]">
-                      <div className="text-2xl font-bold text-blue-700">
-                        {new Date(interview.scheduledStart).getDate()}
-                      </div>
-                      <div className="text-xs font-medium text-blue-600 uppercase">
-                        {new Date(interview.scheduledStart).toLocaleDateString('es-MX', { month: 'short' })}
-                      </div>
-                      <div className="text-xs text-blue-500 mt-0.5">
-                        {formatTime(interview.scheduledStart)}
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+
+                  </li>
+                ))}
+              </ul>
+            )}
+          </PanelPestana>
+        </Card>
+      )}
+    </>
   );
 }

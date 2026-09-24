@@ -2,31 +2,54 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+/**
+ * Perfil de la empresa: representante, datos fiscales y de contacto, dirección
+ * con mapa y logo.
+ *
+ * Registro de aplicación (docs/DISENO.md). Misma carga, mismo PUT con el mismo
+ * cuerpo, misma subida del logo y el mismo mapa de Google; cambió la
+ * presentación: campos con etiqueta visible (FormField), tarjetas por tema, una
+ * columna con el logo y el estado de la cuenta, y la barra de «Guardar
+ * cambios» fija abajo para no tener que bajar hasta el final del formulario.
+ * Si Google Maps no se puede usar, en lugar del mapa (y del diálogo de error
+ * de Google) sale un respaldo propio con la dirección guardada en texto.
+ */
+
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Building2,
-  User,
-  Mail,
-  Globe,
-  MapPin,
-  FileText,
-  Save,
-  Loader2,
   AlertCircle,
-  CheckCircle,
   ArrowLeft,
-  Camera
+  Camera,
+  FileText,
+  Globe,
+  Loader2,
+  Mail,
+  MapPin,
+  RefreshCw,
+  Save,
 } from 'lucide-react';
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api';
 import CompanyLogo from '@/components/shared/CompanyLogo';
+import MapaNoDisponible from '@/components/company/MapaNoDisponible';
+import { useFalloMapa } from '@/hooks/useFalloMapa';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import FormField, { Input } from '@/components/ui/FormField';
+import Button, { clasesBoton } from '@/components/ui/Button';
+import StatusBadge from '@/components/ui/Badge';
+import Toast from '@/components/ui/Toast';
+import Skeleton, { SkeletonPagina } from '@/components/ui/Skeleton';
+import { notifyAuthChanged } from '@/lib/auth-events';
+import { cn } from '@/lib/utils';
+import { fechaCorta, fechaLarga } from '@/lib/fechas';
 
 // Configuración de Google Maps
 const libraries: ("places")[] = ["places"];
 const mapContainerStyle = {
   width: '100%',
-  height: '250px',
-  borderRadius: '8px'
+  height: '260px',
+  borderRadius: '12px'
 };
 const defaultCenter = {
   lat: 19.4326, // CDMX por defecto
@@ -104,6 +127,16 @@ export default function CompanyProfilePage() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries,
   });
+
+  // ¿Se puede usar el mapa? Sin clave, sin script (loadError) o con la clave
+  // rechazada por Google (facturación apagada, dominio no permitido: el
+  // script carga pero Google tapa el mapa con su diálogo y apaga el
+  // autocompletado). En los tres casos se pinta el respaldo propio en vez del
+  // mapa. Presentación: el formulario y el PUT no cambian.
+  const contenedorMapaRef = useRef<HTMLDivElement>(null);
+  const sinClaveMapa = !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const claveRechazada = useFalloMapa(contenedorMapaRef, isMapLoaded && !loading && !sinClaveMapa && !mapLoadError);
+  const mapaNoDisponible = sinClaveMapa || Boolean(mapLoadError) || claveRechazada;
 
   // Funciones para Google Maps
   const onAutocompleteLoad = (auto: google.maps.places.Autocomplete) => {
@@ -298,6 +331,10 @@ export default function CompanyProfilePage() {
             longitud: formData.longitud
           });
         }
+        // El nombre del representante también es el de la cuenta (la API
+        // actualiza User.nombre): la tarjeta de usuario del AppShell se
+        // refresca sin esperar a cambiar de página (docs/DISENO.md §4).
+        notifyAuthChanged();
         // Limpiar mensaje de éxito después de 3 segundos
         setTimeout(() => setSuccess(null), 3000);
       } else {
@@ -317,245 +354,171 @@ export default function CompanyProfilePage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-button-orange mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando perfil...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonPagina conCifras={false} />;
   }
 
   if (error && !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/company/dashboard')}
-            className="px-6 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90 transition-colors"
-          >
-            Volver al Dashboard
-          </button>
+      <>
+        <PageHeader antetitulo="Empresa" titulo="Perfil de empresa" />
+        <div
+          role="alert"
+          className="flex flex-col gap-4 rounded-xl border border-danger/30 bg-danger-tint p-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-start gap-3 font-medium text-danger-dark">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-none" aria-hidden="true" />
+            {error}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variante="contorno"
+              icono={RefreshCw}
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                fetchProfile();
+              }}
+            >
+              Reintentar
+            </Button>
+            <Button variante="secundario" icono={ArrowLeft} onClick={() => router.push('/company/dashboard')}>
+              Volver al panel
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-custom-beige py-8">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header - Responsive */}
-        <div className="mb-6 md:mb-8">
-          <button
-            onClick={() => router.push('/company/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 text-sm md:text-base"
-          >
-            <ArrowLeft size={18} />
-            Volver al Dashboard
-          </button>
-          <h1 className="text-2xl md:text-3xl font-bold text-title-dark flex items-center gap-2 md:gap-3">
-            <Building2 className="text-button-green w-6 h-6 md:w-8 md:h-8" />
-            Perfil de Empresa
-          </h1>
-          <p className="text-gray-600 mt-2 text-sm md:text-base">
-            Actualiza la información de tu empresa
-          </p>
-        </div>
+    <>
+      <PageHeader
+        antetitulo="Empresa"
+        titulo="Perfil de empresa"
+        descripcion="Actualiza la información de tu empresa. Es la que INAKAT usa para tus vacantes y tu facturación."
+      />
 
-        {/* Mensajes de estado */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 text-red-700">
-            <AlertCircle size={20} />
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 p-4 bg-green-100 border border-green-300 rounded-lg flex items-center gap-3 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-          {/* Datos del Representante */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-            <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <User className="text-button-green" size={18} />
-              Datos del Representante
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
-                </label>
-                <input
-                  type="text"
-                  name="nombre"
-                  value={formData.nombre}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Apellido Paterno
-                </label>
-                <input
-                  type="text"
-                  name="apellidoPaterno"
-                  value={formData.apellidoPaterno}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Apellido Materno
-                </label>
-                <input
-                  type="text"
-                  name="apellidoMaterno"
-                  value={formData.apellidoMaterno}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Datos de la Empresa */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-            <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Building2 className="text-button-green" size={18} />
-              Datos de la Empresa
-            </h2>
-            <div className="space-y-4">
-              {/* FEAT-1b: Logo de empresa */}
-              <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
-                <div className="relative">
-                  <CompanyLogo
-                    logoUrl={profile?.logoUrl}
-                    companyName={profile?.nombreEmpresa || 'Empresa'}
-                    size="xl"
+      {/* Formulario */}
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="min-w-0 space-y-6">
+            {/* Datos del Representante */}
+            <Card titulo="Datos del representante" descripcion="La persona que trata con INAKAT en nombre de la empresa.">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <FormField etiqueta="Nombre" requerido>
+                  <Input
+                    type="text"
+                    name="nombre"
+                    value={formData.nombre}
+                    onChange={handleChange}
+                    autoComplete="given-name"
                   />
-                  {uploadingLogo && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
-                      <Loader2 className="animate-spin text-white" size={24} />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="cursor-pointer bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm hover:bg-gray-50 inline-flex items-center gap-2">
-                    <Camera size={16} />
-                    {profile?.logoUrl ? 'Cambiar logo' : 'Subir logo'}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleLogoChange}
-                      disabled={uploadingLogo}
+                </FormField>
+                <FormField etiqueta="Apellido paterno" requerido>
+                  <Input
+                    type="text"
+                    name="apellidoPaterno"
+                    value={formData.apellidoPaterno}
+                    onChange={handleChange}
+                    autoComplete="family-name"
+                  />
+                </FormField>
+                <FormField etiqueta="Apellido materno" opcional>
+                  <Input
+                    type="text"
+                    name="apellidoMaterno"
+                    value={formData.apellidoMaterno}
+                    onChange={handleChange}
+                  />
+                </FormField>
+              </div>
+            </Card>
+
+            {/* Datos de la Empresa */}
+            <Card titulo="Datos de la empresa" descripcion="Nombre comercial, razón social y contacto.">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField etiqueta="Nombre de empresa" requerido>
+                    <Input
+                      type="text"
+                      name="nombreEmpresa"
+                      value={formData.nombreEmpresa}
+                      onChange={handleChange}
+                      autoComplete="organization"
                     />
-                  </label>
-                  <p className="text-xs text-gray-400 mt-1">PNG, JPG o WebP. Máx 2MB.</p>
+                  </FormField>
+                  <FormField etiqueta="Razón social" requerido>
+                    <Input
+                      type="text"
+                      name="razonSocial"
+                      value={formData.razonSocial}
+                      onChange={handleChange}
+                    />
+                  </FormField>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre de Empresa *
-                  </label>
-                  <input
+
+                {/* RFC - Solo lectura */}
+                <FormField etiqueta="RFC" ayuda="El RFC identifica a tu empresa y no se puede editar.">
+                  <Input
                     type="text"
-                    name="nombreEmpresa"
-                    value={formData.nombreEmpresa}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                    required
+                    value={profile?.rfc ?? ''}
+                    readOnly
+                    prefijo={<FileText />}
+                    className="bg-mist text-ink-muted hover:border-line-strong focus:ring-0"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Razón Social *
-                  </label>
-                  <input
-                    type="text"
-                    name="razonSocial"
-                    value={formData.razonSocial}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                    required
-                  />
+                </FormField>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField etiqueta="Correo de empresa" requerido>
+                    <Input
+                      type="email"
+                      name="correoEmpresa"
+                      value={formData.correoEmpresa}
+                      onChange={handleChange}
+                      autoComplete="email"
+                      prefijo={<Mail />}
+                    />
+                  </FormField>
+                  <FormField etiqueta="Sitio web" opcional ayuda="Con https://, por ejemplo https://ejemplo.com">
+                    <Input
+                      type="url"
+                      name="sitioWeb"
+                      value={formData.sitioWeb}
+                      onChange={handleChange}
+                      placeholder="https://ejemplo.com"
+                      autoComplete="url"
+                      prefijo={<Globe />}
+                    />
+                  </FormField>
                 </div>
               </div>
+            </Card>
 
-              {/* RFC - Solo lectura */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  RFC
-                  <span className="ml-2 text-xs text-gray-500">(No editable)</span>
-                </label>
-                <div className="w-full p-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 flex items-center gap-2">
-                  <FileText size={16} className="text-gray-400" />
-                  {profile?.rfc}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                    <Mail size={14} />
-                    Correo de Empresa *
-                  </label>
-                  <input
-                    type="email"
-                    name="correoEmpresa"
-                    value={formData.correoEmpresa}
-                    onChange={handleChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                    <Globe size={14} />
-                    Sitio Web
-                  </label>
-                  <input
-                    type="url"
-                    name="sitioWeb"
-                    value={formData.sitioWeb}
-                    onChange={handleChange}
-                    placeholder="https://ejemplo.com"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <MapPin size={14} />
-                  Dirección de la Empresa *
-                </label>
-
-                {mapLoadError && (
-                  <p className="text-red-500 text-sm mb-2">Error al cargar el mapa</p>
-                )}
-
-                {!isMapLoaded ? (
-                  <div className="w-full h-[250px] bg-gray-100 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">Cargando mapa...</p>
+            {/* Dirección */}
+            <Card titulo="Dirección de la empresa" descripcion="Se usa para calcular la distancia de cada candidato a tus vacantes.">
+              {mapaNoDisponible ? (
+                <MapaNoDisponible
+                  direccion={formData.direccionEmpresa}
+                  conUbicacion={formData.latitud != null && formData.longitud != null}
+                />
+              ) : !isMapLoaded ? (
+                <div className="space-y-3" role="status">
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                  <div className="flex h-[260px] w-full items-center justify-center rounded-xl bg-mist">
+                    <p className="flex items-center gap-2 text-sm text-ink-muted">
+                      <MapPin className="h-4 w-4" aria-hidden="true" />
+                      Cargando mapa...
+                    </p>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Autocomplete de Google Places */}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Autocomplete de Google Places */}
+                  <FormField
+                    etiqueta="Dirección"
+                    requerido
+                    ayuda="Busca tu dirección o haz clic en el mapa para seleccionar la ubicación exacta"
+                  >
                     <Autocomplete
                       onLoad={onAutocompleteLoad}
                       onPlaceChanged={onPlaceChanged}
@@ -564,19 +527,20 @@ export default function CompanyProfilePage() {
                         types: ['address']
                       }}
                     >
-                      <input
+                      <Input
                         type="text"
                         value={formData.direccionEmpresa}
                         onChange={(e) =>
                           setFormData(prev => ({ ...prev, direccionEmpresa: e.target.value }))
                         }
                         placeholder="Busca tu dirección..."
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                        required
+                        prefijo={<MapPin />}
                       />
                     </Autocomplete>
+                  </FormField>
 
-                    {/* Mapa */}
+                  {/* Mapa (su envoltorio es donde useFalloMapa busca el aviso de Google) */}
+                  <div ref={contenedorMapaRef} className="overflow-hidden rounded-xl border border-line">
                     <GoogleMap
                       mapContainerStyle={mapContainerStyle}
                       zoom={16}
@@ -598,62 +562,117 @@ export default function CompanyProfilePage() {
                         }}
                       />
                     </GoogleMap>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
 
-                    <p className="text-xs text-gray-500">
-                      Busca tu dirección o haz clic en el mapa para seleccionar la ubicación exacta
-                    </p>
+          {/* Columna lateral: logo y cuenta */}
+          <div className="min-w-0 space-y-6">
+            {/* FEAT-1b: Logo de empresa */}
+            <Card titulo="Logo" descripcion="Aparece en tus vacantes y en tu panel.">
+              <div className="flex items-center gap-4 xl:flex-col xl:items-start">
+                <div className="relative">
+                  <CompanyLogo
+                    logoUrl={profile?.logoUrl}
+                    companyName={profile?.nombreEmpresa || 'Empresa'}
+                    size="xl"
+                    className="border border-line"
+                  />
+                  {uploadingLogo && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-ink/60" role="status">
+                      <Loader2 className="animate-spin text-white" size={24} aria-hidden="true" />
+                      <span className="sr-only">Subiendo logo…</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {/* El input va dentro de la etiqueta y con sr-only (no hidden): así
+                      se alcanza con el teclado y el anillo de foco se ve en el botón. */}
+                  <label
+                    className={cn(
+                      clasesBoton({ variante: 'contorno', tamano: 'sm' }),
+                      // ring y no outline: cn (tailwind-merge 3) descarta `outline` junto a `outline-2`.
+                      'cursor-pointer focus-within:ring-2 focus-within:ring-teal focus-within:ring-offset-2',
+                      uploadingLogo && 'pointer-events-none opacity-50'
+                    )}
+                  >
+                    <Camera aria-hidden="true" />
+                    {profile?.logoUrl ? 'Cambiar logo' : 'Subir logo'}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleLogoChange}
+                      disabled={uploadingLogo}
+                    />
+                  </label>
+                  <p className="mt-1.5 text-xs text-ink-muted">PNG, JPG o WebP. Máx 2MB.</p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Información adicional (solo lectura) */}
+            <Card titulo="Tu cuenta">
+              <dl className="space-y-3 text-sm">
+                {profile?.status && (
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-ink-muted">Estado</dt>
+                    <dd>
+                      <StatusBadge estado={profile.status} contexto="solicitud" />
+                    </dd>
                   </div>
                 )}
-              </div>
-            </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-ink-muted">Cuenta creada</dt>
+                  <dd
+                    className="text-right font-medium tabular-nums text-ink"
+                    title={profile?.createdAt ? fechaLarga(profile.createdAt) : undefined}
+                  >
+                    {fechaCorta(profile?.createdAt)}
+                  </dd>
+                </div>
+                {profile?.approvedAt && (
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-ink-muted">Aprobada</dt>
+                    <dd className="text-right font-medium tabular-nums text-ink" title={fechaLarga(profile.approvedAt)}>
+                      {fechaCorta(profile.approvedAt)}
+                    </dd>
+                  </div>
+                )}
+                {profile?.userEmail && (
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-ink-muted">Acceso</dt>
+                    <dd className="min-w-0 break-all text-right font-medium text-ink">{profile.userEmail}</dd>
+                  </div>
+                )}
+              </dl>
+            </Card>
           </div>
+        </div>
 
-          {/* Información adicional (solo lectura) */}
-          <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-            <p className="text-sm text-gray-600">
-              <span className="font-medium">Cuenta creada:</span>{' '}
-              {profile?.createdAt
-                ? new Date(profile.createdAt).toLocaleDateString('es-MX', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })
-                : '-'}
-            </p>
-            {profile?.approvedAt && (
-              <p className="text-sm text-gray-600 mt-1">
-                <span className="font-medium">Aprobada:</span>{' '}
-                {new Date(profile.approvedAt).toLocaleDateString('es-MX', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </p>
-            )}
-          </div>
+        {/* Botón Guardar: barra fija abajo mientras se edita el formulario */}
+        <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <p className="hidden text-[13px] text-ink-muted sm:block">
+            Los campos con <span className="text-danger" aria-hidden="true">*</span>
+            <span className="sr-only">asterisco</span> son obligatorios.
+          </p>
+          <Button
+            type="submit"
+            icono={Save}
+            cargando={saving}
+            textoCargando="Guardando..."
+            className="w-full sm:w-auto"
+          >
+            Guardar cambios
+          </Button>
+        </div>
+      </form>
 
-          {/* Botón Guardar */}
-          <div className="flex justify-center md:justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full md:w-auto px-8 py-3 bg-button-green text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save size={20} />
-                  Guardar Cambios
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      {/* Mensajes de estado: arriba y a la vista, estés donde estés del formulario. */}
+      <Toast tono="error" mensaje={error} alCerrar={() => setError(null)} duracion={0} />
+      <Toast tono="exito" mensaje={success} alCerrar={() => setSuccess(null)} duracion={0} />
+    </>
   );
 }
