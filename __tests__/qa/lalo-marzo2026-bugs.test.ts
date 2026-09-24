@@ -43,8 +43,10 @@ describe('Bug A: Vacante saved as draft before credit redirect', () => {
     expect(content).toContain("router.push('/credits/purchase')");
   });
 
-  it('modal button should say "Comprar Créditos y Guardar en Borrador"', () => {
-    expect(content).toContain('Comprar Créditos y Guardar en Borrador');
+  it('modal button should say "Comprar créditos y guardar en borrador"', () => {
+    // Rediseño «Arco» (sep 2026): las etiquetas van en mayúscula de frase. La
+    // intención sigue: el botón dice que guarda el borrador ANTES de ir a comprar.
+    expect(content).toMatch(/Comprar créditos y guardar en borrador/i);
   });
 
   it('modal button should be disabled while saving', () => {

@@ -58,9 +58,12 @@ const listado = (jobs: unknown[]) => ({
   stats: { total: jobs.length, unassigned: 0, partial: 1, assigned: 0, inProgress: 0, completed: 0 }
 });
 
-/** Tarjeta (vista móvil, la primera en el DOM) de una vacante. */
+/**
+ * Fila de una vacante. Desde el rediseño es UNA sola tabla (DataTable) que en
+ * móvil se ve como tarjetas: no hay dos copias de cada fila en el DOM.
+ */
 const tarjeta = (titulo: string) =>
-  screen.getAllByText(titulo)[0].closest('div.shadow-sm') as HTMLElement;
+  screen.getAllByText(titulo)[0].closest('tr') as HTMLElement;
 
 describe('/admin/assignments', () => {
   let confirmSpy: jest.SpyInstance;
@@ -91,8 +94,8 @@ describe('/admin/assignments', () => {
     await waitFor(() => expect(posts()).toHaveLength(1));
     await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(3));
 
-    // La pantalla no se sustituye por el spinner y la fila 2 conserva su elección.
-    expect(screen.getByText('Gestión de Vacantes')).toBeInTheDocument();
+    // La pantalla no se sustituye por el esqueleto y la fila 2 conserva su elección.
+    expect(screen.getByRole('heading', { level: 1, name: /Asignar equipo/ })).toBeInTheDocument();
     await waitFor(() =>
       expect(
         (within(tarjeta('Vacante 2')).getAllByRole('combobox')[0] as HTMLSelectElement).value
@@ -120,7 +123,12 @@ describe('/admin/assignments', () => {
     const select = within(tarjeta('Vacante 1')).getAllByRole('combobox')[0] as HTMLSelectElement;
     expect(select.value).toBe('9');
     expect(select.selectedOptions[0].textContent).toContain('Laura Baja');
-    expect(select.selectedOptions[0].textContent).toContain('desactivado');
+    // El aviso ya no va en el texto de la opción (el select lo recortaba): es
+    // una insignia junto al select, enlazada con aria-describedby, y en la
+    // lista desplegada la opción cuelga del grupo «Desactivado».
+    const aviso = document.getElementById(select.getAttribute('aria-describedby') || '');
+    expect(aviso).toHaveTextContent('Desactivado · reasigna');
+    expect((select.selectedOptions[0].parentElement as HTMLOptGroupElement).label).toBe('Desactivado');
   });
 
   it('ADM-058: se puede retirar el equipo de una vacante (con confirmación)', async () => {
@@ -185,6 +193,90 @@ describe('/admin/assignments', () => {
     await screen.findAllByText('Vacante 1');
 
     expect(screen.getAllByText('Incompletas').length).toBeGreaterThan(0);
-    expect(within(tarjeta('Vacante 1')).getByText('Incompleta')).toBeInTheDocument();
+    // El estado sale en su columna y, cuando la tabla es estrecha, también bajo
+    // el título (data-solo-bajo; CSS enseña uno u otro): la insignia dice el
+    // nombre de su pestaña, «Incompletas», y nunca «Asignadas».
+    const fila = within(tarjeta('Vacante 1'));
+    expect(fila.getAllByText('Incompletas').length).toBeGreaterThan(0);
+    expect(fila.queryByText('Asignadas')).not.toBeInTheDocument();
+    expect(fila.queryByText('Asignado')).not.toBeInTheDocument();
+  });
+
+  it('la insignia de cada fila usa la etiqueta de la pestaña en la que cae (mismo criterio que la API)', async () => {
+    const equipo = (recruiterStatus: string, specialistStatus: string) => ({
+      id: 10,
+      jobId: 0,
+      recruiterId: 1,
+      specialistId: 5,
+      recruiterStatus,
+      specialistStatus
+    });
+    const jobs = [
+      vacante(1),
+      vacante(2, equipo('pending', 'pending')),
+      vacante(3, equipo('reviewing', 'pending')),
+      vacante(4, equipo('sent_to_specialist', 'evaluating')),
+      vacante(5, equipo('sent_to_specialist', 'sent_to_company'))
+    ];
+    mockFetch.mockResolvedValue(respuesta(listado(jobs)));
+
+    render(<AssignmentsPage />);
+    await screen.findAllByText('Vacante 1');
+
+    // Sin contar las opciones de los selects («Sin asignar» también es una).
+    const dice = (titulo: string, etiqueta: string) =>
+      expect(
+        within(tarjeta(titulo)).getAllByText(etiqueta, { ignore: 'option, script, style' }).length
+      ).toBeGreaterThan(0);
+    dice('Vacante 1', 'Sin asignar');
+    dice('Vacante 2', 'Asignadas');
+    dice('Vacante 3', 'En proceso');
+    dice('Vacante 3', 'con el reclutador');
+    dice('Vacante 4', 'En proceso');
+    dice('Vacante 4', 'con el especialista');
+    dice('Vacante 5', 'Completadas');
+    // El vocabulario viejo, que no coincidía con las pestañas, ya no sale.
+    for (const viejo of ['Asignado', 'Con reclutador', 'Con especialista', 'Completado', 'Incompleta']) {
+      expect(screen.queryByText(viejo)).not.toBeInTheDocument();
+    }
+  });
+
+  it('la especialidad no va en el texto de la opción: agrupa la lista y se lee bajo el select', async () => {
+    const jobs = [
+      vacante(1, {
+        id: 10,
+        jobId: 1,
+        recruiterId: 1,
+        specialistId: 5,
+        recruiterStatus: 'pending',
+        specialistStatus: 'pending'
+      })
+    ];
+    mockFetch.mockResolvedValue(respuesta(listado(jobs)));
+
+    render(<AssignmentsPage />);
+    await screen.findAllByText('Vacante 1');
+
+    const especialista = within(tarjeta('Vacante 1')).getAllByRole('combobox')[1] as HTMLSelectElement;
+    expect(especialista.value).toBe('5');
+    expect(especialista.selectedOptions[0].textContent?.trim()).toBe('Eva Eje');
+    expect((especialista.selectedOptions[0].parentElement as HTMLOptGroupElement).label).toBe('Tecnología');
+    const ayuda = document.getElementById(especialista.getAttribute('aria-describedby') || '');
+    expect(ayuda).toHaveTextContent('Especialidad: Tecnología');
+  });
+
+  it('en la tarjeta (móvil) «Guardar» va al pie, a lo ancho, y no en la esquina sobre la empresa', async () => {
+    mockFetch.mockResolvedValue(respuesta(listado([vacante(1)])));
+
+    render(<AssignmentsPage />);
+    await screen.findAllByText('Vacante 1');
+
+    const celda = within(tarjeta('Vacante 1')).getByRole('button', { name: /Guardar/ }).closest('td') as HTMLElement;
+    // 'completa' = fila propia a todo el ancho de la tarjeta (app.css), después
+    // de los selects. En la esquina ('acciones') el w-px de la tabla dejaba la
+    // columna en 1 px y el botón se montaba sobre empresa, ciudad y candidatos.
+    expect(celda).toHaveAttribute('data-tarjeta', 'completa');
+    // El w-px sólo se aplica en modo tabla (container query), nunca suelto.
+    expect(celda.className.split(/\s+/)).not.toContain('w-px');
   });
 });

@@ -409,7 +409,8 @@ describe('CreateJobForm', () => {
     await waitFor(() =>
       expect(screen.getByText(/para aplicar este cambio/i)).toBeInTheDocument()
     );
-    expect(screen.getByText(/2\s+créditos/, { selector: 'strong.text-red-600' })).toBeInTheDocument();
+    // La cifra que falta va destacada en el color de peligro del sistema (text-danger).
+    expect(screen.getByText(/2\s+créditos/, { selector: 'strong.text-danger' })).toBeInTheDocument();
 
     const llamadasGuardado = () =>
       mockFetch.mock.calls.filter(([, init]) => init?.method === 'PUT').length;

@@ -12,7 +12,7 @@
  *  - UI-029: useCountUp cancela su bucle y respeta "reducir movimiento".
  */
 import React from 'react';
-import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
+import { render, screen, fireEvent, renderHook, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ExpertsSection from '@/components/sections/aboutus/ExpertsSection';
 import AboutUsSection from '@/components/sections/aboutus/AboutUsSection';
@@ -34,11 +34,18 @@ describe('UI-028: modal de detalle de experto', () => {
     expect(dialogo).toHaveAccessibleName('Guillermo Sánchez');
   });
 
-  it('mueve el foco al botón Cerrar y bloquea el scroll del fondo', () => {
+  // Desde el rediseño «Arco» (sept. 2026) la ficha usa el Modal del sistema:
+  // al abrir, el foco entra al diálogo (a su primer campo o, sin campos, al
+  // propio diálogo, que anuncia el título) y el scroll se bloquea en <html>.
+  it('mete el foco en el diálogo y bloquea el scroll del fondo', async () => {
     abrirPrimerExperto();
 
-    expect(screen.getByRole('button', { name: 'Cerrar' })).toHaveFocus();
-    expect(document.body.style.overflow).toBe('hidden');
+    const dialogo = screen.getByRole('dialog');
+    await waitFor(() =>
+      expect(dialogo).toContainElement(document.activeElement as HTMLElement)
+    );
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument();
+    expect(document.documentElement.style.overflow).toBe('hidden');
   });
 
   it('Escape lo cierra, devuelve el foco a la tarjeta y libera el scroll', () => {
@@ -48,21 +55,32 @@ describe('UI-028: modal de detalle de experto', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(tarjeta).toHaveFocus();
-    expect(document.body.style.overflow).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
+  });
+
+  it('el botón Cerrar también lo cierra y devuelve el foco a la tarjeta', () => {
+    const tarjeta = abrirPrimerExperto();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(tarjeta).toHaveFocus();
   });
 });
 
 describe('UI-027: el hover de las tarjetas no lo anula el reveal', () => {
-  it('la tarjeta con hover:-translate-y-1 no lleva animate-on-scroll; su envoltorio sí', () => {
+  it('el revelado ligado al scroll vive en el envoltorio, no en la tarjeta con hover', () => {
     render(<ExpertsSection />);
 
     const tarjeta = screen.getByRole('button', { name: /Guillermo Sánchez/i });
-    expect(tarjeta.className).toMatch(/hover:-translate-y-1/);
-    expect(tarjeta.className).not.toMatch(/animate-on-scroll/);
+    // La tarjeta lleva su propio hover (about.css: .ab-experto:hover) …
+    expect(tarjeta.className).toMatch(/\bab-experto\b/);
+    // … y NO el revelado, cuyo transform lo anularía.
+    expect(tarjeta.className).not.toMatch(/hm-rv|animate-on-scroll/);
     expect(tarjeta.getAttribute('style') ?? '').not.toMatch(/transition-delay/);
 
     const envoltorio = tarjeta.parentElement as HTMLElement;
-    expect(envoltorio.className).toMatch(/animate-on-scroll/);
+    expect(envoltorio.className).toMatch(/\bhm-rv\b/);
   });
 });
 
@@ -70,22 +88,27 @@ describe('UI-024 / UI-025: primer pantallazo de /about', () => {
   it('la imagen principal no se carga en diferido', () => {
     render(<AboutUsSection />);
 
-    const imagen = screen.getByAltText('Equipo INAKAT');
+    // Es una foto de archivo: el alt ya no la presenta como «Equipo INAKAT».
+    const imagen = screen.getByAltText(/Fotografía de archivo/);
     expect(imagen).not.toHaveAttribute('loading', 'lazy');
   });
 
   it('el encabezado principal es un h1', () => {
     render(<AboutUsSection />);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /Quiénes\s*Somos/
-    );
+    const h1 = screen.getByRole('heading', { level: 1 });
+    // Titular partido en máscaras: el nombre accesible completo va en el h1.
+    expect(h1).toHaveAccessibleName(/Quiénes\s*somos/i);
+    expect(h1).toHaveTextContent(/Quiénes\s*somos/i);
   });
 
   it('las fotos de expertos (bajo el pliegue) sí se cargan en diferido', () => {
     render(<ExpertsSection />);
 
-    const foto = screen.getByAltText('Guillermo Sánchez');
+    // La foto de la tarjeta es decorativa (el nombre ya va en texto).
+    const tarjeta = screen.getByRole('button', { name: /Guillermo Sánchez/i });
+    const foto = tarjeta.querySelector('img');
+    expect(foto).not.toBeNull();
     expect(foto).toHaveAttribute('loading', 'lazy');
   });
 });

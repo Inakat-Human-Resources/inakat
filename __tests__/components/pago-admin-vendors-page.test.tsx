@@ -110,10 +110,15 @@ describe('Panel de vendedores y comisiones', () => {
     mockFetch.mockImplementation((url: string) => respuestaPorDefecto(String(url)));
   });
 
+  // Rediseño (sep 2026): las secciones son pestañas (role="tab"), los modales
+  // se pintan al final de <body> (portal, fuera de `container`) y los botones
+  // van en minúscula («Marcar pagada», «Confirmar pago», «Crear vendedor»).
   const abrirPendientes = async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Pendientes/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Pendientes/ }));
     await screen.findByText('Empresa 1');
   };
+
+  const campoComprobante = () => document.querySelector('input[type="url"]') as HTMLInputElement;
 
   it('PAGO-007: pide la página y el tamaño de tanda a las dos APIs', async () => {
     render(<AdminVendorsPage />);
@@ -183,7 +188,7 @@ describe('Panel de vendedores y comisiones', () => {
     });
 
     render(<AdminVendorsPage />);
-    fireEvent.click(screen.getByRole('button', { name: /Pendientes/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Pendientes/ }));
 
     await screen.findByText('No se pudieron cargar los datos');
     expect(screen.getByText('Error al obtener comisiones')).toBeInTheDocument();
@@ -205,45 +210,42 @@ describe('Panel de vendedores y comisiones', () => {
   });
 
   it('PAGO-010: el comprobante no se hereda de la comisión anterior', async () => {
-    const { container } = render(<AdminVendorsPage />);
+    render(<AdminVendorsPage />);
     await abrirPendientes();
 
-    const botonesPagar = screen.getAllByRole('button', { name: 'Marcar Pagada' });
+    const botonesPagar = screen.getAllByRole('button', { name: /^Marcar pagada/ });
 
     // Comisión 1: se escribe una URL y se cancela.
     fireEvent.click(botonesPagar[0]);
-    const campo = () => container.querySelector('input[type="url"]') as HTMLInputElement;
-    fireEvent.change(campo(), { target: { value: 'https://banco/comprobante-uno.pdf' } });
+    fireEvent.change(campoComprobante(), { target: { value: 'https://banco/comprobante-uno.pdf' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     // Comisión 2: el campo tiene que venir en blanco.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Marcar Pagada' })[1]);
-    expect(campo().value).toBe('');
+    fireEvent.click(screen.getAllByRole('button', { name: /^Marcar pagada/ })[1]);
+    expect(campoComprobante().value).toBe('');
   });
 
   it('PAGO-013: un comprobante sin http(s) se rechaza antes de tocar la API', async () => {
-    const { container } = render(<AdminVendorsPage />);
+    render(<AdminVendorsPage />);
     await abrirPendientes();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Marcar Pagada' })[0]);
-    const campo = container.querySelector('input[type="url"]') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: 'drive.google.com/file/abc' } });
+    fireEvent.click(screen.getAllByRole('button', { name: /^Marcar pagada/ })[0]);
+    fireEvent.change(campoComprobante(), { target: { value: 'drive.google.com/file/abc' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar pago/ }));
 
     await screen.findByText(/debe ser un enlace completo/);
     expect(mockFetch.mock.calls.some(([, opciones]) => opciones?.method === 'PUT')).toBe(false);
   });
 
   it('PAGO-013: un comprobante válido sí se envía', async () => {
-    const { container } = render(<AdminVendorsPage />);
+    render(<AdminVendorsPage />);
     await abrirPendientes();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Marcar Pagada' })[0]);
-    const campo = container.querySelector('input[type="url"]') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: 'https://banco.mx/comprobante.pdf' } });
+    fireEvent.click(screen.getAllByRole('button', { name: /^Marcar pagada/ })[0]);
+    fireEvent.change(campoComprobante(), { target: { value: 'https://banco.mx/comprobante.pdf' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar pago/ }));
 
     await waitFor(() =>
       expect(mockFetch.mock.calls.some(([, opciones]) => opciones?.method === 'PUT')).toBe(true)
@@ -259,15 +261,19 @@ describe('Panel de vendedores y comisiones', () => {
     const abrirModal = async () => {
       render(<AdminVendorsPage />);
       await screen.findByText('Vendedor 1');
-      fireEvent.click(screen.getByRole('button', { name: /Nuevo Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Nuevo vendedor/ }));
       await screen.findByPlaceholderText('Ej: VENDEDOR10');
     };
 
+    // Los campos se encuentran por su etiqueta visible (el placeholder ya no
+    // repite la etiqueta; la regla de la contraseña es la ayuda del campo).
+    const campoContrasena = () => screen.getByLabelText(/^Contraseña/);
+
     const rellenarValido = (container: HTMLElement) => {
-      fireEvent.change(screen.getByPlaceholderText('Nombre'), { target: { value: 'Juan' } });
-      fireEvent.change(screen.getByPlaceholderText('Apellido Paterno'), { target: { value: 'Pérez' } });
+      fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: 'Juan' } });
+      fireEvent.change(screen.getByLabelText(/^Apellido paterno/), { target: { value: 'Pérez' } });
       fireEvent.change(screen.getByPlaceholderText('vendedor@ejemplo.com'), { target: { value: 'juan@inakat.com' } });
-      fireEvent.change(screen.getByPlaceholderText(/Mínimo 8 caracteres/), { target: { value: 'Password1' } });
+      fireEvent.change(campoContrasena(), { target: { value: 'Password1' } });
       fireEvent.change(screen.getByPlaceholderText('Ej: VENDEDOR10'), { target: { value: 'JUAN10' } });
       return container.querySelectorAll('input[type="number"]');
     };
@@ -279,7 +285,7 @@ describe('Panel de vendedores y comisiones', () => {
       const numericos = rellenarValido(document.body);
       fireEvent.change(numericos[1], { target: { value: '' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await screen.findByText(/% de comisión debe ser un número entre 0 y 99/);
       expect(hayPost()).toBe(false);
@@ -290,7 +296,7 @@ describe('Panel de vendedores y comisiones', () => {
       const numericos = rellenarValido(document.body);
       fireEvent.change(numericos[0], { target: { value: '150' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await screen.findByText(/% de descuento debe ser un número entre 0 y 99/);
       expect(hayPost()).toBe(false);
@@ -301,7 +307,7 @@ describe('Panel de vendedores y comisiones', () => {
       rellenarValido(document.body);
       fireEvent.change(screen.getByPlaceholderText('vendedor@ejemplo.com'), { target: { value: 'juan@' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await screen.findByText('El email no tiene un formato válido');
       expect(hayPost()).toBe(false);
@@ -312,7 +318,7 @@ describe('Panel de vendedores y comisiones', () => {
       rellenarValido(document.body);
       fireEvent.change(screen.getByPlaceholderText('Ej: VENDEDOR10'), { target: { value: 'A' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await screen.findByText(/entre 4 y 20 caracteres/);
       expect(hayPost()).toBe(false);
@@ -321,9 +327,9 @@ describe('Panel de vendedores y comisiones', () => {
     it('PAGO-015: la contraseña usa la misma política que el registro', async () => {
       await abrirModal();
       rellenarValido(document.body);
-      fireEvent.change(screen.getByPlaceholderText(/Mínimo 8 caracteres/), { target: { value: '123456' } });
+      fireEvent.change(campoContrasena(), { target: { value: '123456' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await screen.findByText(/al menos 8 caracteres, una mayúscula y un número/);
       expect(hayPost()).toBe(false);
@@ -335,7 +341,7 @@ describe('Panel de vendedores y comisiones', () => {
       fireEvent.change(numericos[0], { target: { value: '15' } });
       fireEvent.change(numericos[1], { target: { value: '12.5' } });
 
-      fireEvent.click(screen.getByRole('button', { name: /Crear Vendedor/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Crear vendedor/ }));
 
       await waitFor(() => expect(hayPost()).toBe(true));
       const llamadaPost = mockFetch.mock.calls.find(([, opciones]) => opciones?.method === 'POST');

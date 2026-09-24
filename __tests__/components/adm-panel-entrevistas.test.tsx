@@ -103,7 +103,8 @@ describe('/admin/interviews', () => {
 
     expect(await screen.findByText('Candidato 101')).toBeInTheDocument();
     expect(llamadas('page=2')).toHaveLength(1);
-    const pendientes = screen.getByRole('button', { name: /Pendientes/ });
+    // Las cuatro vistas son pestañas (role="tab") con su contador.
+    const pendientes = screen.getByRole('tab', { name: /Pendientes/ });
     expect(pendientes).toHaveTextContent('1');
   });
 
@@ -149,9 +150,10 @@ describe('/admin/interviews', () => {
     ]]);
     render(<AdminInterviewsPage />);
 
-    await screen.findByRole('button', { name: /Agendadas/ });
-    fireEvent.click(screen.getByRole('button', { name: /Agendadas/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+    await screen.findByRole('tab', { name: /Agendadas/ });
+    fireEvent.click(screen.getByRole('tab', { name: /Agendadas/ }));
+    // «Editar la entrevista de Candidato 2» (el nombre lleva a quién se refiere).
+    fireEvent.click(await screen.findByRole('button', { name: /^Editar/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar entrevista' }));
 
     await waitFor(() => expect(llamadas('/api/admin/interviews/2')).toHaveLength(1));
@@ -169,20 +171,23 @@ describe('/admin/interviews', () => {
     expect(await screen.findByText('La fecha no es válida')).toBeInTheDocument();
   });
 
+  // El modal se pinta al final de <body> (portal de Modal), fuera del
+  // `container` del render: los campos se buscan por su etiqueta visible.
   it('ADM-065: una liga sin https no se confirma', async () => {
     conListado([[solicitud(1)]]);
-    const { container } = render(<AdminInterviewsPage />);
+    render(<AdminInterviewsPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Agendar/ }));
-    const inicio = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    const inicio = screen.getByLabelText(/Fecha y hora de inicio/) as HTMLInputElement;
+    expect(inicio).toHaveAttribute('type', 'datetime-local');
     const local = new Date(MANANA.getTime() - MANANA.getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 16);
     fireEvent.change(inicio, { target: { value: local } });
-    fireEvent.change(container.querySelector('input[type="url"]') as HTMLInputElement, {
-      target: { value: 'meet.google.com/abc-defg-hij' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Entrevista/ }));
+    const liga = screen.getByLabelText(/Liga de videoconferencia/) as HTMLInputElement;
+    expect(liga).toHaveAttribute('type', 'url');
+    fireEvent.change(liga, { target: { value: 'meet.google.com/abc-defg-hij' } });
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar entrevista/i }));
 
     expect(await screen.findByText(/debe empezar por https/)).toBeInTheDocument();
     expect(llamadas('/api/admin/interviews/1')).toHaveLength(0);
@@ -190,16 +195,16 @@ describe('/admin/interviews', () => {
 
   it('ADM-064: no se confirma un horario que ya pasó', async () => {
     conListado([[solicitud(1)]]);
-    const { container } = render(<AdminInterviewsPage />);
+    render(<AdminInterviewsPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Agendar/ }));
-    fireEvent.change(container.querySelector('input[type="datetime-local"]') as HTMLInputElement, {
+    fireEvent.change(screen.getByLabelText(/Fecha y hora de inicio/), {
       target: { value: '2020-01-01T10:00' }
     });
-    fireEvent.change(container.querySelector('input[type="url"]') as HTMLInputElement, {
+    fireEvent.change(screen.getByLabelText(/Liga de videoconferencia/), {
       target: { value: 'https://meet.example.com/abc' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Entrevista/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar entrevista/i }));
 
     expect(await screen.findByText(/ya pasó/)).toBeInTheDocument();
     expect(llamadas('/api/admin/interviews/1')).toHaveLength(0);

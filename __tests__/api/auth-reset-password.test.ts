@@ -156,7 +156,7 @@ describe('Page: /forgot-password', () => {
   it('should have link back to login', () => {
     const content = readFile('src/app/forgot-password/page.tsx');
     expect(content).toContain('/login');
-    expect(content).toContain('Volver al login');
+    expect(content).toContain('Volver a iniciar sesión');
   });
 });
 
@@ -206,8 +206,15 @@ describe('Page: /reset-password', () => {
   it('should show/hide password toggle', () => {
     const content = readFile('src/app/reset-password/page.tsx');
     expect(content).toContain('showPassword');
-    expect(content).toContain('Eye');
-    expect(content).toContain('EyeOff');
+    // El botón de mostrar/ocultar vive en el campo compartido de las páginas de
+    // acceso, que desde la integración del rediseño es el del sistema de diseño
+    // (src/components/ui/CampoContrasena) con el botón de 40 px.
+    expect(content).toContain('CampoContrasena');
+    const campo = readFile('src/app/login/_acceso/CampoContrasena.tsx');
+    expect(campo).toContain("from '@/components/ui/CampoContrasena'");
+    const sistema = readFile('src/components/ui/CampoContrasena.tsx');
+    expect(sistema).toContain('Eye');
+    expect(sistema).toContain('EyeOff');
   });
 });
 
@@ -321,8 +328,14 @@ describe('Scrollbar-hide CSS', () => {
   });
 
   it('specialist tabs should use scrollbar-hide', () => {
+    // Las pestañas del especialista son el componente Tabs del sistema de
+    // diseño, que es quien lleva scrollbar-hide (se comprueba en su código,
+    // no en un comentario de la página).
     const content = readFile('src/app/specialist/jobs/[jobId]/page.tsx');
-    expect(content).toContain('scrollbar-hide');
+    expect(content).toMatch(/import Tabs(, \{[^}]*\})? from '@\/components\/ui\/Tabs'/);
+    expect(content).toContain('<Tabs');
+    const tabs = readFile('src/components/ui/Tabs.tsx');
+    expect(tabs).toMatch(/role="tablist"[\s\S]*scrollbar-hide/);
   });
 });
 
@@ -332,10 +345,20 @@ describe('Scrollbar-hide CSS', () => {
 
 describe('Admin table responsive columns', () => {
   it('should hide secondary columns on mobile', () => {
+    // Desde el sistema de diseño, la tabla es un DataTable con columnas
+    // declarativas: las secundarias se esconden con `ocultarBajo` (y por
+    // debajo de md la tabla pasa a tarjetas, donde sí se ven).
     const content = readFile('src/app/admin/page.tsx');
-    // Headers and cells should have hidden classes
-    expect(content).toContain('hidden md:table-cell');
-    expect(content).toContain('hidden lg:table-cell');
+    expect(content).toContain('<DataTable');
+    // Al menos dos columnas secundarias se esconden al estrecharse la pantalla
+    // (hoy: la fecha bajo md; la especialidad y la ubicación bajo xl).
+    const ocultas = content.match(/ocultarBajo: '(md|lg|xl)'/g) ?? [];
+    expect(ocultas.length).toBeGreaterThanOrEqual(2);
+    expect(content).toContain("ocultarBajo: 'md'");
+    const css = readFile('src/app/app.css');
+    expect(css).toMatch(/\[data-ocultar='md'\][\s\S]{0,40}display: none/);
+    expect(css).toMatch(/\[data-ocultar='lg'\][\s\S]{0,40}display: none/);
+    expect(css).toMatch(/\[data-ocultar='xl'\][\s\S]{0,40}display: none/);
   });
 });
 
@@ -345,7 +368,9 @@ describe('Admin table responsive columns', () => {
 
 describe('Admin stats cards', () => {
   it('should have truncate on long labels', () => {
-    const content = readFile('src/app/admin/page.tsx');
+    // Las cifras del panel son StatCard: la etiqueta se recorta, no desborda.
+    expect(readFile('src/app/admin/page.tsx')).toContain('<StatCard');
+    const content = readFile('src/components/ui/StatCard.tsx');
     expect(content).toContain('truncate');
     expect(content).toContain('min-w-0');
   });

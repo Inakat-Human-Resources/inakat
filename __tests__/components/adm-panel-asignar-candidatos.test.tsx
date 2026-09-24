@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 
 let mockParams = new URLSearchParams();
 jest.mock('next/navigation', () => ({
@@ -125,10 +125,14 @@ const elegirVacante = async (titulo: string) => {
   fireEvent.click(await screen.findByText(titulo));
 };
 
+// Las vistas de la vacante son pestañas (role="tab") desde el rediseño.
 const irAAsignar = async () => {
-  fireEvent.click(screen.getByRole('button', { name: /Asignar Nuevos/ }));
+  fireEvent.click(screen.getByRole('tab', { name: /Asignar nuevos/ }));
   await screen.findByText('Nombre1 Apellido1');
 };
+
+// El pie de la selección: «1 candidato seleccionado» / «3 candidatos seleccionados».
+const SELECCION = /candidatos? seleccionados?/;
 
 describe('/admin/assign-candidates', () => {
   beforeEach(() => {
@@ -167,12 +171,10 @@ describe('/admin/assign-candidates', () => {
     await irAAsignar();
 
     fireEvent.click(screen.getByText('Nombre1 Apellido1'));
-    expect(screen.getByText('1 candidato(s) seleccionado(s)')).toBeInTheDocument();
+    expect(screen.getByText('1 candidato seleccionado')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Vacante 2'));
-    await waitFor(() =>
-      expect(screen.queryByText(/candidato\(s\) seleccionado\(s\)/)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText(SELECCION)).not.toBeInTheDocument());
   });
 
   it('ADM-012: "Seleccionar todos" marca por pertenencia, no por tamaño', async () => {
@@ -180,14 +182,14 @@ describe('/admin/assign-candidates', () => {
     await elegirVacante('Vacante 1');
     await irAAsignar();
 
-    // Se marca uno a mano: con 3 visibles, el botón debe completar la selección
-    // (no desmarcar) y luego, con los 3 marcados, desmarcarlos.
+    // Se marca uno a mano: con 3 visibles, la casilla debe completar la
+    // selección (no desmarcar) y luego, con los 3 marcados, desmarcarlos.
     fireEvent.click(screen.getByText('Nombre1 Apellido1'));
-    fireEvent.click(screen.getByRole('button', { name: /Seleccionar todos/ }));
-    expect(screen.getByText('3 candidato(s) seleccionado(s)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Seleccionar todos/ }));
+    expect(screen.getByText('3 candidatos seleccionados')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Seleccionar todos/ }));
-    expect(screen.queryByText(/candidato\(s\) seleccionado\(s\)/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Seleccionar todos/ }));
+    expect(screen.queryByText(SELECCION)).not.toBeInTheDocument();
   });
 
   it('ADM-012/013: cambiar un filtro recarga la lista y vacía la selección', async () => {
@@ -196,17 +198,17 @@ describe('/admin/assign-candidates', () => {
     await irAAsignar();
 
     fireEvent.click(screen.getByText('Nombre2 Apellido2'));
-    expect(screen.getByText('1 candidato(s) seleccionado(s)')).toBeInTheDocument();
+    expect(screen.getByText('1 candidato seleccionado')).toBeInTheDocument();
 
     const antes = urlsDe('/api/admin/candidates').length;
+    // En móvil los filtros se despliegan con «Filtros»; desde sm están siempre.
     fireEvent.click(screen.getByRole('button', { name: /Filtros/ }));
-    const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'Finanzas' } });
+    fireEvent.change(screen.getByLabelText('Especialidad'), { target: { value: 'Finanzas' } });
 
     await waitFor(() => expect(urlsDe('/api/admin/candidates').length).toBeGreaterThan(antes));
     const ultima = new URL(urlsDe('/api/admin/candidates').slice(-1)[0], 'http://x');
     expect(ultima.searchParams.get('profile')).toBe('Finanzas');
-    expect(screen.queryByText(/candidato\(s\) seleccionado\(s\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(SELECCION)).not.toBeInTheDocument();
   });
 
   it('ADM-011: si la API trae el conteo por candidato, no se descarga la tabla de applications', async () => {
@@ -272,22 +274,19 @@ describe('/admin/assign-candidates', () => {
     render(<AssignCandidatesPage />);
     await elegirVacante('Vacante 1');
 
-    const entrevista = await screen.findByText('Entrevista');
-    const valor = (etiqueta: HTMLElement) =>
-      Number(etiqueta.parentElement!.querySelector('p')!.textContent);
+    // Cada etapa es un <dt> (nombre) con su <dd> (cifra) en el mismo grupo.
+    await screen.findByText('Entrevista', { selector: 'dt' });
+    const valor = (nombre: string) => {
+      const etiqueta = screen.getByText(nombre, { selector: 'dt' });
+      return Number(etiqueta.parentElement!.querySelector('dd')!.textContent);
+    };
 
-    const cajas = ['Pendientes', 'En Revisión', 'Evaluación', 'Enviados', 'Entrevista', 'Contratados', 'Descartados'];
-    const suma = cajas.reduce((acc, nombre) => {
-      const etiqueta = nombre === 'Entrevista' ? entrevista : screen.getAllByText(nombre).find(
-        (el) => el.tagName === 'P' && el.className.includes('text-xs')
-      )!;
-      return acc + valor(etiqueta);
-    }, 0);
+    const cajas = ['Pendientes', 'En revisión', 'Evaluación', 'Enviados', 'Entrevista', 'Contratados', 'Descartados'];
+    const suma = cajas.reduce((acc, nombre) => acc + valor(nombre), 0);
 
     expect(suma).toBe(8);
     // 'Enviados' incluye a los que ya le interesan a la empresa.
-    const enviados = screen.getAllByText('Enviados').find((el) => el.tagName === 'P')!;
-    expect(valor(enviados)).toBe(3);
+    expect(valor('Enviados')).toBe(3);
   });
 
   it('ADM-054: una respuesta tardía de la vacante anterior no pisa el pipeline actual', async () => {
@@ -311,7 +310,7 @@ describe('/admin/assign-candidates', () => {
     await elegirVacante('Vacante 1');
     fireEvent.click(screen.getByText('Vacante 2'));
 
-    const pestana = await screen.findByRole('button', { name: /Pipeline de Candidatos/ });
+    const pestana = await screen.findByRole('tab', { name: /Pipeline/ });
     await waitFor(() => expect(pestana).toHaveTextContent('2'));
 
     await act(async () => {
@@ -325,6 +324,80 @@ describe('/admin/assign-candidates', () => {
       );
     });
 
-    expect(screen.getByRole('button', { name: /Pipeline de Candidatos/ })).not.toHaveTextContent('99');
+    expect(screen.getByRole('tab', { name: /Pipeline/ })).not.toHaveTextContent('99');
+  });
+});
+
+/**
+ * Una sola columna (< xl: el móvil y hasta 1279 px). Antes la lista vivía en
+ * una caja con scroll propio de unas tres vacantes y el detalle quedaba debajo:
+ * al elegir no pasaba nada visible. Ahora el detalle se abre en el Drawer.
+ * Sólo cambia DÓNDE se pinta: las llamadas son las mismas.
+ */
+describe('/admin/assign-candidates en una columna (< xl)', () => {
+  const matchMediaOriginal = window.matchMedia;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParams = new URLSearchParams();
+    conRutas({
+      ...rutasPorDefecto(),
+      // POST de «Asignar» (la clave de ?jobId= es más larga y gana en los GET).
+      '/api/admin/assign-candidates': () => ({ success: true, message: '1 candidato asignado' })
+    });
+    window.history.replaceState(null, '', '/admin/assign-candidates');
+    window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+      matches: query.includes('max-width: 1279.98px'),
+      media: query,
+      onchange: null,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      dispatchEvent: jest.fn()
+    })) as unknown as typeof window.matchMedia;
+  });
+
+  afterEach(() => {
+    window.matchMedia = matchMediaOriginal;
+  });
+
+  const pipelinesPedidos = (id: number) => urlsDe(`/api/admin/assign-candidates?jobId=${id}`).length;
+
+  it('elegir una vacante abre su detalle en un cajón; cerrarlo no la deselecciona ni vuelve a pedir nada', async () => {
+    render(<AssignCandidatesPage />);
+    await elegirVacante('Vacante 1');
+
+    const cajon = await screen.findByRole('dialog', { name: 'Vacante 1' });
+    expect(within(cajon).getByRole('tab', { name: /Pipeline/ })).toBeInTheDocument();
+    await waitFor(() => expect(pipelinesPedidos(1)).toBe(1));
+
+    fireEvent.click(within(cajon).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const vacante = screen.getByRole('button', { name: /Vacante 1/ });
+    expect(vacante).toHaveAttribute('aria-pressed', 'true');
+
+    // Pulsarla otra vez reabre el detalle sin volver a pedirlo.
+    fireEvent.click(vacante);
+    expect(await screen.findByRole('dialog', { name: 'Vacante 1' })).toBeInTheDocument();
+    expect(pipelinesPedidos(1)).toBe(1);
+  });
+
+  it('la barra de «Asignar» va en el pie del cajón y hace el mismo POST', async () => {
+    render(<AssignCandidatesPage />);
+    await elegirVacante('Vacante 1');
+
+    const cajon = await screen.findByRole('dialog', { name: 'Vacante 1' });
+    fireEvent.click(within(cajon).getByRole('tab', { name: /Asignar nuevos/ }));
+    fireEvent.click(await within(cajon).findByText('Nombre1 Apellido1'));
+    expect(within(cajon).getByText('1 candidato seleccionado')).toBeInTheDocument();
+
+    fireEvent.click(within(cajon).getByRole('button', { name: 'Asignar a la vacante' }));
+    await waitFor(() => {
+      const post = mockFetch.mock.calls.find(([, init]) => init?.method === 'POST' && !String(init?.body).includes('emails'));
+      expect(post).toBeTruthy();
+      expect(String(post![0])).toBe('/api/admin/assign-candidates');
+      expect(JSON.parse(String(post![1].body))).toEqual({ jobId: 1, candidateIds: [1] });
+    });
   });
 });

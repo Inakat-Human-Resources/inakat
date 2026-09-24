@@ -247,7 +247,11 @@ describe('PERF · CandidateProfileModal', () => {
 
   it('PERF-016: el alta de documentos ya no va a la ruta reservada a admin', () => {
     const inicio = MODAL.indexOf('const handleAddDocument');
-    const fn = MODAL.slice(inicio, MODAL.indexOf('onMouseDown', inicio));
+    // Rediseño 2026-09: tras handleAddDocument viene la presentación (const edad).
+    const fin = MODAL.indexOf('const edad = calculateAge', inicio);
+    expect(inicio).toBeGreaterThan(-1);
+    expect(fin).toBeGreaterThan(inicio);
+    const fn = MODAL.slice(inicio, fin);
     expect(fn.length).toBeGreaterThan(0);
     expect(fn).toContain('fetch(`/api/evaluations/candidates/${candidateId}/documents`');
     expect(fn).not.toContain('/api/admin/candidates/');
@@ -278,7 +282,9 @@ describe('PERF · CandidateProfileModal', () => {
   });
 
   it('PERF-012: el badge de estatus conoce los dos vocabularios', () => {
-    expect(MODAL).toContain('const COLOR_ESTATUS_EDUCACION: Record<string, string>');
+    // Rediseño 2026-09: el mapa da el TONO del Badge del sistema (el texto del
+    // estatus se escribe siempre).
+    expect(MODAL).toContain('const COLOR_ESTATUS_EDUCACION: Record<string, TonoBadge>');
     for (const estatus of ['Titulado', 'Completa', 'Terminado', 'Cursando', "'En curso'", 'Trunco', 'Trunca']) {
       expect(MODAL).toContain(estatus);
     }
@@ -340,33 +346,56 @@ describe('PERF · CandidateProfileModal', () => {
     expect(MODAL).toContain('newDocFile.size > MAX_ADJUNTO_BYTES');
   });
 
-  it('PERF-017/037: el overlay cierra con onMouseDown sobre sí mismo', () => {
-    expect(MODAL).toContain('onMouseDown={(e) => {');
-    expect(MODAL).toContain('if (e.target === e.currentTarget) onClose();');
-    // Ya no hay onClick={onClose} en el overlay ni stopPropagation en el diálogo
-    // (Los botones «Cerrar» sí lo usan: se mira sólo la etiqueta del overlay.)
-    const cierre = MODAL.indexOf('if (e.target === e.currentTarget) onClose();');
-    const overlay = MODAL.slice(MODAL.lastIndexOf('<div', cierre), MODAL.indexOf('>', cierre));
-    expect(overlay).toContain('onMouseDown');
-    expect(overlay).not.toContain('onClick={onClose}');
+  // Rediseño 2026-09: la ficha usa el Modal del sistema (src/components/ui/Modal)
+  // en vez de su propio overlay. Las tres garantías de abajo se comprueban
+  // ahora donde viven; el comportamiento con ratón y teclado lo prueba
+  // __tests__/components/ficha-candidato.test.tsx.
+  const MODAL_SISTEMA = leer('src/components/ui/Modal.tsx');
+
+  it('PERF-017/037: el fondo cierra con onMouseDown sobre sí mismo', () => {
+    // La ficha no pinta overlay propio: la cierra el Modal del sistema.
+    expect(MODAL).toContain("import Modal from '@/components/ui/Modal';");
+    expect(MODAL).toMatch(/<Modal\s+abierto=\{isOpen\}\s+alCerrar=\{onClose\}/);
+    expect(MODAL).not.toContain('fixed inset-0');
+    // Y el Modal del sistema cierra sólo con mousedown sobre el propio fondo.
+    expect(MODAL_SISTEMA).toContain('onMouseDown={(e) => {');
+    expect(MODAL_SISTEMA).toContain('e.target === e.currentTarget) alCerrar();');
+    const cierre = MODAL_SISTEMA.indexOf('e.target === e.currentTarget) alCerrar();');
+    const fondo = MODAL_SISTEMA.slice(MODAL_SISTEMA.lastIndexOf('<div', cierre), MODAL_SISTEMA.indexOf('>', cierre));
+    expect(fondo).toContain('onMouseDown');
+    expect(fondo).not.toContain('onClick');
     expect(MODAL).not.toContain('onClick={(e) => e.stopPropagation()}');
   });
 
-  it('PERF-017: el sub-modal no deja burbujear sus clics al overlay', () => {
-    const sub = MODAL.slice(MODAL.indexOf('{showAddDocModal && ('));
-    expect(sub).toContain('onMouseDown={(e) => e.stopPropagation()}');
-    expect(sub).toContain('role="dialog"');
+  it('PERF-017: el sub-modal es una capa aparte y no cierra la ficha', () => {
+    // «Agregar documento» es otro Modal, HERMANO de la ficha (no hijo de su
+    // fondo): nada de lo que pase dentro llega al fondo de la ficha.
+    const ficha = MODAL.indexOf('abierto={isOpen}');
+    const finFicha = MODAL.indexOf('</Modal>', ficha);
+    const sub = MODAL.indexOf('abierto={showAddDocModal}');
+    expect(ficha).toBeGreaterThan(-1);
+    expect(sub).toBeGreaterThan(finFicha);
+    const subModal = MODAL.slice(sub, MODAL.indexOf('</Modal>', sub));
+    expect(subModal).toContain('alCerrar={cancelarDocumento}');
+    // Como antes, pulsar el fondo del sub-modal no lo cierra.
+    expect(subModal).toContain('cerrarAlPulsarFondo={false}');
+    expect(MODAL_SISTEMA).toContain('role="dialog"');
   });
 
   it('PERF-035: Escape cancela primero el sub-modal', () => {
-    const efecto = MODAL.slice(
-      MODAL.indexOf("if (e.key !== 'Escape') return;"),
-      MODAL.indexOf('const fetchSkillRatings')
+    // Cancelar el sub-modal lo deja limpio para el siguiente candidato…
+    const cancelar = MODAL.slice(
+      MODAL.indexOf('const cancelarDocumento'),
+      MODAL.indexOf('const handleAddDocument')
     );
-    expect(efecto).toContain('if (showAddDocModal) {');
-    expect(efecto).toContain('setShowAddDocModal(false);');
-    expect(efecto).toContain('return;');
-    expect(MODAL).toContain('}, [isOpen, onClose, showAddDocModal]);');
+    for (const reset of ['setShowAddDocModal(false);', "setNewDocName('');", 'setNewDocFile(null);', "setDocError('');"]) {
+      expect(cancelar).toContain(reset);
+    }
+    // …y Escape lo atiende SÓLO la capa de arriba (useFocoAtrapado con su
+    // pila): la ficha ya no escucha el teclado por su cuenta.
+    expect(MODAL).not.toContain("addEventListener('keydown'");
+    const foco = leer('src/hooks/useFocoAtrapado.ts');
+    expect(foco).toContain('if (!esSuperior()) return;');
   });
 
   it('PERF-032: el fileType del modal sale de la extensión', () => {

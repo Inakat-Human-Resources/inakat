@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { NAV_POR_ROL, ROLES_APP } from '@/lib/nav-app';
 
 const readFile = (filePath: string) =>
   fs.readFileSync(path.join(process.cwd(), filePath), 'utf-8');
@@ -215,67 +216,44 @@ describe('P1-ed9: SelectionProcessSection shows the full 11-step process', () =>
 // Mobile menu was missing ALL admin links
 // ============================================================
 
-describe('P2-ed9: Navbar mobile menu has admin links', () => {
-  let mobileSection = '';
-  beforeAll(() => {
-    const navbar = readFile('src/components/commons/Navbar.tsx');
-    mobileSection = navbar.slice(navbar.indexOf('mobileMenuOpen && ('));
+// Desde el sistema de diseño (sept. 2026) el menú del admin no vive en el
+// Navbar: lo pinta el AppShell desde src/lib/nav-app.ts, y el cajón móvil usa
+// EXACTAMENTE la misma navegación que la barra lateral de escritorio. Se
+// comprueba la configuración (qué enlaces tiene cada rol) y que el cajón se
+// pueda desplazar.
+describe('P2-ed9: el menú móvil del admin tiene todos sus enlaces', () => {
+  const hrefs = (rol: keyof typeof NAV_POR_ROL) =>
+    NAV_POR_ROL[rol].flatMap((g) => g.items.map((i) => i.href));
+  const admin = hrefs('admin');
+
+  it.each([
+    ['Vacantes', '/admin'],
+    ['Asignar Equipo', '/admin/assignments'],
+    ['Asignar Candidatos', '/admin/assign-candidates'],
+    ['Gestión Entrevistas', '/admin/interviews'],
+    ['Candidatos Interesados', '/admin/direct-applications'],
+    ['Empresas', '/admin/requests'],
+    ['Vendedores', '/admin/vendors'],
+    ['Paquetes de Créditos', '/admin/credit-packages'],
+    ['Precios', '/admin/pricing'],
+    ['Candidatos (sistema)', '/admin/candidates'],
+    ['Usuarios', '/admin/users'],
+    ['Especialidades', '/admin/specialties'],
+  ])('mobile menu should have %s link', (_nombre, href) => {
+    expect(admin).toContain(href);
   });
 
-  it('mobile menu should have Vacantes link for admin', () => {
-    expect(mobileSection).toContain('/admin"');
-  });
-
-  it('mobile menu should have Asignar Equipo link', () => {
-    expect(mobileSection).toContain('/admin/assignments');
-  });
-
-  it('mobile menu should have Asignar Candidatos link', () => {
-    expect(mobileSection).toContain('/admin/assign-candidates');
-  });
-
-  it('mobile menu should have Gestión Entrevistas link', () => {
-    expect(mobileSection).toContain('/admin/interviews');
-  });
-
-  it('mobile menu should have Candidatos Interesados link', () => {
-    expect(mobileSection).toContain('/admin/direct-applications');
-  });
-
-  it('mobile menu should have Empresas link', () => {
-    expect(mobileSection).toContain('/admin/requests');
-  });
-
-  it('mobile menu should have Vendedores link', () => {
-    expect(mobileSection).toContain('/admin/vendors');
-  });
-
-  it('mobile menu should have Paquetes de Créditos link', () => {
-    expect(mobileSection).toContain('/admin/credit-packages');
-  });
-
-  it('mobile menu should have Precios link', () => {
-    expect(mobileSection).toContain('/admin/pricing');
-  });
-
-  it('mobile menu should have Candidatos (sistema) link', () => {
-    expect(mobileSection).toContain('/admin/candidates');
-  });
-
-  it('mobile menu should have Usuarios link', () => {
-    expect(mobileSection).toContain('/admin/users');
-  });
-
-  it('mobile menu should have Especialidades link', () => {
-    expect(mobileSection).toContain('/admin/specialties');
-  });
-
-  it('mobile menu should be scrolleable (max-h + overflow-y)', () => {
-    expect(mobileSection).toMatch(/max-h-\[.*\].*overflow-y-auto|overflow-y-auto.*max-h/);
+  it('mobile menu should be scrolleable (overflow-y) and reuse the desktop navigation', () => {
+    const shell = readFile('src/components/ui/AppShell.tsx');
+    expect(shell).toMatch(/<nav aria-label="Secciones" className="[^"]*overflow-y-auto/);
+    // El cajón recibe la misma barra lateral que el escritorio.
+    expect(shell).toMatch(/<CajonMovil[\s\S]{0,120}\{lateral\}/);
   });
 
   it('admin links should only show for admin role', () => {
-    expect(mobileSection).toMatch(/user\.role\s*===\s*['"]admin['"]/);
+    ROLES_APP.filter((r) => r !== 'admin').forEach((rol) => {
+      expect(hrefs(rol).some((h) => h.startsWith('/admin'))).toBe(false);
+    });
   });
 });
 

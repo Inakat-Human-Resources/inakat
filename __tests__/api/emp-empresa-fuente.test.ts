@@ -103,15 +103,27 @@ describe('EMP-021 — los horarios propuestos usan la fecha LOCAL', () => {
 });
 
 describe('EMP-019 — la barra sticky no queda debajo del Navbar fijo', () => {
-  it('el dashboard usa top-14 (= pt-14 del body) en vez de top-0', () => {
+  it('«Publicar vacante» no queda tapada ni desaparece al bajar por el panel', () => {
+    // Con el rediseño (docs/DISENO.md) ya no hay barra sticky propia: la
+    // acción vive en la cabecera de la página, en la barra lateral del
+    // AppShell y, en móvil (sin barra lateral), en un botón flotante fijo
+    // abajo. La intención de EMP-019 se conserva: nada de la página se fija en
+    // top-0 (debajo de la cabecera del AppShell) y la acción de crear vacante
+    // sigue a la vista al hacer scroll.
     const c = sinComentarios(leer('src/app/company/dashboard/page.tsx'));
-    expect(c).toMatch(/className="sticky top-14 z-30/);
-    expect(c).not.toMatch(/className="sticky top-0 z-30/);
+    expect(c).not.toMatch(/sticky top-0/);
+    expect(c).toMatch(/className="fixed bottom-\d+[^"]*lg:hidden"/);
+    expect(c).toMatch(/const publicar = \(\) => router\.push\('\/create-job'\)/);
+    expect(c).toMatch(/<Button icono=\{Plus\} onClick=\{publicar\}/);
   });
 
-  it('el layout sigue reservando esa misma altura', () => {
-    const layout = leer('src/app/layout.tsx');
-    expect(layout).toMatch(/pt-14/);
+  it('la cabecera fija del AppShell mide esa misma altura (h-14)', () => {
+    // La empresa ya no vive bajo el Navbar público: la envuelve el AppShell,
+    // cuya cabecera es sticky top-0 y h-14. `sticky top-14` deja la barra de
+    // la página justo debajo de ella.
+    expect(leer('src/app/company/layout.tsx')).toContain('<AppShell>');
+    const shell = sinComentarios(leer('src/components/ui/AppShell.tsx'));
+    expect(shell).toMatch(/<header className="sticky top-0 z-30 flex h-14/);
   });
 });
 
@@ -159,7 +171,11 @@ describe('EMP-034 — JobDetailModal traduce paused y recibe el logo', () => {
   it('los mapas de badge y etiqueta contemplan paused', () => {
     const c = sinComentarios(leer('src/components/company/JobDetailModal.tsx'));
     expect(c).toMatch(/paused:\s*'En pausa'/);
-    expect(c).toMatch(/paused:\s*'bg-yellow-100 text-yellow-800'/);
+    // El color ya no es una clase suelta: la insignia es la del sistema
+    // (StatusBadge), cuyo mapa de estados da tono propio a 'paused' (aviso).
+    expect(c).toMatch(/<StatusBadge estado=\{estado\} etiqueta=\{ETIQUETAS_ESTADO\[estado\]\}/);
+    const badge = leer('src/components/ui/Badge.tsx');
+    expect(badge).toMatch(/paused:\s*\{\s*tono:\s*'aviso'/);
   });
 
   it('el dashboard le inyecta logoUrl a la vacante seleccionada', () => {

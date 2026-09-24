@@ -8,7 +8,7 @@ jest.mock('@/lib/distance', () => ({
 }));
 
 import { getDistanceInfo } from '@/lib/distance';
-import DistanceBadge from '@/components/shared/DistanceBadge';
+import DistanceBadge, { UMBRAL_LEJOS_KM } from '@/components/shared/DistanceBadge';
 
 const mockGetDistanceInfo = getDistanceInfo as jest.Mock;
 
@@ -62,7 +62,10 @@ describe('DistanceBadge', () => {
     expect(screen.getByText('1h 40min')).toBeInTheDocument();
   });
 
-  it('should use green color for short distances (<=10km)', () => {
+  // Rediseño 2026-09 (QA visual): la cercanía ya no se dice sólo con color.
+  // El chip es el mismo (neutro) para cualquier distancia; pasado el umbral
+  // dice «lejos» con texto. La cifra en km siempre va escrita.
+  it('una distancia corta sale en el chip neutro y sin «lejos»', () => {
     mockGetDistanceInfo.mockReturnValue({
       distanceKm: 5,
       driving: '12 min',
@@ -77,10 +80,12 @@ describe('DistanceBadge', () => {
         compact
       />
     );
-    expect(container.firstChild).toHaveClass('bg-green-50');
+    expect(container.firstChild).toHaveClass('bg-mist');
+    expect(screen.getByText('5 km')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/lejos/);
   });
 
-  it('should use red color for long distances (>60km)', () => {
+  it('una distancia larga lleva el MISMO chip y además el texto «lejos» (color y texto)', () => {
     mockGetDistanceInfo.mockReturnValue({
       distanceKm: 100,
       driving: '4h',
@@ -95,6 +100,25 @@ describe('DistanceBadge', () => {
         compact
       />
     );
-    expect(container.firstChild).toHaveClass('bg-red-50');
+    expect(container.firstChild).toHaveClass('bg-mist');
+    expect(container.firstChild).not.toHaveClass('bg-danger-tint');
+    expect(screen.getByText('100 km')).toBeInTheDocument();
+    expect(container).toHaveTextContent(/lejos/);
+  });
+
+  it('el umbral: justo en el corte no es «lejos»; por encima, sí', () => {
+    mockGetDistanceInfo.mockReturnValue({ distanceKm: UMBRAL_LEJOS_KM, driving: '1h', transit: '2h' });
+    const { container, rerender } = render(<DistanceBadge candidateLat={1} candidateLng={1} jobLat={1} jobLng={1} compact />);
+    expect(container).not.toHaveTextContent(/lejos/);
+    mockGetDistanceInfo.mockReturnValue({ distanceKm: UMBRAL_LEJOS_KM + 0.1, driving: '1h', transit: '2h' });
+    rerender(<DistanceBadge candidateLat={1} candidateLng={1} jobLat={1} jobLng={1} compact />);
+    expect(container).toHaveTextContent(/lejos/);
+  });
+
+  it('la versión completa también dice «lejos» con texto', () => {
+    mockGetDistanceInfo.mockReturnValue({ distanceKm: 73.9, driving: '2h 57min', transit: '4h 56min' });
+    const { container } = render(<DistanceBadge candidateLat={1} candidateLng={1} jobLat={1} jobLng={1} />);
+    expect(screen.getByText('73.9 km')).toBeInTheDocument();
+    expect(container).toHaveTextContent(/lejos/);
   });
 });

@@ -36,7 +36,12 @@ test.describe('Flujo de Reclutamiento E2E', () => {
     await expect(
       page.locator('input[name="title"]')
     ).toBeVisible();
-    await expect(page.locator('text=créditos')).toBeVisible();
+    // El costo en créditos se ve en el panel de publicación. `text=créditos`
+    // a secas encontraba varios nodos (el saldo de la cabecera del AppShell,
+    // el panel) y el modo estricto de Playwright fallaba: se busca en el panel.
+    const costo = page.getByRole('complementary', { name: /costo de publicación/i });
+    await expect(costo).toBeVisible();
+    await expect(costo.getByText('créditos', { exact: true })).toBeVisible();
   });
 
   test('Reclutador puede ver su dashboard con candidatos asignados', async ({

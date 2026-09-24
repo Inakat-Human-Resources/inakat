@@ -37,6 +37,26 @@ jest.mock('next/link', () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
+// jsdom no implementa matchMedia; SiteMotion (el movimiento del registro
+// público) lo consulta en su efecto.
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+  }
+});
+
 // ============================================================
 // AUTHUI-001 / AUTHUI-011 — destino tras iniciar sesión
 // ============================================================

@@ -17,6 +17,7 @@ const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
 import SearchPositionsSection from '@/components/sections/talents/SearchPositionsSection';
+import { textoPublicada } from '@/components/sections/talents/vacante';
 
 /** Genera N vacantes de prueba. */
 const vacantes = (ids: number[], extra: Record<string, unknown> = {}) =>
@@ -127,7 +128,9 @@ describe('SearchPositionsSection — listado público de vacantes', () => {
     await avanzarDebounce();
     await waitFor(() => expect(urlsDeJobs().length).toBe(1));
 
-    fireEvent.change(screen.getByPlaceholderText('Buscar puesto, área, empresa'), {
+    // El buscador tiene etiqueta visible (FormField): se busca por ella, no
+    // por el placeholder.
+    fireEvent.change(screen.getByLabelText('¿Qué buscas?'), {
       target: { value: 'Vacante 28' }
     });
     await avanzarDebounce();
@@ -187,7 +190,7 @@ describe('SearchPositionsSection — listado público de vacantes', () => {
       expect(screen.getByRole('heading', { level: 2, name: 'Vacante 2' })).toBeInTheDocument()
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Ubicación'), {
+    fireEvent.change(screen.getByLabelText('¿Dónde?'), {
       target: { value: 'Guadalajara' }
     });
     await avanzarDebounce();
@@ -213,5 +216,63 @@ describe('SearchPositionsSection — listado público de vacantes', () => {
     expect(screen.queryByRole('button', { name: 'Guardados' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Postulados' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Vencidos' })).not.toBeInTheDocument();
+  });
+
+  it('pasado un mes, la tarjeta y el detalle dan la fecha corta, no «hace N días»', async () => {
+    jest.setSystemTime(new Date(2026, 8, 23, 12, 0));
+    // createdAt: 1 de enero de 2026 (265 días antes).
+    responderJobs([{ data: vacantes([1]), total: 1, hasNext: false }]);
+
+    render(<SearchPositionsSection />);
+    await avanzarDebounce();
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 3, name: 'Vacante 1' })).toBeInTheDocument()
+    );
+    const fechas = screen.getAllByText('Publicado en ene 2026.');
+    expect(fechas.length).toBeGreaterThan(0);
+    // Con la fecha legible por máquina.
+    fechas.forEach((fecha) => expect(fecha.tagName).toBe('TIME'));
+    expect(screen.queryByText(/hace \d+ días/)).not.toBeInTheDocument();
+  });
+});
+
+describe('textoPublicada — antigüedad de una vacante por tramos', () => {
+  const ahora = new Date(2026, 8, 23, 12, 0);
+  const antes = (ms: number) => new Date(ahora.getTime() - ms).toISOString();
+  const MIN = 60_000;
+  const HORA = 60 * MIN;
+  const DIA = 24 * HORA;
+
+  it('recién publicada (o con el reloj adelantado): «hace un momento»', () => {
+    expect(textoPublicada(antes(30_000), ahora)).toBe('Publicado hace un momento.');
+    expect(textoPublicada(antes(-5 * MIN), ahora)).toBe('Publicado hace un momento.');
+  });
+
+  it('minutos y horas', () => {
+    expect(textoPublicada(antes(5 * MIN), ahora)).toBe('Publicado hace 5 min.');
+    expect(textoPublicada(antes(HORA), ahora)).toBe('Publicado hace 1 hora.');
+    expect(textoPublicada(antes(3 * HORA), ahora)).toBe('Publicado hace 3 horas.');
+  });
+
+  it('días durante la primera semana y semanas hasta el mes', () => {
+    expect(textoPublicada(antes(DIA), ahora)).toBe('Publicado hace 1 día.');
+    expect(textoPublicada(antes(6 * DIA), ahora)).toBe('Publicado hace 6 días.');
+    expect(textoPublicada(antes(7 * DIA), ahora)).toBe('Publicado hace 1 semana.');
+    expect(textoPublicada(antes(20 * DIA), ahora)).toBe('Publicado hace 2 semanas.');
+    expect(textoPublicada(antes(29 * DIA), ahora)).toBe('Publicado hace 4 semanas.');
+  });
+
+  it('pasados 30 días, la fecha corta (mes y año) en vez de «hace 212 días»', () => {
+    expect(textoPublicada(new Date(2026, 1, 23, 9).toISOString(), ahora)).toBe(
+      'Publicado en feb 2026.'
+    );
+    expect(textoPublicada(new Date(2025, 11, 12, 9).toISOString(), ahora)).toBe(
+      'Publicado en dic 2025.'
+    );
+  });
+
+  it('una fecha ilegible no pinta «hace NaN días»', () => {
+    expect(textoPublicada('no-es-fecha', ahora)).toBe('');
   });
 });

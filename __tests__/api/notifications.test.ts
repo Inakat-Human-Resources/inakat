@@ -233,19 +233,20 @@ describe('NotificationBell component', () => {
 });
 
 // ============================================================
-// Navbar integration
+// Integración en la navegación (antes el Navbar; desde el sistema de diseño,
+// la campanita vive en la cabecera del AppShell, que envuelve la aplicación)
 // ============================================================
 
-describe('Navbar should include NotificationBell', () => {
-  it('should import NotificationBell', () => {
-    const content = readFile('src/components/commons/Navbar.tsx');
+describe('La navegación de la aplicación incluye la campanita', () => {
+  it('el AppShell importa NotificationBell', () => {
+    const content = readFile('src/components/ui/AppShell.tsx');
     expect(content).toContain('NotificationBell');
     expect(content).toContain('@/components/shared/NotificationBell');
   });
 
-  it('should render NotificationBell when user is logged in', () => {
-    const content = readFile('src/components/commons/Navbar.tsx');
-    expect(content).toContain('<NotificationBell');
+  it('la pinta sólo con sesión', () => {
+    const content = readFile('src/components/ui/AppShell.tsx');
+    expect(content).toMatch(/sesion\.usuario && <NotificationBell/);
   });
 });
 
@@ -267,10 +268,15 @@ describe('Notifications page', () => {
   });
 
   it('should have pagination', () => {
+    // Desde el sistema de diseño (docs/DISENO.md) la página usa el componente
+    // de paginación de la app, que pinta los botones Anterior / Siguiente.
     const content = readFile('src/app/notifications/page.tsx');
-    expect(content).toContain('Anterior');
-    expect(content).toContain('Siguiente');
+    expect(content).toContain("import Pagination from '@/components/ui/Pagination'");
+    expect(content).toMatch(/<Pagination[\s\S]*alCambiar=\{setPage\}/);
     expect(content).toContain('totalPages');
+    const paginacion = readFile('src/components/ui/Pagination.tsx');
+    expect(paginacion).toContain('Anterior');
+    expect(paginacion).toContain('Siguiente');
   });
 
   it('should support marking all as read', () => {

@@ -296,7 +296,9 @@ describe('BUG-6: Recruiter dashboard should allow viewing candidate profile', ()
 
   it('should have click handler on sent candidates', () => {
     const content = readFile('src/app/recruiter/dashboard/page.tsx');
-    expect(content).toMatch(/cursor-pointer/);
+    // Desde el sistema de diseño la lista de enviados es un DataTable: la fila
+    // entera abre el perfil (ratón y teclado) con alActivarFila.
+    expect(content).toMatch(/alActivarFila=\{openCandidateProfile\}/);
     expect(content).toMatch(/openCandidateProfile/);
   });
 });

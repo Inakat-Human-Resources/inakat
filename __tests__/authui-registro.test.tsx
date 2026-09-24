@@ -25,6 +25,26 @@ const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 global.alert = jest.fn();
 
+// jsdom no implementa matchMedia; SiteMotion (el movimiento del registro
+// público) lo consulta en su efecto.
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+  }
+});
+
 const respuestaEspecialidades = {
   ok: true,
   status: 200,
@@ -59,8 +79,8 @@ const llenarPaso1 = async () => {
   await userEvent.type(screen.getByPlaceholderText('Tu nombre'), 'Juan');
   await userEvent.type(screen.getByPlaceholderText('Tu apellido paterno'), 'Pérez');
   await userEvent.type(screen.getByPlaceholderText('tu@email.com'), 'juan@test.com');
-  await userEvent.type(screen.getByPlaceholderText('Mínimo 8 caracteres'), 'TestPass123');
-  await userEvent.type(screen.getByPlaceholderText('Repite tu contraseña'), 'TestPass123');
+  await userEvent.type(screen.getByPlaceholderText('8+ caracteres'), 'TestPass123');
+  await userEvent.type(screen.getByPlaceholderText('Repítela'), 'TestPass123');
 };
 
 const siguiente = async (paso: number) => {
@@ -114,7 +134,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       await siguiente(3);
       await siguiente(4);
 
-      fireEvent.click(screen.getByText('Agregar Experiencia'));
+      fireEvent.click(screen.getByText('Agregar experiencia'));
       await waitFor(() => expect(screen.getByText('Experiencia 1')).toBeInTheDocument());
       await userEvent.type(screen.getByPlaceholderText('Nombre de la empresa'), 'INAKAT');
       await userEvent.type(screen.getByPlaceholderText('Tu puesto'), 'Desarrollador');
@@ -134,7 +154,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       await llenarPaso1();
       await irAlPaso6();
 
-      fireEvent.click(screen.getByText('Agregar Documento'));
+      fireEvent.click(screen.getByText('Agregar documento'));
       await waitFor(() => expect(screen.getByText('Documento 1')).toBeInTheDocument());
       await userEvent.type(
         screen.getByPlaceholderText('Ej: Título universitario, Certificación AWS...'),
@@ -154,7 +174,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       await llenarPaso1();
       await siguiente(2);
 
-      fireEvent.click(screen.getByText('Agregar Educación'));
+      fireEvent.click(screen.getByText('Agregar educación'));
       await waitFor(() => expect(screen.getByText('Educación 1')).toBeInTheDocument());
       await userEvent.type(
         screen.getByPlaceholderText('Ej: UANL, Tec de Monterrey, UNAM...'),
@@ -174,11 +194,11 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       render(<RegisterPage />);
       await llenarPaso1();
       await siguiente(2);
-      fireEvent.click(screen.getByText('Agregar Educación'));
+      fireEvent.click(screen.getByText('Agregar educación'));
       await waitFor(() => expect(screen.getByText('Educación 1')).toBeInTheDocument());
 
       await irAlPaso6();
-      fireEvent.click(screen.getByText('Agregar Documento'));
+      fireEvent.click(screen.getByText('Agregar documento'));
       await waitFor(() => expect(screen.getByText('Documento 1')).toBeInTheDocument());
 
       await crearCuenta();
@@ -195,7 +215,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
 
   describe('AUTHUI-004: errores de experiencia indexados por identidad', () => {
     const agregarExperienciaConFechasInvalidas = async () => {
-      fireEvent.click(screen.getByText('Agregar Experiencia'));
+      fireEvent.click(screen.getByText('Agregar experiencia'));
       await waitFor(() => expect(screen.getByText('Experiencia 1')).toBeInTheDocument());
       await userEvent.type(screen.getByPlaceholderText('Nombre de la empresa'), 'INAKAT');
       await userEvent.type(screen.getByPlaceholderText('Tu puesto'), 'Desarrollador');
@@ -280,7 +300,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
 
     const prepararDocumentoSubiendo = async (contenedor: HTMLElement) => {
       await irAlPaso6();
-      fireEvent.click(screen.getByText('Agregar Documento'));
+      fireEvent.click(screen.getByText('Agregar documento'));
       await waitFor(() => expect(screen.getByText('Documento 1')).toBeInTheDocument());
       const [inputArchivo] = inputsDeArchivo(contenedor);
       fireEvent.change(inputArchivo, { target: { files: [archivo('titulo.pdf')] } });
@@ -352,7 +372,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       const { container } = render(<RegisterPage />);
       await llenarPaso1();
       await irAlPaso6();
-      fireEvent.click(screen.getByText('Agregar Documento'));
+      fireEvent.click(screen.getByText('Agregar documento'));
       await waitFor(() => expect(screen.getByText('Documento 1')).toBeInTheDocument());
 
       const [inputArchivo] = inputsDeArchivo(container);
@@ -445,7 +465,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
     const { container } = render(<RegisterPage />);
     await llenarPaso1();
     await irAlPaso6();
-    fireEvent.click(screen.getByText('Agregar Documento'));
+    fireEvent.click(screen.getByText('Agregar documento'));
     await waitFor(() => expect(screen.getByText('Documento 1')).toBeInTheDocument());
 
     const [inputArchivo] = inputsDeArchivo(container);
@@ -578,7 +598,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       await llenarPaso1();
       await siguiente(2);
 
-      fireEvent.click(screen.getByText('Agregar Educación'));
+      fireEvent.click(screen.getByText('Agregar educación'));
       await waitFor(() => expect(screen.getByText('Educación 1')).toBeInTheDocument());
 
       fireEvent.change(screen.getAllByRole('combobox')[0], {
@@ -606,7 +626,7 @@ describe('RegisterPage — auditoría AUTHUI', () => {
       await llenarPaso1();
       await siguiente(2);
 
-      fireEvent.click(screen.getByText('Agregar Educación'));
+      fireEvent.click(screen.getByText('Agregar educación'));
       await waitFor(() => expect(screen.getByText('Educación 1')).toBeInTheDocument());
 
       fireEvent.change(screen.getAllByRole('combobox')[0], {

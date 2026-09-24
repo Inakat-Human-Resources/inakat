@@ -103,7 +103,8 @@ describe('/admin/users', () => {
     render(<AdminUsersPage />);
     await screen.findByText(/Usuario2/);
 
-    const total = screen.getByText('Total').parentElement as HTMLElement;
+    // La tarjeta (StatCard) de «Total de usuarios»: su cifra es el total real.
+    const total = screen.getByText('Total de usuarios').closest('.rounded-xl') as HTMLElement;
     await waitFor(() => expect(total).toHaveTextContent('35'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
@@ -123,12 +124,27 @@ describe('/admin/users', () => {
     render(<AdminUsersPage />);
     await screen.findByText('Activo (tú)');
 
+    // El «pill» es ahora un interruptor (role="switch"); la confirmación, un
+    // Modal con el mismo aviso en lugar del confirm() del navegador.
     const fila = screen.getByText(/Usuario2/).closest('tr') as HTMLElement;
-    fireEvent.click(within(fila).getByRole('button', { name: 'Activo' }));
+    fireEvent.click(within(fila).getByRole('switch', { name: 'Activo' }));
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(String(confirmSpy.mock.calls[0][0])).toContain('6 vacante(s)');
+    const dialogo = await screen.findByRole('dialog');
+    expect(dialogo).toHaveTextContent('6 vacante(s)');
     expect(mockFetch.mock.calls.filter(([, i]) => i?.method === 'PUT')).toHaveLength(0);
+
+    // Cancelar no desactiva; aceptar hace el PUT de siempre.
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockFetch.mock.calls.filter(([, i]) => i?.method === 'PUT')).toHaveLength(0);
+
+    fireEvent.click(within(fila).getByRole('switch', { name: 'Activo' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Desactivar' }));
+    await waitFor(() =>
+      expect(mockFetch.mock.calls.filter(([, i]) => i?.method === 'PUT')).toHaveLength(1)
+    );
+    const [, init] = mockFetch.mock.calls.find(([, i]) => i?.method === 'PUT')!;
+    expect(JSON.parse(String(init.body))).toEqual({ id: 2, isActive: false });
   });
 
   it('ADM-024/050: especialidades del catálogo y contraseña de 8 como mínimo', async () => {

@@ -49,11 +49,15 @@ describe('Batch 3: Expert cards data and modal', () => {
     expect(content).toContain('Naciones Unidas');
   });
 
-  it('modal photo should be w-32 h-32 with quality={90}', () => {
-    expect(content).toMatch(/w-32\s+h-32/);
+  // Rediseño «Arco» (sept. 2026): la foto de la ficha va en una ventana en
+  // arco de 144 × 180 px (4:5, about.css .ab-ficha__foto). La intención se
+  // conserva: se pide nítida (calidad 90, al doble del tamaño pintado) y con
+  // dimensiones explícitas (sin salto de maquetación).
+  it('modal photo is sharp and has explicit dimensions (quality={90})', () => {
     expect(content).toContain('quality={90}');
-    expect(content).toContain('width={128}');
-    expect(content).toContain('height={128}');
+    expect(content).toContain('width={288}');
+    expect(content).toContain('height={360}');
+    expect(content).toContain('ab-ficha__foto');
   });
 
   // -- Real team members still present --
@@ -122,8 +126,11 @@ describe('Batch 3: Expert cards data and modal', () => {
     expect(content).toMatch(/target="_blank"/);
   });
 
-  it('should import X icon for close button', () => {
-    expect(content).toMatch(/import.*X.*from\s*['"]lucide-react['"]/);
+  // El botón de cerrar (la X, con nombre accesible «Cerrar») lo pone ahora el
+  // Modal del sistema; aquí se comprueba que la ficha lo usa y lo cablea.
+  it('modal has a close button (system Modal wired to cerrarModal)', () => {
+    expect(content).toMatch(/import\s+Modal\s+from\s+['"]@\/components\/ui\/Modal['"]/);
+    expect(content).toMatch(/alCerrar=\{cerrarModal\}/);
   });
 
   it('should import Play icon for video button', () => {

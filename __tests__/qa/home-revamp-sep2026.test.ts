@@ -16,6 +16,9 @@ const readFile = (filePath: string): string =>
 
 const HOME = 'src/app/page.tsx';
 const CSS = 'src/app/home.css';
+// Las primitivas compartidas (máscaras, revelados, botones, tokens) salieron de
+// home.css a site.css, el registro público que carga el layout raíz.
+const SITE_CSS = 'src/app/site.css';
 
 // ============================================================
 // Estructura de la portada
@@ -29,7 +32,11 @@ describe('Home revamp: estructura de la página', () => {
   });
 
   it('envuelve la página en .hm (ámbito de los estilos de la home)', () => {
-    expect(content).toMatch(/className=\{`hm /);
+    expect(content).toMatch(/<main className=(\{`|")hm /);
+  });
+
+  it('las primitivas compartidas llegan por el layout raíz (site.css)', () => {
+    expect(readFile('src/app/layout.tsx')).toContain('./site.css');
   });
 
   it('mantiene todas las secciones del recorrido', () => {
@@ -62,17 +69,25 @@ describe('Home revamp: estructura de la página', () => {
 
 describe('Home revamp: se lee sin JavaScript y con movimiento reducido', () => {
   const css = readFile(CSS);
+  const site = readFile(SITE_CSS);
 
   it('las animaciones de entrada cuelgan de .hm--js (sin JS el estado es el final)', () => {
     // Si una animación de entrada se declara fuera de .hm--js y el reloj de
     // animación no avanza, el contenido se queda invisible para siempre.
-    for (const rule of [
-      '.hm--js .hm-line > span',
-      '.hm--js .hm-window',
-      '.hm--js .hm-hero__foot',
-    ]) {
+    for (const rule of ['.hm--js .hm-window', '.hm--js .hm-hero__foot']) {
       expect(css).toContain(rule);
     }
+    // La máscara del titular es compartida: vive en site.css.
+    expect(site).toContain('.hm--js .hm-line > span');
+    expect(site).not.toMatch(/^\.hm-line > span \{[^}]*animation/m);
+  });
+
+  it('site.css también deja lo ligado al scroll tras @supports + movimiento no reducido', () => {
+    expect(site).toContain('@supports (animation-timeline: view())');
+    expect(site).toContain('prefers-reduced-motion: no-preference');
+    const reduce = site.slice(site.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduce).toContain('.hm--js .hm-line > span');
+    expect(reduce).toContain('animation: none !important');
   });
 
   it('todo lo ligado al scroll vive tras @supports + prefers-reduced-motion', () => {
@@ -98,7 +113,9 @@ describe('Home revamp: se lee sin JavaScript y con movimiento reducido', () => {
     // En una pestaña de fondo (ctrl+click, restaurar sesión) el reloj de animación
     // no avanza, y un `both` deja el título y la foto congelados en su fotograma
     // inicial: invisibles. Por eso .hm--js se pone sólo con la pestaña visible.
-    const motion = readFile('src/components/sections/home/HomeMotion.tsx');
+    // HomeMotion se generalizó en SiteMotion (lo monta cualquier página pública).
+    expect(readFile(HOME)).toContain('<SiteMotion />');
+    const motion = readFile('src/components/ui/SiteMotion.tsx');
     expect(motion).toContain("document.visibilityState !== 'visible'");
     expect(motion).toContain("addEventListener('visibilitychange'");
     expect(motion).toContain("removeEventListener('visibilitychange'");

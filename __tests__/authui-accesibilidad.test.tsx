@@ -30,6 +30,26 @@ jest.mock('next/navigation', () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
+// jsdom no implementa matchMedia; SiteMotion (el movimiento del registro
+// público) lo consulta en su efecto.
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+  }
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetch.mockResolvedValue({
@@ -62,7 +82,7 @@ describe('AUTHUI-025: botones sólo-icono con nombre accesible', () => {
     fireEvent.click(screen.getByText(/Omitir y crear cuenta con datos básicos/));
     await waitFor(() => expect(screen.getByText(/Paso 6 de 6/)).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('Agregar Documento'));
+    fireEvent.click(screen.getByText('Agregar documento'));
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar documento 1' }));
 
     expect(screen.getByText('No hay documentos agregados')).toBeInTheDocument();

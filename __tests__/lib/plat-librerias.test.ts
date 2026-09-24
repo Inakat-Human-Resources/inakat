@@ -346,9 +346,13 @@ describe('PLAT-023/024 · componentes compartidos', () => {
   });
 
   it('PLAT-024: ErrorToast cancela el temporizador de cierre en el cleanup', () => {
-    const c = leer('src/components/shared/ErrorToast.tsx');
-    expect(c).toMatch(/closeTimerRef/);
-    expect(c).toMatch(/clearTimeout\(closeTimerRef\.current\)/);
+    // ErrorToast es ahora un puente hacia el Toast del sistema de diseño, que
+    // guarda el temporizador de salida y lo cancela en el cleanup.
+    expect(leer('src/components/shared/ErrorToast.tsx')).toContain("from '@/components/ui/Toast'");
+    const c = leer('src/components/ui/Toast.tsx');
+    expect(c).toMatch(/cierreRef/);
+    expect(c).toMatch(/clearTimeout\(cierreRef\.current\)/);
+    expect(c).toMatch(/return cancelarCierre;/);
   });
 });
 
@@ -362,8 +366,10 @@ describe('PLAT-008 · pantalla de Integraciones de la empresa', () => {
     expect(c).toMatch(/credentials: 'include'/);
   });
 
-  it('está enlazada desde el menú de empresa del Navbar', () => {
-    const c = leer('src/components/commons/Navbar.tsx');
-    expect(c).toContain('/company/integrations');
+  it('está enlazada desde la navegación de la empresa', () => {
+    // La navegación por rol vive en src/lib/nav-app.ts (la pinta el AppShell).
+    const c = leer('src/lib/nav-app.ts');
+    const empresa = c.slice(c.indexOf('company: ['), c.indexOf('candidate: ['));
+    expect(empresa).toContain("href: '/company/integrations'");
   });
 });

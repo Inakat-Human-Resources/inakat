@@ -93,8 +93,9 @@ describe('/my-applications', () => {
     expect(screen.getByText('No seleccionado')).toBeInTheDocument();
     expect(screen.getByText('Empresa interesada')).toBeInTheDocument();
 
-    // El filtro de no seleccionados incluye la descartada (antes: 0).
-    const filtro = screen.getByRole('button', { name: /No seleccionados \(1\)/ });
+    // El filtro de no seleccionados incluye la descartada (antes: 0). Desde el
+    // rediseño (docs/DISENO.md) los filtros son pestañas con su conteo al lado.
+    const filtro = screen.getByRole('tab', { name: /No seleccionados\s*\(?1\)?$/ });
     fireEvent.click(filtro);
 
     expect(screen.getByRole('heading', { name: 'Vacante 1' })).toBeInTheDocument();
@@ -102,7 +103,7 @@ describe('/my-applications', () => {
     expect(screen.queryByRole('heading', { name: 'Vacante 3' })).not.toBeInTheDocument();
 
     // company_interested cae en 'En proceso'.
-    expect(screen.getByRole('button', { name: /En proceso \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /En proceso\s*\(?1\)?$/ })).toBeInTheDocument();
   });
 
   it('VAC-028: la nota interna no se muestra al candidato aunque llegue', async () => {
@@ -119,6 +120,31 @@ describe('/my-applications', () => {
     );
     expect(screen.queryByText(/Candidato inyectado por Admin/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nota de la empresa/)).not.toBeInTheDocument();
+  });
+
+  // Revisión visual (b7): /my-applications y /candidate/applications son la
+  // misma pantalla para dos roles y deben pintarse igual: mismo título, la
+  // misma fecha corta del panel y el mismo aviso por estado.
+  it('se pinta como su hermana /candidate/applications', async () => {
+    responderMisPostulaciones([
+      postulacion(1, 'accepted', { reviewedAt: new Date(2026, 0, 3).toISOString() })
+    ]);
+
+    render(<MyApplicationsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Vacante 1' })).toBeInTheDocument()
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Mis postulaciones' })).toBeInTheDocument();
+
+    // Fecha corta («1 ene 2026»), no la larga («1 de enero de 2026»).
+    // Es la del formateador único (src/lib/fechas), que no depende del ICU.
+    expect(screen.getByText('Aplicado: 1 ene 2026')).toBeInTheDocument();
+    expect(screen.queryByText(/de enero de 2026/)).not.toBeInTheDocument();
+
+    // El aviso por estado y la modalidad legible, como en la hermana.
+    expect(screen.getByText(/Has sido seleccionado para este puesto/)).toBeInTheDocument();
+    expect(screen.getByText('Presencial')).toBeInTheDocument();
   });
 });
 
@@ -187,14 +213,16 @@ describe('/talents — volver a la vacante tras iniciar sesión (VAC-033)', () =
     render(<SearchPositionsSection />);
     await avanzarDebounce();
 
-    const tarjeta = await screen.findByRole('button', { name: 'Ver detalle de la vacante Vacante 2' });
+    // La tarjeta se elige con el botón de su título (h3 > button).
+    const tarjeta = await screen.findByRole('button', { name: 'Vacante 2' });
     fireEvent.click(tarjeta);
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 2, name: 'Vacante 2' })).toBeInTheDocument()
     );
 
     // La navegación va por el router de Next (mockPush).
-    const detalle = screen.getByRole('heading', { level: 2, name: 'Vacante 2' }).closest('div.bg-white') as HTMLElement;
+    // El panel de detalle es el <article> que encabeza ese h2.
+    const detalle = screen.getByRole('heading', { level: 2, name: 'Vacante 2' }).closest('article') as HTMLElement;
     fireEvent.click(within(detalle).getByRole('button', { name: /inicia sesión para postularte/i }));
 
     expect(mockPush).toHaveBeenCalledTimes(1);

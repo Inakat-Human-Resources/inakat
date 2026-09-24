@@ -188,7 +188,8 @@ describe('/admin/direct-applications', () => {
     render(<DirectApplicationsPage />);
     await screen.findByText('Postulante 1');
 
-    const tarjeta = screen.getByText('Postulante 1').closest('div.bg-white') as HTMLElement;
+    // Cada postulación de la bandeja es un <article> con sus tres decisiones.
+    const tarjeta = screen.getByText('Postulante 1').closest('article') as HTMLElement;
     fireEvent.click(within(tarjeta).getByRole('button', { name: /Descartar/ }));
 
     await waitFor(() => expect(screen.queryByText('Postulante 1')).not.toBeInTheDocument());
@@ -223,11 +224,50 @@ describe('/admin/requests', () => {
     });
 
     render(<AdminRequestsPage />);
-    fireEvent.click((await screen.findAllByRole('button', { name: /Ver\/Editar/ }))[0]);
-    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
-    fireEvent.click(screen.getByRole('button', { name: /Guardar Cambios/ }));
+    // Abrir el detalle de la fila, pasar a edición y guardar.
+    fireEvent.click((await screen.findAllByRole('button', { name: /Ver solicitud de/ }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Editar datos' }));
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/i }));
 
     await waitFor(() => expect(llamadas('/api/company-requests/4', 'PUT')).toHaveLength(1));
+    await waitFor(() => expect(llamadas('/api/company-requests')).toHaveLength(2));
+  });
+
+  it('aprobar pide confirmación en un Modal y hace el mismo PATCH de siempre', async () => {
+    const solicitud = {
+      id: 4,
+      nombre: 'Ana',
+      apellidoPaterno: 'Pérez',
+      apellidoMaterno: 'López',
+      nombreEmpresa: 'Acme SA',
+      correoEmpresa: 'contacto@acme.com',
+      sitioWeb: null,
+      razonSocial: 'Acme SA de CV',
+      rfc: 'ACM010101AAA',
+      direccionEmpresa: 'Calle 1',
+      identificacionUrl: null,
+      documentosConstitucionUrl: null,
+      status: 'pending',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z'
+    };
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return Promise.resolve(respuesta({ success: true }));
+      return Promise.resolve(respuesta({ success: true, data: [solicitud] }));
+    });
+
+    render(<AdminRequestsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Aprobar solicitud de Acme SA' }));
+
+    // Nada se envía hasta confirmar (antes lo decidía el confirm() del navegador).
+    const dialogo = await screen.findByRole('dialog');
+    expect(llamadas('/api/company-requests/4', 'PATCH')).toHaveLength(0);
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Aprobar solicitud' }));
+    await waitFor(() => expect(llamadas('/api/company-requests/4', 'PATCH')).toHaveLength(1));
+    const [, init] = llamadas('/api/company-requests/4', 'PATCH')[0];
+    expect(JSON.parse(String(init.body))).toEqual({ status: 'approved' });
+    // Y recarga la lista, como siempre.
     await waitFor(() => expect(llamadas('/api/company-requests')).toHaveLength(2));
   });
 });
@@ -243,7 +283,8 @@ describe('/admin/specialties', () => {
     });
 
     render(<SpecialtiesPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /Nueva Especialidad/ }));
+    // Rediseño (sep 2026): el botón va en minúscula («Nueva especialidad»).
+    fireEvent.click(await screen.findByRole('button', { name: /Nueva especialidad/i }));
 
     const form = document.querySelector('form') as HTMLFormElement;
     fireEvent.change(form.querySelector('input[type="text"]') as HTMLInputElement, {

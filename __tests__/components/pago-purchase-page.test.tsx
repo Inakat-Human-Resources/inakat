@@ -116,9 +116,9 @@ describe('Página de compra de créditos', () => {
 
     // Cambiar al Pack 20: el descuento es del 10% sobre 65,000 -> 58,500
     fireEvent.click(screen.getByText('20'));
-    fireEvent.click(screen.getByRole('button', { name: /Continuar al Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continuar al pago/i }));
 
-    await screen.findByText('Resumen de Compra');
+    await screen.findByText('Resumen de compra');
 
     // El total que se enseña es el del paquete elegido, no el que el servidor
     // calculó para el anterior (31,500).
@@ -136,7 +136,7 @@ describe('Página de compra de créditos', () => {
     await aplicarCodigo();
 
     fireEvent.click(screen.getByText('20'));
-    fireEvent.click(screen.getByRole('button', { name: /Continuar al Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continuar al pago/i }));
 
     await waitFor(() => expect(crearBrick).toHaveBeenCalled());
 
@@ -150,8 +150,8 @@ describe('Página de compra de créditos', () => {
     render(<PurchaseCreditsPage />);
     await screen.findByText('10');
 
-    fireEvent.click(screen.getByRole('button', { name: /Continuar al Pago/ }));
-    await screen.findByText('Información de Pago');
+    fireEvent.click(screen.getByRole('button', { name: /Continuar al pago/i }));
+    await screen.findByText('Información de pago');
 
     expect(screen.getByText(/Cargando formulario de pago/)).toBeInTheDocument();
     expect(crearBrick).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe('Página de compra de créditos', () => {
     render(<PurchaseCreditsPage />);
     await screen.findByText('10');
 
-    fireEvent.click(screen.getByRole('button', { name: /Continuar al Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continuar al pago/i }));
 
     await waitFor(() => expect(crearBrick).toHaveBeenCalled());
     expect(screen.queryByText(/Cargando formulario de pago/)).toBeNull();
@@ -190,7 +190,7 @@ describe('Página de compra de créditos', () => {
     await screen.findByText('20');
 
     fireEvent.click(screen.getByText('20'));
-    fireEvent.click(screen.getByRole('button', { name: /Continuar al Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Continuar al pago/i }));
 
     await waitFor(() => expect(crearBrick).toHaveBeenCalled());
 

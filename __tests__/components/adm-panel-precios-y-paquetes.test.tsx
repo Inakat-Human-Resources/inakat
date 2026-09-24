@@ -74,20 +74,37 @@ describe('/admin/pricing', () => {
 
   afterEach(() => confirmSpy.mockRestore());
 
+  // Rediseño (sep 2026): la confirmación ya no es window.confirm sino un
+  // diálogo del sistema (role="dialog") con la misma pregunta; el estado es un
+  // interruptor (role="switch") con el texto «Activo» / «Inactivo».
   it('ADM-020: desactivar pide confirmación y, si se cancela, no toca nada', async () => {
-    confirmSpy.mockReturnValue(false);
     render(<AdminPricingPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Activo' }));
+    fireEvent.click(await screen.findByRole('switch', { name: /^Activo/ }));
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(String(confirmSpy.mock.calls[0][0])).toContain('12 créditos');
+    const dialogo = await screen.findByRole('dialog');
+    expect(dialogo).toHaveTextContent('12 créditos');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(llamadas('/api/admin/pricing', 'PUT')).toHaveLength(0);
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it('ADM-020: al confirmar, desactiva con el mismo cuerpo de siempre', async () => {
+    render(<AdminPricingPage />);
+
+    fireEvent.click(await screen.findByRole('switch', { name: /^Activo/ }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Desactivar' }));
+
+    await waitFor(() => expect(llamadas('/api/admin/pricing', 'PUT')).toHaveLength(1));
+    const [, init] = llamadas('/api/admin/pricing', 'PUT')[0];
+    expect(JSON.parse(String(init.body))).toEqual({ id: 7, isActive: false });
   });
 
   it('ADM-021: limpiar filtros recarga SIN los filtros anteriores', async () => {
     render(<AdminPricingPage />);
-    await screen.findByRole('button', { name: 'Activo' });
+    await screen.findByRole('switch', { name: /^Activo/ });
 
     const [perfil] = screen.getAllByRole('combobox');
     fireEvent.change(perfil, { target: { value: 'Tecnología' } });
@@ -96,7 +113,7 @@ describe('/admin/pricing', () => {
       expect(llamadas('profile=Tecnolog').length).toBe(1)
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros y recargar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar y recargar' }));
 
     await waitFor(() => expect(llamadas('/api/admin/pricing?', 'GET').length).toBe(3));
     const ultima = String(llamadas('/api/admin/pricing?', 'GET').slice(-1)[0][0]);
@@ -138,12 +155,74 @@ describe('/admin/pricing', () => {
 
   it('ADM-045: hay forma de regenerar las combinaciones borradas', async () => {
     render(<AdminPricingPage />);
-    await screen.findByRole('button', { name: 'Activo' });
+    await screen.findByRole('switch', { name: /^Activo/ });
 
     fireEvent.click(screen.getByRole('button', { name: /Regenerar combinaciones faltantes/ }));
+    // Primero pregunta (antes, window.confirm); al confirmar, crea las que faltan.
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Crear las que faltan' }));
 
     await waitFor(() => expect(llamadas('/api/admin/pricing/sync', 'POST')).toHaveLength(1));
     expect(await screen.findByText(/3 precios creados/)).toBeInTheDocument();
+  });
+
+  // Revisión visual (sep 2026): 148 filas planas con el nivel en orden
+  // alfabético. Ahora una matriz por perfil, con el nivel en escalera.
+  it('matriz: agrupa por perfil, ordena el nivel en escalera y abre sólo el primero', async () => {
+    const fila = (id: number, profile: string, seniority: string) => ({
+      ...entrada,
+      id,
+      profile,
+      seniority,
+      credits: id,
+      minSalary: null
+    });
+    // En el orden en que responde la API: perfil y nivel alfabéticos.
+    const datos = [
+      fila(1, 'Arquitectura', 'Director'),
+      fila(2, 'Arquitectura', 'Jr'),
+      fila(3, 'Arquitectura', 'Middle'),
+      fila(4, 'Arquitectura', 'Practicante'),
+      fila(5, 'Arquitectura', 'Sr'),
+      fila(6, 'Tecnología', 'Jr')
+    ];
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(respuesta({ success: true, data: datos, profiles: ['Arquitectura', 'Tecnología'] }))
+    );
+
+    render(<AdminPricingPage />);
+
+    const arquitectura = await screen.findByRole('table', { name: /Créditos de Arquitectura/ });
+    expect(within(arquitectura).getAllByRole('rowheader').map((th) => th.textContent)).toEqual([
+      'Practicante',
+      'Jr',
+      'Middle',
+      'Sr',
+      'Director'
+    ]);
+
+    // El segundo perfil empieza plegado; su cabecera dice cuántos huecos tiene.
+    const tecnologia = screen.getByRole('button', { name: /^Tecnología/ });
+    expect(tecnologia).toHaveAttribute('aria-expanded', 'false');
+    expect(tecnologia).toHaveTextContent('4 sin configurar');
+    expect(screen.queryByRole('table', { name: /Créditos de Tecnología/ })).not.toBeInTheDocument();
+
+    fireEvent.click(tecnologia);
+    expect(tecnologia).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('table', { name: /Créditos de Tecnología/ })).toBeInTheDocument();
+
+    // Todo sale de la misma petición de siempre.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('borrar sigue a mano: desde la edición abre la misma confirmación y el mismo DELETE', async () => {
+    render(<AdminPricingPage />);
+    fireEvent.click(await screen.findByTitle('Editar créditos'));
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar combinación' }));
+
+    const dialogo = await screen.findByRole('dialog', { name: '¿Eliminar entrada de precios?' });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Eliminar' }));
+
+    await waitFor(() => expect(llamadas('/api/admin/pricing?id=7', 'DELETE')).toHaveLength(1));
   });
 });
 
@@ -179,14 +258,18 @@ describe('/admin/credit-packages', () => {
 
   afterEach(() => confirmSpy.mockRestore());
 
-  it('ADM-061: el pill de Estado pide confirmación antes de desactivar', async () => {
-    confirmSpy.mockReturnValue(false);
+  it('ADM-061: el interruptor de Estado pide confirmación antes de desactivar', async () => {
     render(<AdminCreditPackagesPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Activo' }));
+    fireEvent.click(await screen.findByRole('switch', { name: /^Activo/ }));
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const dialogo = await screen.findByRole('dialog');
+    expect(dialogo).toHaveTextContent('Pack 10');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(llamadas('/api/admin/credit-packages/3', 'PUT')).toHaveLength(0);
+    expect(confirmSpy).not.toHaveBeenCalled();
   });
 
   it('ADM-062: el precio se muestra con sus centavos, no redondeado', async () => {
@@ -194,7 +277,9 @@ describe('/admin/credit-packages', () => {
     await screen.findByText('Pack 10');
 
     const fila = screen.getByText('Pack 10').closest('tr') as HTMLElement;
-    expect(fila.textContent).toContain('34,999.5');
+    // Con sus dos decimales («$18,999.5» parecía un error de tabla).
+    expect(fila.textContent).toContain('$34,999.50');
+    expect(fila.textContent).toContain('$3,499.95');
     expect(fila.textContent).not.toContain('35,000');
   });
 

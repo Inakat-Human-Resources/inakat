@@ -318,14 +318,23 @@ describe('UI-001: los formularios enlazan a términos y privacidad', () => {
 
 describe('UI-010: el CTA compartido vive en commons', () => {
   it('ya no cuelga de sections/home', () => {
-    expect(existe('src/components/commons/CTAFinalSection.tsx')).toBe(true);
+    // commons/CTAFinalSection se quedó sin consumidores con el cierre propio
+    // de /about: puede borrarse sin que este test lo impida.
     expect(existe('src/components/sections/home/CTAFinalSection.tsx')).toBe(false);
   });
 
-  it('/about lo importa desde commons', () => {
-    expect(leer('src/app/about/page.tsx')).toContain(
-      '@/components/commons/CTAFinalSection'
-    );
+  // Desde el rediseño «Arco» (sept. 2026) /about tiene su propio cierre en
+  // sections/aboutus (el de commons pintaba blanco sobre naranja, 2.54:1). La
+  // intención de UI-010 se conserva: el cierre de /about no depende de la
+  // carpeta de la portada, y un rediseño de la home no puede romper /about.
+  it('/about no importa nada de sections/home para su cierre', () => {
+    const about = leer('src/app/about/page.tsx');
+    expect(about).not.toMatch(/@\/components\/sections\/home\//);
+    expect(about).toContain('@/components/sections/aboutus/AboutCloseSection');
+    const cierre = leer('src/components/sections/aboutus/AboutCloseSection.tsx');
+    expect(cierre).not.toMatch(/@\/components\/sections\/home\//);
+    expect(cierre).toMatch(/href="\/companies"/);
+    expect(cierre).toMatch(/href="\/talents"/);
   });
 });
 
@@ -357,7 +366,8 @@ describe('UI-011: el reveal sólo esconde contenido si hay JavaScript', () => {
 describe('UI-025: /about tiene un h1', () => {
   it('AboutUsSection encabeza con <h1>', () => {
     const fuente = leer('src/components/sections/aboutus/AboutUsSection.tsx');
-    expect(fuente).toMatch(/<h1/);
+    // Rediseño «Arco»: el h1 es un titular en máscaras (TituloMascara como="h1").
+    expect(fuente).toMatch(/<h1|como="h1"/);
   });
 
   it('el primer encabezado de OurCompromiseSection es de nivel 2', () => {
