@@ -2,16 +2,54 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+/**
+ * Ficha de candidato. La abren admin (pipeline), empresa (candidatos de su
+ * vacante), reclutador y especialista (panel y detalle de vacante).
+ *
+ * Rediseño de septiembre de 2026 con el sistema «Arco» (docs/DISENO.md):
+ * - el Modal del sistema: role=dialog, foco atrapado, Escape, portal al final
+ *   de <body>; en móvil sube desde abajo. «Agregar documento» y «¿Borrar esta
+ *   nota?» son Modales apilados encima: sólo el de arriba atiende Escape;
+ * - cabecera con foto, nombre y estado; a la derecha, pestañas: Resumen ·
+ *   Evaluación · Trayectoria · Documentos. Evaluación (sólo para quien ve
+ *   calificaciones o notas) va segunda: es lo que viene a ver la empresa y
+ *   donde trabajan reclutador y especialista, y así en móvil nunca queda
+ *   cortada por el borde;
+ * - desde 1024 px, a la izquierda una columna con el contacto, los datos y los
+ *   enlaces, siempre a la vista. Por debajo esa columna ocupaba la primera
+ *   pantalla entera y empujaba las pestañas a la segunda (QA b9, 390 px): ahí
+ *   se resume en una franja (correo · teléfono · CV · LinkedIn) y el resto se
+ *   pliega en un <details> que adelanta ubicación y edad;
+ * - la barra de pestañas se queda fija arriba del cuerpo al desplazarse.
+ *
+ * La LÓGICA es la de antes: mismas llamadas con los mismos cuerpos, mismos
+ * permisos por rol, mismos reinicios al cambiar de candidato. Sólo cambió cómo
+ * se ve.
+ */
+
+import { useState, useRef, useEffect, useId, type ReactNode } from 'react';
 import { normalizeUrl } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { fechaCorta, fechaHora } from '@/lib/fechas';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 import DistanceBadge from '@/components/shared/DistanceBadge';
+import Modal from '@/components/ui/Modal';
+import Tabs, { PanelPestana, type Pestana } from '@/components/ui/Tabs';
+import Button, { ButtonLink, clasesBoton } from '@/components/ui/Button';
+import Aviso from '@/components/ui/Aviso';
+import Dato, { Seccion } from '@/components/ui/Dato';
+import IconButton from '@/components/ui/IconButton';
+import SelectorArchivo from '@/components/ui/SelectorArchivo';
+import StatusBadge, { Badge, tieneEtiquetaEnContexto, type TonoBadge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import FormField, { Input, Textarea, Checkbox } from '@/components/ui/FormField';
+import Skeleton from '@/components/ui/Skeleton';
 import {
-  X,
   Mail,
   Phone,
   MapPin,
-  Calendar,
+  CalendarCheck,
+  Cake,
   Briefcase,
   GraduationCap,
   Link as LinkIcon,
@@ -19,18 +57,29 @@ import {
   FileText,
   User,
   Clock,
-  MessageSquare,
   Building,
   Download,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  File,
   Plus,
-  Upload,
-  Loader2,
   Save,
   ClipboardList,
-  Star
+  Star,
+  Signal,
+  Layers,
+  Compass,
+  Eye,
+  EyeOff,
+  Lock,
+  Pencil,
+  Trash2,
+  X,
+  Paperclip,
+  FolderOpen,
+  AlertCircle,
+  CheckCircle2,
+  type LucideIcon
 } from 'lucide-react';
 
 /**
@@ -64,30 +113,53 @@ interface CandidateDocument {
 }
 
 /**
- * Colores del badge de estatus de educación (#PERF-012).
- *
- * Hay DOS vocabularios en producción: el del registro
- * (Cursando/Terminado/Trunco/Titulado) y el de /profile
- * (Completa/En curso/Trunca). El mapa anterior sólo conocía el primero, así que
- * todo lo guardado desde el perfil salía gris ante empresa y reclutador.
- * Mientras no se unifiquen con una migración de datos, aquí se reconocen ambos.
- */
-/**
  * Límite real de /api/upload (#PERF-028): las funciones de Vercel rechazan
  * cuerpos de más de 4.5 MB antes de llegar al handler.
  */
 const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
 const MAX_ADJUNTO_LABEL = '4MB';
 
-const COLOR_ESTATUS_EDUCACION: Record<string, string> = {
-  Titulado: 'bg-green-100 text-green-800',
-  Completa: 'bg-green-100 text-green-800',
-  Terminado: 'bg-blue-100 text-blue-800',
-  Cursando: 'bg-yellow-100 text-yellow-800',
-  'En curso': 'bg-yellow-100 text-yellow-800',
-  Trunco: 'bg-orange-100 text-orange-800',
-  Trunca: 'bg-orange-100 text-orange-800'
+/**
+ * Tono del badge de estatus de educación (#PERF-012).
+ *
+ * Hay DOS vocabularios en producción: el del registro
+ * (Cursando/Terminado/Trunco/Titulado) y el de /profile
+ * (Completa/En curso/Trunca). El mapa anterior sólo conocía el primero, así que
+ * todo lo guardado desde el perfil salía gris ante empresa y reclutador.
+ * Mientras no se unifiquen con una migración de datos, aquí se reconocen ambos.
+ * El texto del estatus siempre se escribe: el tono sólo lo acompaña.
+ */
+const COLOR_ESTATUS_EDUCACION: Record<string, TonoBadge> = {
+  Titulado: 'exito',
+  Completa: 'exito',
+  Terminado: 'info',
+  Cursando: 'aviso',
+  'En curso': 'aviso',
+  Trunco: 'neutro',
+  Trunca: 'neutro'
 };
+
+/**
+ * Etiquetas de estado que ya usaba la ficha. Un estado que no está aquí
+ * (company_interested, accepted…) sale con la etiqueta del sistema de diseño
+ * (antes salía el nombre crudo: «accepted»).
+ */
+const ETIQUETA_ESTADO: Record<string, string> = {
+  pending: 'Pendiente',
+  reviewing: 'En revisión',
+  sent_to_specialist: 'Enviado a especialista',
+  evaluating: 'En evaluación técnica',
+  sent_to_company: 'Enviado a empresa',
+  hired: 'Contratado',
+  discarded: 'Descartado',
+  available: 'Disponible',
+  in_process: 'En proceso',
+  inactive: 'Inactivo'
+};
+
+
+/** Columnas de la tabla de calificaciones: habilidad · estrellas · comentario. */
+const COLUMNAS_HABILIDADES = 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,15rem)]';
 
 // FEATURE: Educación múltiple
 interface Education {
@@ -260,6 +332,12 @@ export default function CandidateProfileModal({
   const [ratingsError, setRatingsError] = useState('');
   const [ratingsSaved, setRatingsSaved] = useState(false);
 
+  // Presentación: pestaña visible y nota pendiente de confirmar su borrado
+  // (la confirmación era un confirm() del navegador; ahora es un Modal).
+  const [pestana, setPestana] = useState('resumen');
+  const [notaABorrar, setNotaABorrar] = useState<EvaluationNote | null>(null);
+  const idFicha = `ficha${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+
   // Determinar si el usuario puede agregar notas de evaluación
   const canAddEvaluationNotes = ['recruiter', 'specialist'].includes(userRole || '');
   const canViewEvaluationNotes = ['recruiter', 'specialist', 'admin', 'company'].includes(userRole || '');
@@ -304,8 +382,18 @@ export default function CandidateProfileModal({
     setNewDocName('');
     setNewDocFile(null);
     setDocError('');
+    // Y la confirmación de borrado, si hubiera una abierta.
+    setNotaABorrar(null);
     if (noteFileRef.current) noteFileRef.current.value = '';
   }, [isOpen, application?.id, candidate?.id]);
+
+  // Cada vez que se abre, la ficha empieza por el resumen (se reinicia al
+  // CERRAR, así no asoma un instante la pestaña de la vez anterior). Al pasar
+  // al siguiente candidato se queda en la que se estaba viendo: quien evalúa
+  // uno tras otro sigue en «Evaluación».
+  useEffect(() => {
+    if (!isOpen) setPestana('resumen');
+  }, [isOpen]);
 
   // FEAT-5: Cargar notas de evaluación cuando se abre el modal
   useEffect(() => {
@@ -343,26 +431,12 @@ export default function CandidateProfileModal({
     };
   }, [isOpen, application?.id, canViewSkillRatings]);
 
-  // A11y (#59): cerrar con la tecla Escape mientras el modal está abierto.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // #PERF-035: con el sub-modal «Agregar Documento» abierto, Escape cerraba
-      // la ficha entera y dejaba showAddDocModal en true, así que reaparecía
-      // sobre el siguiente candidato. Escape cancela primero el sub-modal.
-      if (showAddDocModal) {
-        setShowAddDocModal(false);
-        setNewDocName('');
-        setNewDocFile(null);
-        setDocError('');
-        return;
-      }
-      onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose, showAddDocModal]);
+  // A11y (#59) y #PERF-035: Escape lo atiende el Modal del sistema, y SÓLO la
+  // capa de arriba. Con «Agregar documento» abierto, Escape cancela ese
+  // sub-modal (su alCerrar es cancelarDocumento, que limpia nombre, archivo y
+  // error) y la ficha sigue abierta; sin sub-modal, Escape cierra la ficha.
+  // Por eso ya no hay aquí un oyente de teclado propio: habría cerrado dos
+  // veces.
 
   const fetchSkillRatings = async (applicationId: number, cancelado: () => boolean = () => false) => {
     try {
@@ -482,8 +556,9 @@ export default function CandidateProfileModal({
     }
   };
 
+  // Se llama DESPUÉS de confirmar en el Modal «¿Borrar esta nota?» (antes, un
+  // confirm() del navegador con el mismo texto). Lo que hace es lo de siempre.
   const borrarNota = async (note: EvaluationNote) => {
-    if (!confirm('¿Borrar esta nota? No se puede deshacer.')) return;
     setNoteActionId(note.id);
     setNoteActionError(null);
     try {
@@ -499,6 +574,13 @@ export default function CandidateProfileModal({
     } finally {
       setNoteActionId(null);
     }
+  };
+
+  /** «Borrar nota» en la confirmación: se cierra y se borra, como tras el confirm(). */
+  const confirmarBorrado = () => {
+    const nota = notaABorrar;
+    setNotaABorrar(null);
+    if (nota) borrarNota(nota);
   };
 
   // FEAT-5: Función para guardar nota de evaluación
@@ -660,13 +742,8 @@ export default function CandidateProfileModal({
   // real (createdAt), no una fecha guardada a medianoche UTC: ésa se muestra en
   // hora local. Con UTC, una postulación hecha a las 19:00 en México salía con
   // la fecha del día siguiente. Sólo formatExperienceDate va en UTC.
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
+  // Fecha corta del panel (src/lib/fechas): «23 sep 2026».
+  const formatDate = (dateString: string) => fechaCorta(dateString);
 
   const formatExperienceDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-MX', {
@@ -676,39 +753,17 @@ export default function CandidateProfileModal({
     });
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      reviewing: 'bg-blue-100 text-blue-800',
-      sent_to_specialist: 'bg-purple-100 text-purple-800',
-      evaluating: 'bg-indigo-100 text-indigo-800',
-      sent_to_company: 'bg-green-100 text-green-800',
-      hired: 'bg-emerald-100 text-emerald-800',
-      discarded: 'bg-red-100 text-red-800',
-      available: 'bg-green-100 text-green-800',
-      in_process: 'bg-blue-100 text-blue-800',
-      inactive: 'bg-gray-100 text-gray-800'
-    };
-
-    const labels: Record<string, string> = {
-      pending: 'Pendiente',
-      reviewing: 'En revisión',
-      sent_to_specialist: 'Enviado a especialista',
-      evaluating: 'En evaluación técnica',
-      sent_to_company: 'Enviado a empresa',
-      hired: 'Contratado',
-      discarded: 'Descartado',
-      available: 'Disponible',
-      in_process: 'En proceso',
-      inactive: 'Inactivo'
-    };
-
-    return (
-      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${badges[status] || 'bg-gray-100 text-gray-800'}`}>
-        {labels[status] || status}
-      </span>
+  // Estado con color Y texto: el vocabulario de siempre de la ficha y, para
+  // los estados que no conocía, el del sistema. La empresa, el suyo: el
+  // contexto «empresa» de StatusBadge, el MISMO que su lista de candidatos
+  // (la ficha le decía «Enviado a empresa» a quien la lista llamaba «Por
+  // revisar», QA b9).
+  const getStatusBadge = (status: string) =>
+    userRole === 'company' && tieneEtiquetaEnContexto(status, 'empresa') ? (
+      <StatusBadge estado={status} contexto="empresa" />
+    ) : (
+      <StatusBadge estado={status} etiqueta={ETIQUETA_ESTADO[status]} />
     );
-  };
 
   /**
    * Normaliza una entrada de educación venida de la BD (#PERF-006).
@@ -833,6 +888,15 @@ export default function CandidateProfileModal({
     return null;
   };
 
+  // Cancelar «Agregar documento» (botón Cancelar, la X y Escape): el sub-modal
+  // se cierra y no deja nada a medias para el siguiente candidato (#PERF-035).
+  const cancelarDocumento = () => {
+    setShowAddDocModal(false);
+    setNewDocName('');
+    setNewDocFile(null);
+    setDocError('');
+  };
+
   // Agregar documento
   const handleAddDocument = async () => {
     if (!candidateId) {
@@ -918,909 +982,1083 @@ export default function CandidateProfileModal({
     }
   };
 
+  // ---------------------------------------------------------------------
+  // Presentación: qué se pinta y en qué pestaña. Las condiciones de cada
+  // bloque son las de siempre (permisos por rol incluidos).
+  // ---------------------------------------------------------------------
+  const edad = calculateAge(data.fechaNacimiento);
+  const ubicacion = getLocation();
+  const experiencias = data.experiences || [];
+  const documentos = data.documents || [];
+
+  const verCalificaciones = canViewSkillRatings && parsedHabilidades.length > 0 && !!application?.id;
+  const verNotasReclutador = showRecruiterNotes && !!recruiterNotes;
+  const verNotasEvaluacion = canViewEvaluationNotes && !!application?.id;
+  const verNotasInternas = puedeVerNotasInternas && (!!data.adminNotas || !!data.notes);
+  const hayEvaluacion = verCalificaciones || verNotasReclutador || verNotasEvaluacion || verNotasInternas;
+
+  // Evaluación, segunda: a 390 px las cuatro pestañas no caben, y la que se
+  // cortaba por el borde era justo la que la empresa viene a ver.
+  const pestanas: Pestana[] = [
+    { id: 'resumen', etiqueta: 'Resumen' },
+    ...(hayEvaluacion
+      ? [{
+          id: 'evaluacion',
+          etiqueta: 'Evaluación',
+          contador: verNotasEvaluacion && !loadingNotes ? evaluationNotes.length : undefined
+        }]
+      : []),
+    { id: 'trayectoria', etiqueta: 'Trayectoria' },
+    { id: 'documentos', etiqueta: 'Documentos', contador: documentos.length }
+  ];
+  // Si el candidato siguiente no tiene la pestaña que se veía, al resumen.
+  const activa = pestanas.some((p) => p.id === pestana) ? pestana : 'resumen';
+
+  const perfilProfesional = [
+    data.añosExperiencia != null && {
+      icono: Briefcase,
+      termino: 'Años de experiencia',
+      valor: `${data.añosExperiencia} ${data.añosExperiencia === 1 ? 'año' : 'años'}`
+    },
+    data.seniority && { icono: Signal, termino: 'Nivel de experiencia', valor: getSeniorityLabel(data.seniority) },
+    data.profile && { icono: Layers, termino: 'Área de especialidad', valor: data.profile },
+    data.subcategory && { icono: Layers, termino: 'Subespecialidad', valor: data.subcategory },
+    data.source && { icono: Compass, termino: 'Fuente', valor: getSourceLabel(data.source) }
+  ].filter(Boolean) as Array<{ icono: LucideIcon; termino: string; valor: string }>;
+
+  const hayEnlaces = Boolean(data.cvUrl || data.linkedinUrl || data.portafolioUrl);
+  const hayNavegacion = Boolean(onPrev || onNext);
+  const hayDatos = Boolean(data.appliedAt || edad || data.sexo);
+
+  // Bajo 1024 px: lo que se pliega (ubicación y datos) y la línea que lo
+  // adelanta en el <summary>, para no tener que abrirlo para lo esencial.
+  const hayPlegable = Boolean(ubicacion || hayDatos);
+  const avanceDatos = [ubicacion, edad ? `${edad} años` : null].filter(Boolean).join(' · ');
+
+  // Lo mismo se pinta en la columna (escritorio) y en el plegable (móvil):
+  // un solo sitio para cada dato.
+  const contenidoUbicacion = (
+    <>
+      <span className="block">{ubicacion}</span>
+      {data.ubicacionCercana && (
+        <span className="mt-0.5 block text-[13px] text-ink-muted">{data.ubicacionCercana}</span>
+      )}
+      <div className="mt-1.5 empty:hidden">
+        <DistanceBadge
+          candidateLat={data.latitude}
+          candidateLng={data.longitude}
+          jobLat={jobLatitude}
+          jobLng={jobLongitude}
+        />
+      </div>
+    </>
+  );
+
+  const datosPersonales = (
+    <>
+      {data.appliedAt && (
+        <Dato icono={CalendarCheck} termino="Fecha de postulación" className="col-span-2 sm:col-span-1">
+          {formatDate(data.appliedAt)}
+        </Dato>
+      )}
+      {edad ? (
+        <Dato icono={Cake} termino="Edad">
+          <span className="tabular-nums">{edad}</span> años
+        </Dato>
+      ) : null}
+      {data.sexo && (
+        <Dato icono={User} termino="Sexo">
+          {getSexoLabel(data.sexo)}
+        </Dato>
+      )}
+    </>
+  );
+
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 fade-in-fast"
-      // #PERF-037: con onClick, arrastrar una selección de texto desde dentro
-      // del diálogo y soltar fuera despachaba `click` sobre el overlay (ancestro
-      // común) y cerraba el modal, borrando el borrador de nota. onMouseDown +
-      // `e.target === e.currentTarget` sólo cierra al pulsar el fondo.
-      //
-      // #PERF-017: además ya no hace falta stopPropagation en el diálogo, que
-      // era lo que dejaba desprotegido al sub-modal «Agregar Documento» (hijo
-      // del overlay pero hermano del diálogo): cualquier clic dentro de él
-      // burbujeaba hasta aquí y cerraba toda la ficha.
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Perfil de ${data.name}`}
-        className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 md:p-6 flex justify-between items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 md:gap-3 mb-2">
-              {/* FEAT-2: Foto de perfil del candidato */}
-              <CandidatePhoto
-                fotoUrl={data.fotoUrl}
-                candidateName={data.name}
-                size="lg"
-              />
-              <div className="min-w-0">
-                <h2 className="text-lg md:text-2xl font-bold text-gray-900 truncate">{data.name}</h2>
-                <div className="flex items-center gap-1 md:gap-2 mt-1 flex-wrap">
-                  {getStatusBadge(data.status)}
-                  {data.seniority && (
-                    <span className="px-2 py-0.5 md:py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
-                      {getSeniorityLabel(data.seniority)}
-                    </span>
-                  )}
-                  {data.profile && (
-                    <span className="px-2 py-0.5 md:py-1 text-xs font-medium bg-[#e8f4f4] text-[#2b5d62] rounded hidden sm:inline">
-                      {data.profile}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0 rounded-full"
-          >
-            <X size={24} aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 md:p-6">
-          {/* Contact Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6">
-            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-              <Mail className="w-5 h-5 text-[#2b5d62]" />
-              <div>
-                <p className="text-xs text-gray-500">Email</p>
-                <a href={`mailto:${data.email}`} className="text-sm font-medium text-[#2b5d62] hover:underline">
-                  {data.email}
-                </a>
-              </div>
-            </div>
-
-            {data.phone && (
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                <Phone className="w-5 h-5 text-[#2b5d62]" />
-                <div>
-                  <p className="text-xs text-gray-500">Teléfono</p>
-                  <a href={`tel:${data.phone}`} className="text-sm font-medium text-[#2b5d62] hover:underline">
-                    {data.phone}
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {data.appliedAt && (
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                <Calendar className="w-5 h-5 text-[#2b5d62]" />
-                <div>
-                  <p className="text-xs text-gray-500">Fecha de aplicación</p>
-                  <p className="text-sm font-medium text-gray-900">{formatDate(data.appliedAt)}</p>
-                </div>
-              </div>
-            )}
-
-            {data.sexo && (
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                <User className="w-5 h-5 text-[#2b5d62]" />
-                <div>
-                  <p className="text-xs text-gray-500">Sexo</p>
-                  <p className="text-sm font-medium text-gray-900">{getSexoLabel(data.sexo)}</p>
-                </div>
-              </div>
-            )}
-
-            {calculateAge(data.fechaNacimiento) && (
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                <Calendar className="w-5 h-5 text-[#2b5d62]" />
-                <div>
-                  <p className="text-xs text-gray-500">Edad</p>
-                  <p className="text-sm font-medium text-gray-900">{calculateAge(data.fechaNacimiento)} años</p>
-                </div>
-              </div>
-            )}
-
-            {getLocation() && (
-              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-                <MapPin className="w-5 h-5 text-[#2b5d62]" />
-                <div>
-                  <p className="text-xs text-gray-500">Ubicación</p>
-                  <p className="text-sm font-medium text-gray-900">{getLocation()}</p>
-                  {data.ubicacionCercana && (
-                    <p className="text-xs text-gray-500 mt-0.5">{data.ubicacionCercana}</p>
-                  )}
-                  <DistanceBadge
-                    candidateLat={data.latitude}
-                    candidateLng={data.longitude}
-                    jobLat={jobLatitude}
-                    jobLng={jobLongitude}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* FEATURE: Educación múltiple */}
-          {educaciones.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-[#2b5d62]" />
-                Educación
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {educaciones.map((edu, index) => (
-                  <div key={edu.id || index} className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{edu.carrera || 'Sin carrera'}</h4>
-                        <p className="text-sm text-gray-600">{edu.institucion || 'Sin institución'}</p>
-                      </div>
-                      {edu.estatus && (
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${COLOR_ESTATUS_EDUCACION[edu.estatus] || 'bg-gray-100 text-gray-800'}`}>
-                          {edu.estatus}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      {edu.nivel && <span className="font-medium">{edu.nivel}</span>}
-                      {(edu.añoInicio || edu.añoFin) && (
-                        <>
-                          <span className="text-gray-400">•</span>
-                          <span>
-                            {edu.añoInicio || '?'} - {edu.añoFin || 'Presente'}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Experience & Professional Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {data.añosExperiencia !== undefined && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <Briefcase className="w-4 h-4" />
-                  <span className="text-xs font-medium">Años de Experiencia</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">
-                  {data.añosExperiencia} {data.añosExperiencia === 1 ? 'año' : 'años'}
-                </p>
-              </div>
-            )}
-
+    <>
+      <Modal
+        abierto={isOpen}
+        alCerrar={onClose}
+        tamano="xl"
+        iconoTitulo={
+          <CandidatePhoto fotoUrl={data.fotoUrl} candidateName={data.name} size="md" decorativa />
+        }
+        titulo={
+          <>
+            <span className="sr-only">Perfil de </span>
+            {data.name}
+          </>
+        }
+        subtitulo={
+          // Modal pinta la foto fuera del <h2>, en su propia columna: las
+          // insignias arrancan solas bajo el nombre.
+          <span className="flex flex-wrap items-center gap-1.5">
+            {getStatusBadge(data.status)}
             {data.seniority && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <Briefcase className="w-4 h-4" />
-                  <span className="text-xs font-medium">Nivel de Experiencia</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{getSeniorityLabel(data.seniority)}</p>
-              </div>
+              <Badge tono="neutro" sinPunto>
+                {getSeniorityLabel(data.seniority)}
+              </Badge>
             )}
-
             {data.profile && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <Briefcase className="w-4 h-4" />
-                  <span className="text-xs font-medium">Área de Especialidad</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{data.profile}</p>
-              </div>
+              <Badge tono="info" sinPunto>
+                {data.profile}
+              </Badge>
             )}
-
-            {data.subcategory && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <Briefcase className="w-4 h-4" />
-                  <span className="text-xs font-medium">Subespecialidad</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{data.subcategory}</p>
+          </span>
+        }
+        pie={
+          <div className="flex w-full items-center justify-between gap-3">
+            {hayNavegacion ? (
+              <div role="group" aria-label="Navegar entre candidatos" className="flex items-center gap-1.5">
+                <Button
+                  variante="contorno"
+                  tamano="sm"
+                  icono={ChevronLeft}
+                  onClick={onPrev}
+                  disabled={!onPrev || currentIndex === 0}
+                >
+                  <span className="sr-only sm:not-sr-only">Anterior</span>
+                </Button>
+                {currentIndex !== undefined && totalCount !== undefined && (
+                  <span
+                    aria-live="polite"
+                    className="min-w-[4.5rem] text-center font-display text-sm font-medium tabular-nums text-ink-muted"
+                  >
+                    <span className="sr-only">Candidato </span>
+                    {currentIndex + 1} de {totalCount}
+                  </span>
+                )}
+                <Button
+                  variante="contorno"
+                  tamano="sm"
+                  iconoFinal={ChevronRight}
+                  onClick={onNext}
+                  disabled={!onNext || (currentIndex !== undefined && totalCount !== undefined && currentIndex >= totalCount - 1)}
+                >
+                  <span className="sr-only sm:not-sr-only">Siguiente</span>
+                </Button>
               </div>
+            ) : (
+              <span aria-hidden="true" />
             )}
+            <Button variante="contorno" onClick={onClose}>
+              Cerrar
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-7">
+          {/* Bajo 1024 px: el contacto en una franja y el resto plegado, así
+              las pestañas entran en la primera pantalla (QA b9, 390 px). */}
+          <div className="min-w-0 rounded-xl border border-line bg-paper/70 lg:hidden">
+            <ul aria-label="Contacto y enlaces" className="flex flex-wrap gap-2 p-3">
+              <li className="min-w-0 max-w-full">
+                <a href={`mailto:${data.email}`} className={cn(clasesBoton({ variante: 'contorno', tamano: 'sm' }), 'max-w-full')}>
+                  <Mail aria-hidden="true" />
+                  <span className="sr-only">Correo: </span>
+                  <span className="min-w-0 truncate">{data.email}</span>
+                </a>
+              </li>
+              {data.phone && (
+                <li>
+                  <a href={`tel:${data.phone}`} className={clasesBoton({ variante: 'contorno', tamano: 'sm' })}>
+                    <Phone aria-hidden="true" />
+                    <span className="sr-only">Teléfono: </span>
+                    <span className="tabular-nums">{data.phone}</span>
+                  </a>
+                </li>
+              )}
+              {data.cvUrl && (
+                <li>
+                  <ButtonLink externo href={ensureUrl(data.cvUrl)} icono={FileText} variante="secundario" tamano="sm">
+                    Ver CV
+                  </ButtonLink>
+                </li>
+              )}
+              {data.linkedinUrl && (
+                <li>
+                  <ButtonLink externo href={ensureUrl(data.linkedinUrl)} icono={Linkedin} variante="contorno" tamano="sm">
+                    LinkedIn
+                  </ButtonLink>
+                </li>
+              )}
+              {data.portafolioUrl && (
+                <li>
+                  <ButtonLink externo href={ensureUrl(data.portafolioUrl)} icono={LinkIcon} variante="contorno" tamano="sm">
+                    Portafolio
+                  </ButtonLink>
+                </li>
+              )}
+            </ul>
 
-            {data.source && (
-              <div className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <User className="w-4 h-4" />
-                  <span className="text-xs font-medium">Fuente</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900">{getSourceLabel(data.source)}</p>
-              </div>
+            {hayPlegable && (
+              <details className="group border-t border-line">
+                <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2.5 rounded-b-xl px-3.5 py-2 hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal group-open:rounded-none [&::-webkit-details-marker]:hidden">
+                  <span className="flex-none font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                    Datos
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                    {avanceDatos ||
+                      (data.appliedAt ? `Postuló el ${formatDate(data.appliedAt)}` : getSexoLabel(data.sexo ?? undefined))}
+                  </span>
+                  {/* Avance visual; para el lector, la distancia completa va dentro. */}
+                  <span aria-hidden="true" className="flex-none empty:hidden">
+                    <DistanceBadge
+                      compact
+                      candidateLat={data.latitude}
+                      candidateLng={data.longitude}
+                      jobLat={jobLatitude}
+                      jobLng={jobLongitude}
+                    />
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="h-4 w-4 flex-none text-ink-muted transition-transform duration-150 group-open:rotate-180"
+                  />
+                </summary>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line px-3.5 py-3.5 sm:grid-cols-3">
+                  {ubicacion && (
+                    <Dato icono={MapPin} termino="Ubicación" className="col-span-full">
+                      {contenidoUbicacion}
+                    </Dato>
+                  )}
+                  {datosPersonales}
+                </dl>
+              </details>
             )}
           </div>
 
-          {/* Links */}
-          <div className="flex flex-wrap gap-3 mb-6">
-            {data.cvUrl && (
-              <a
-                href={ensureUrl(data.cvUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] transition-colors"
-              >
-                <FileText className="w-4 h-4" />
-                Ver CV
-              </a>
+          {/* Desde 1024 px: contacto, datos y enlaces en su columna, a la
+              vista en todas las pestañas. */}
+          <div className="hidden gap-5 self-start rounded-xl border border-line bg-paper/70 p-4 lg:grid">
+            <BloqueLateral titulo="Contacto">
+              <dl className="space-y-3">
+                <Dato icono={Mail} termino="Correo">
+                  <a href={`mailto:${data.email}`} className="break-all font-medium text-teal hover:underline">
+                    {data.email}
+                  </a>
+                </Dato>
+                {data.phone && (
+                  <Dato icono={Phone} termino="Teléfono">
+                    <a href={`tel:${data.phone}`} className="font-medium tabular-nums text-teal hover:underline">
+                      {data.phone}
+                    </a>
+                  </Dato>
+                )}
+                {ubicacion && (
+                  <Dato icono={MapPin} termino="Ubicación">
+                    {contenidoUbicacion}
+                  </Dato>
+                )}
+              </dl>
+            </BloqueLateral>
+
+            {hayDatos && (
+              <BloqueLateral titulo="Datos">
+                <dl className="space-y-3">{datosPersonales}</dl>
+              </BloqueLateral>
             )}
 
-            {data.linkedinUrl && (
-              <a
-                href={ensureUrl(data.linkedinUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0077b5] text-white rounded-lg hover:bg-[#006097] transition-colors"
-              >
-                <Linkedin className="w-4 h-4" />
-                LinkedIn
-              </a>
-            )}
-
-            {data.portafolioUrl && (
-              <a
-                href={ensureUrl(data.portafolioUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                <LinkIcon className="w-4 h-4" />
-                Portafolio
-              </a>
+            {hayEnlaces && (
+              <BloqueLateral titulo="Enlaces">
+                <div className="flex flex-col gap-2">
+                  {data.cvUrl && (
+                    <ButtonLink externo href={ensureUrl(data.cvUrl)} icono={FileText} variante="secundario" tamano="sm" className="w-full justify-start">
+                      <span className="min-w-0 flex-1 truncate text-left">Ver CV</span>
+                    </ButtonLink>
+                  )}
+                  {data.linkedinUrl && (
+                    <ButtonLink externo href={ensureUrl(data.linkedinUrl)} icono={Linkedin} variante="contorno" tamano="sm" className="w-full justify-start">
+                      <span className="min-w-0 flex-1 truncate text-left">LinkedIn</span>
+                    </ButtonLink>
+                  )}
+                  {data.portafolioUrl && (
+                    <ButtonLink externo href={ensureUrl(data.portafolioUrl)} icono={LinkIcon} variante="contorno" tamano="sm" className="w-full justify-start">
+                      <span className="min-w-0 flex-1 truncate text-left">Portafolio</span>
+                    </ButtonLink>
+                  )}
+                </div>
+              </BloqueLateral>
             )}
           </div>
 
-          {/* Carta de Presentación del candidato */}
-          {data.cartaPresentacion && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#2b5d62]" />
-                Carta de Presentación
-              </h3>
-              <div className="p-4 bg-[#e8f4f4] border border-[#2b5d62]/20 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.cartaPresentacion}</p>
-              </div>
+          {/* Pestañas. La barra se queda fija arriba del cuerpo del modal al
+              desplazarse por la ficha. Bajo 1024 px va de borde a borde: si
+              no caben las cuatro, la última se corta contra el borde de la
+              pantalla y se entiende que se desliza. */}
+          <div className="min-w-0">
+            <div className="sticky top-0 z-10 bg-white">
+              <Tabs
+                idBase={idFicha}
+                etiqueta="Secciones de la ficha"
+                pestanas={pestanas}
+                activa={activa}
+                alCambiar={setPestana}
+                className="-mx-5 scroll-px-5 px-5 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:scroll-px-0 lg:px-0"
+              />
             </div>
-          )}
 
-          {/* Cover Letter (de la aplicación) */}
-          {data.coverLetter && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-[#2b5d62]" />
-                Carta de Presentación
-              </h3>
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.coverLetter}</p>
-              </div>
-            </div>
-          )}
+            {/* ---------------- Resumen ---------------- */}
+            <PanelPestana idBase={idFicha} id="resumen" activa={activa}>
+              <div className="space-y-7">
+                {perfilProfesional.length > 0 && (
+                  <Seccion titulo="Perfil profesional">
+                    <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                      {perfilProfesional.map(({ icono: Icono, termino, valor }) => (
+                        <div key={termino} className="rounded-lg border border-line px-3 py-2.5">
+                          <dt className="flex items-center gap-1.5 text-xs text-ink-muted">
+                            <Icono className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                            {termino}
+                          </dt>
+                          <dd className="mt-1 font-display text-[15px] font-semibold leading-snug text-ink">{valor}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </Seccion>
+                )}
 
-          {/* Evaluación de Habilidades */}
-          {canViewSkillRatings && parsedHabilidades.length > 0 && application?.id && (
-            <div className="mb-6 border border-amber-200 rounded-lg overflow-hidden">
-              <div className="bg-amber-50 px-4 py-3 border-b border-amber-200">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <Star className="w-5 h-5 text-amber-500" />
-                  Evaluación de Habilidades
-                </h3>
-                {!canEditSkillRatings && (
-                  <p className="text-xs text-gray-500 mt-1">Calificaciones del especialista</p>
+                {/* Carta de presentación del perfil del candidato */}
+                {data.cartaPresentacion && (
+                  <Seccion titulo="Carta de presentación" remate="en sus palabras">
+                    <Carta texto={data.cartaPresentacion} />
+                  </Seccion>
+                )}
+
+                {/* Carta que acompañó a la postulación */}
+                {data.coverLetter && (
+                  <Seccion titulo="Carta de la postulación">
+                    <Carta texto={data.coverLetter} />
+                  </Seccion>
+                )}
+
+                {perfilProfesional.length === 0 && !data.cartaPresentacion && !data.coverLetter && (
+                  <EmptyState
+                    compacto
+                    frase="Poco que contar por ahora."
+                    titulo="Sin resumen profesional"
+                    descripcion="El perfil todavía no tiene años de experiencia, especialidad ni carta de presentación."
+                  />
                 )}
               </div>
-              <div className="p-4 space-y-3">
-                {parsedHabilidades.map((skill) => {
-                  const currentRating = skillRatings[skill]?.rating || 0;
-                  const currentComment = skillRatings[skill]?.comment || '';
-                  const savedRating = savedSkillRatings.find(r => r.skillName === skill);
+            </PanelPestana>
 
-                  return (
-                    <div key={skill} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 border-b border-gray-100 last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium text-gray-800">{skill}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex gap-0.5">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <button
-                              key={star}
-                              type="button"
-                              aria-label={`Calificar ${skill}: ${star} de 5 estrella${star > 1 ? 's' : ''}`}
-                              aria-pressed={star <= currentRating}
-                              title={`${star} de 5`}
-                              onClick={() => {
-                                if (!canEditSkillRatings) return;
-                                setSkillRatings(prev => ({
-                                  ...prev,
-                                  [skill]: { ...prev[skill], rating: star, comment: prev[skill]?.comment || '' }
-                                }));
-                              }}
-                              disabled={!canEditSkillRatings}
-                              className={`text-xl transition-colors ${
-                                canEditSkillRatings ? 'cursor-pointer hover:scale-110' : 'cursor-default'
-                              } ${star <= currentRating ? 'text-amber-400' : 'text-gray-300'}`}
+            {/* ---------------- Trayectoria ---------------- */}
+            <PanelPestana idBase={idFicha} id="trayectoria" activa={activa}>
+              {experiencias.length === 0 && educaciones.length === 0 ? (
+                <EmptyState
+                  compacto
+                  frase="Todavía no hay trayectoria que mostrar."
+                  titulo="Sin experiencia ni estudios registrados"
+                />
+              ) : (
+                <div className="space-y-8">
+                  <Seccion titulo="Experiencia laboral" contador={experiencias.length}>
+                    {experiencias.length > 0 ? (
+                      // Línea de tiempo: cada puesto es un punto sobre la línea
+                      // (el punto y el puente del isotipo); el actual, en lima.
+                      <ol className="ml-1 space-y-5 border-l-2 border-line pl-6">
+                        {experiencias.map((exp, index) => (
+                          <li key={exp.id || index} className="relative">
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'absolute -left-[31px] top-1.5 h-3 w-3 rounded-full ring-4 ring-white',
+                                exp.esActual ? 'bg-lime' : 'bg-teal'
+                              )}
+                            />
+                            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                              <h4 className="font-display text-[15px] font-semibold leading-snug text-ink">{exp.puesto}</h4>
+                              {exp.esActual && (
+                                <Badge tono="exito" tamano="sm">
+                                  Actual
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
+                              <span className="inline-flex items-center gap-1.5">
+                                <Building className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                                {exp.empresa}
+                              </span>
+                              {exp.ubicacion && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <MapPin className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                                    {exp.ubicacion}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1.5 text-[13px] tabular-nums text-ink-muted">
+                              <Clock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                              {formatExperienceDate(exp.fechaInicio)} – {exp.esActual ? 'Presente' : exp.fechaFin ? formatExperienceDate(exp.fechaFin) : 'N/A'}
+                            </p>
+                            {exp.descripcion && (
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink">{exp.descripcion}</p>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="text-sm text-ink-muted">Sin experiencia laboral registrada.</p>
+                    )}
+                  </Seccion>
+
+                  {/* FEATURE: Educación múltiple */}
+                  <Seccion titulo="Educación" contador={educaciones.length}>
+                    {educaciones.length > 0 ? (
+                      <ul className="grid gap-3 md:grid-cols-2">
+                        {educaciones.map((edu, index) => (
+                          <li key={edu.id || index} className="flex gap-3 rounded-xl border border-line p-4">
+                            <span
+                              aria-hidden="true"
+                              className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-teal-tint text-teal"
                             >
-                              <span aria-hidden="true">{star <= currentRating ? '★' : '☆'}</span>
-                            </button>
+                              <GraduationCap className="h-[18px] w-[18px]" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <h4 className="min-w-0 font-display text-[15px] font-semibold leading-snug text-ink">
+                                  {edu.carrera || 'Sin carrera'}
+                                </h4>
+                                {edu.estatus && (
+                                  <Badge tono={COLOR_ESTATUS_EDUCACION[edu.estatus] || 'neutro'} tamano="sm">
+                                    {edu.estatus}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-sm text-ink-muted">{edu.institucion || 'Sin institución'}</p>
+                              {(edu.nivel || edu.añoInicio || edu.añoFin) && (
+                                <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[13px] tabular-nums text-ink-muted">
+                                  {edu.nivel && <span className="font-medium text-ink">{edu.nivel}</span>}
+                                  {(edu.añoInicio || edu.añoFin) && (
+                                    <>
+                                      {edu.nivel && <span aria-hidden="true">·</span>}
+                                      <span>
+                                        {edu.añoInicio || '?'} – {edu.añoFin || 'Presente'}
+                                      </span>
+                                    </>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-ink-muted">Sin estudios registrados.</p>
+                    )}
+                  </Seccion>
+                </div>
+              )}
+            </PanelPestana>
+
+            {/* ---------------- Documentos ---------------- */}
+            <PanelPestana idBase={idFicha} id="documentos" activa={activa}>
+              {(documentos.length > 0 || (canAddDocuments && candidateId)) && (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-ink-muted">
+                    <span className="font-display font-semibold tabular-nums text-ink">{documentos.length}</span>{' '}
+                    {documentos.length === 1 ? 'documento' : 'documentos'}
+                  </p>
+                  {canAddDocuments && candidateId && (
+                    <Button variante="contorno" tamano="sm" icono={Plus} onClick={() => setShowAddDocModal(true)}>
+                      Agregar documento
+                    </Button>
+                  )}
+                </div>
+              )}
+              {documentos.length > 0 ? (
+                <ul className="grid gap-2.5 sm:grid-cols-2">
+                  {documentos.map((doc, index) => (
+                    <li key={doc.id || index}>
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex items-center gap-3 rounded-xl border border-line bg-white p-3 transition-colors duration-150 hover:border-teal hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-teal-tint text-teal"
+                        >
+                          <FileText className="h-5 w-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink">{doc.name}</span>
+                          {doc.fileType && (
+                            <span className="block truncate text-xs uppercase tracking-wide text-ink-muted">{doc.fileType}</span>
+                          )}
+                        </span>
+                        <Download
+                          className="h-4 w-4 flex-none text-ink-muted transition-colors duration-150 group-hover:text-teal"
+                          aria-hidden="true"
+                        />
+                        <span className="sr-only"> (se abre en una pestaña nueva)</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  compacto
+                  icono={FolderOpen}
+                  titulo="No hay documentos"
+                  descripcion={
+                    canAddDocuments && candidateId
+                      ? 'Pulsa «Agregar documento» para subir el primero.'
+                      : 'Todavía no se ha subido ningún documento a este expediente.'
+                  }
+                />
+              )}
+            </PanelPestana>
+
+            {/* ---------------- Evaluación ---------------- */}
+            {hayEvaluacion && (
+              <PanelPestana idBase={idFicha} id="evaluacion" activa={activa}>
+                <div className="space-y-8">
+                  {/* Evaluación de Habilidades */}
+                  {canViewSkillRatings && parsedHabilidades.length > 0 && application?.id && (
+                    <Seccion
+                      titulo="Evaluación de habilidades"
+                      descripcion={
+                        canEditSkillRatings
+                          ? 'Califica de 1 a 5 las habilidades que pide la vacante.'
+                          : 'Calificaciones del especialista'
+                      }
+                    >
+                      <div className="overflow-hidden rounded-xl border border-line">
+                        <div
+                          aria-hidden="true"
+                          className={cn(
+                            'hidden gap-4 border-b border-line bg-paper px-4 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted sm:grid',
+                            COLUMNAS_HABILIDADES
+                          )}
+                        >
+                          <span>Habilidad</span>
+                          <span>Calificación</span>
+                          <span>Comentario</span>
+                        </div>
+                        <ul className="divide-y divide-line">
+                          {parsedHabilidades.map((skill, indice) => {
+                            const currentRating = skillRatings[skill]?.rating || 0;
+                            const currentComment = skillRatings[skill]?.comment || '';
+                            const savedRating = savedSkillRatings.find(r => r.skillName === skill);
+                            const idComentario = `${idFicha}-comentario-${indice}`;
+
+                            return (
+                              <li
+                                key={skill}
+                                className={cn('grid gap-2 px-4 py-3 sm:items-center sm:gap-4', COLUMNAS_HABILIDADES)}
+                              >
+                                <p className="min-w-0 text-sm font-medium text-ink">{skill}</p>
+
+                                {canEditSkillRatings ? (
+                                  <div role="group" aria-label={`Calificación de ${skill}`} className="flex items-center">
+                                    {[1, 2, 3, 4, 5].map(star => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        aria-label={`Calificar ${skill}: ${star} de 5 estrella${star > 1 ? 's' : ''}`}
+                                        aria-pressed={star <= currentRating}
+                                        title={`${star} de 5`}
+                                        onClick={() => {
+                                          if (!canEditSkillRatings) return;
+                                          setSkillRatings(prev => ({
+                                            ...prev,
+                                            [skill]: { ...prev[skill], rating: star, comment: prev[skill]?.comment || '' }
+                                          }));
+                                        }}
+                                        disabled={!canEditSkillRatings}
+                                        className="inline-flex h-8 w-7 items-center justify-center rounded-md transition-transform duration-150 hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal"
+                                      >
+                                        <Star
+                                          aria-hidden="true"
+                                          strokeWidth={1.75}
+                                          className={cn(
+                                            'h-5 w-5',
+                                            star <= currentRating ? 'fill-orange text-orange-dark' : 'fill-transparent text-line-strong'
+                                          )}
+                                        />
+                                      </button>
+                                    ))}
+                                    <span
+                                      aria-hidden="true"
+                                      className="ml-1.5 w-8 font-display text-[13px] tabular-nums text-ink-muted"
+                                    >
+                                      {currentRating ? `${currentRating}/5` : '–'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <EstrellasLectura valor={currentRating} />
+                                )}
+
+                                {canEditSkillRatings ? (
+                                  <div className="min-w-0">
+                                    {/* Etiqueta visible en móvil; en escritorio la da la cabecera «Comentario». */}
+                                    <label
+                                      htmlFor={idComentario}
+                                      className="mb-1 block text-xs font-medium text-ink-muted sm:sr-only"
+                                    >
+                                      Comentario sobre {skill}
+                                    </label>
+                                    <Input
+                                      id={idComentario}
+                                      type="text"
+                                      value={currentComment}
+                                      onChange={(e) => {
+                                        setSkillRatings(prev => ({
+                                          ...prev,
+                                          [skill]: { ...prev[skill], rating: prev[skill]?.rating || 0, comment: e.target.value }
+                                        }));
+                                      }}
+                                      placeholder="Comentario (opcional)"
+                                      className="h-9"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="min-w-0 text-[13px]">
+                                    {savedRating?.comment && <p className="text-ink">{savedRating.comment}</p>}
+                                    {savedRating && (
+                                      <p className="mt-0.5 text-xs text-ink-muted">por {savedRating.ratedBy.nombre}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+
+                        {canEditSkillRatings && (
+                          <div className="flex flex-col-reverse gap-2 border-t border-line bg-paper/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            {/* #PERF-014/#PERF-015: confirmación y error visibles */}
+                            <div className="min-w-0 text-sm">
+                              {ratingsError && (
+                                <p role="alert" className="flex items-start gap-1.5 font-medium text-danger">
+                                  <AlertCircle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+                                  {ratingsError}
+                                </p>
+                              )}
+                              {ratingsSaved && !ratingsError && (
+                                <p role="status" className="flex items-center gap-1.5 font-medium text-lime-dark">
+                                  <CheckCircle2 className="h-4 w-4 flex-none" aria-hidden="true" />
+                                  Calificaciones guardadas
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              icono={Save}
+                              onClick={handleSaveSkillRatings}
+                              disabled={savingSkillRatings || Object.values(skillRatings).every(v => v.rating === 0)}
+                              cargando={savingSkillRatings}
+                              textoCargando="Guardando…"
+                              className="sm:flex-none"
+                            >
+                              Guardar calificaciones
+                            </Button>
+                          </div>
+                        )}
+
+                        {!canEditSkillRatings && skillRatingsLoaded && savedSkillRatings.length === 0 && (
+                          <p className="border-t border-line px-4 py-3 text-center text-sm text-ink-muted">
+                            Aún no se han calificado las habilidades.
+                          </p>
+                        )}
+                      </div>
+                    </Seccion>
+                  )}
+
+                  {/* Notas del reclutador sobre la vacante (sólo especialista) - JobAssignment */}
+                  {showRecruiterNotes && recruiterNotes && (
+                    <Seccion titulo="Notas del reclutador" descripcion="Sobre la vacante, para quien evalúa">
+                      <div className="rounded-xl border border-line bg-paper/70 px-4 py-3.5">
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{recruiterNotes}</p>
+                      </div>
+                    </Seccion>
+                  )}
+
+                  {/* FEAT-5: Sección de Notas de Evaluación */}
+                  {canViewEvaluationNotes && application?.id && (
+                    <Seccion titulo="Notas de evaluación" contador={loadingNotes ? undefined : evaluationNotes.length}>
+                      {/* Notas existentes */}
+                      {loadingNotes ? (
+                        <div role="status" className="space-y-2.5">
+                          <span className="sr-only">Cargando notas…</span>
+                          {[0, 1].map((i) => (
+                            <div key={i} className="rounded-xl border border-line p-4">
+                              <Skeleton className="h-3.5 w-40" />
+                              <Skeleton className="mt-3 h-3.5 w-full" />
+                              <Skeleton className="mt-2 h-3.5 w-2/3" />
+                            </div>
                           ))}
                         </div>
-                        {canEditSkillRatings && (
-                          <input
-                            type="text"
-                            value={currentComment}
-                            onChange={(e) => {
-                              setSkillRatings(prev => ({
-                                ...prev,
-                                [skill]: { ...prev[skill], rating: prev[skill]?.rating || 0, comment: e.target.value }
-                              }));
-                            }}
-                            placeholder="Comentario..."
-                            className="w-36 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
-                          />
-                        )}
-                        {!canEditSkillRatings && savedRating?.comment && (
-                          <span className="text-xs text-gray-500 italic max-w-[200px] truncate" title={savedRating.comment}>
-                            {savedRating.comment}
-                          </span>
-                        )}
-                      </div>
-                      {!canEditSkillRatings && savedRating && (
-                        <span className="text-xs text-gray-400">
-                          por {savedRating.ratedBy.nombre}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                      ) : evaluationNotes.length > 0 ? (
+                        <ul className="space-y-3">
+                          {evaluationNotes.map((note) => (
+                            <li key={note.id} className="rounded-xl border border-line bg-white p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge tono={note.authorRole === 'recruiter' ? 'info' : 'marca'} sinPunto tamano="sm">
+                                    {note.authorRole === 'recruiter' ? 'Reclutador' : 'Especialista'}
+                                  </Badge>
+                                  {userRole !== 'company' && (
+                                    note.isPublic ? (
+                                      <Badge tono="exito" icono={Eye} tamano="sm">
+                                        Visible para la empresa
+                                      </Badge>
+                                    ) : (
+                                      <Badge tono="neutro" icono={Lock} tamano="sm">
+                                        Solo INAKAT
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                                <time dateTime={note.createdAt} className="text-xs tabular-nums text-ink-muted">
+                                  {fechaHora(note.createdAt)}
+                                </time>
+                              </div>
 
-                {canEditSkillRatings && (
-                  <div className="pt-2 space-y-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveSkillRatings}
-                      disabled={savingSkillRatings || Object.values(skillRatings).every(v => v.rating === 0)}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {savingSkillRatings ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Guardando...
-                        </>
+                              {editingNoteId === note.id ? (
+                                <div className="mt-3 space-y-2.5">
+                                  <FormField etiqueta="Editar nota">
+                                    <Textarea
+                                      value={editingNoteContent}
+                                      onChange={(e) => setEditingNoteContent(e.target.value)}
+                                      rows={3}
+                                      maxLength={5000}
+                                    />
+                                  </FormField>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      variante="secundario"
+                                      tamano="sm"
+                                      onClick={() => actualizarNota(note, { content: editingNoteContent.trim() })}
+                                      disabled={noteActionId === note.id || !editingNoteContent.trim()}
+                                    >
+                                      Guardar cambios
+                                    </Button>
+                                    <Button variante="contorno" tamano="sm" onClick={() => setEditingNoteId(null)}>
+                                      Cancelar
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="mt-2.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{note.content}</p>
+                              )}
+
+                              {note.documentUrl && (
+                                <a
+                                  href={note.documentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-2.5 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 py-1.5 text-[13px] font-medium text-teal transition-colors duration-150 hover:border-teal hover:text-teal-dark"
+                                >
+                                  <Paperclip className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+                                  <span className="truncate">{note.documentName || 'Documento adjunto'}</span>
+                                  <span className="sr-only"> (se abre en una pestaña nueva)</span>
+                                </a>
+                              )}
+
+                              {note.canEdit && userRole !== 'company' && editingNoteId !== note.id && (
+                                <div className="-mb-1 -ml-2 mt-2 flex flex-wrap gap-1">
+                                  <Button
+                                    variante="fantasma"
+                                    tamano="sm"
+                                    icono={note.isPublic ? EyeOff : Eye}
+                                    onClick={() => actualizarNota(note, { isPublic: !note.isPublic })}
+                                    disabled={noteActionId === note.id}
+                                  >
+                                    {note.isPublic ? 'Ocultar a la empresa' : 'Hacer visible a la empresa'}
+                                  </Button>
+                                  <Button
+                                    variante="fantasma"
+                                    tamano="sm"
+                                    icono={Pencil}
+                                    onClick={() => {
+                                      setEditingNoteId(note.id);
+                                      setEditingNoteContent(note.content);
+                                    }}
+                                    disabled={noteActionId === note.id}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    variante="fantasma"
+                                    tamano="sm"
+                                    icono={Trash2}
+                                    onClick={() => setNotaABorrar(note)}
+                                    disabled={noteActionId === note.id}
+                                    className="text-danger hover:bg-danger-tint"
+                                  >
+                                    Borrar
+                                  </Button>
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
                       ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Guardar Calificaciones
-                        </>
+                        <EmptyState
+                          compacto
+                          icono={ClipboardList}
+                          titulo="No hay notas de evaluación aún"
+                          descripcion={canAddEvaluationNotes ? 'Escribe la primera en el recuadro de abajo.' : undefined}
+                        />
                       )}
-                    </button>
-                    {/* #PERF-014/#PERF-015: confirmación y error visibles */}
-                    {ratingsError && (
-                      <p role="alert" className="text-sm text-red-600">{ratingsError}</p>
-                    )}
-                    {ratingsSaved && !ratingsError && (
-                      <p role="status" className="text-sm text-green-600">Calificaciones guardadas</p>
-                    )}
-                  </div>
-                )}
-
-                {!canEditSkillRatings && skillRatingsLoaded && savedSkillRatings.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-2">
-                    Aún no se han calificado las habilidades.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Experience */}
-          {data.experiences && data.experiences.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-[#2b5d62]" />
-                Experiencia Laboral
-              </h3>
-              <div className="space-y-4">
-                {data.experiences.map((exp, index) => (
-                  <div key={exp.id || index} className="p-4 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{exp.puesto}</h4>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Building className="w-4 h-4" />
-                          <span>{exp.empresa}</span>
-                          {exp.ubicacion && (
-                            <>
-                              <span className="text-gray-400">•</span>
-                              <MapPin className="w-4 h-4" />
-                              <span>{exp.ubicacion}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {exp.esActual && (
-                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-                          Actual
-                        </span>
+                      {noteActionError && (
+                        <Aviso compacto className="mt-3">{noteActionError}</Aviso>
                       )}
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
-                      <Clock className="w-4 h-4" />
-                      <span>
-                        {formatExperienceDate(exp.fechaInicio)} - {exp.esActual ? 'Presente' : exp.fechaFin ? formatExperienceDate(exp.fechaFin) : 'N/A'}
-                      </span>
-                    </div>
-                    {exp.descripcion && (
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{exp.descripcion}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Documents */}
-          {(data.documents && data.documents.length > 0) || canAddDocuments ? (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <File className="w-5 h-5 text-[#2b5d62]" />
-                  Documentos {data.documents && data.documents.length > 0 && `(${data.documents.length})`}
-                </h3>
-                {canAddDocuments && candidateId && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAddDocModal(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] transition-colors"
-                  >
-                    <Plus size={16} />
-                    Agregar
-                  </button>
-                )}
-              </div>
-              {data.documents && data.documents.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {data.documents.map((doc, index) => (
-                    <a
-                      key={doc.id || index}
-                      href={doc.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-[#2b5d62] transition-colors group"
-                    >
-                      <div className="w-10 h-10 bg-[#e8f4f4] rounded-lg flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-5 h-5 text-[#2b5d62]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
-                        {doc.fileType && (
-                          <p className="text-xs text-gray-500 uppercase truncate">{doc.fileType}</p>
-                        )}
-                      </div>
-                      <Download className="w-4 h-4 text-gray-400 group-hover:text-[#2b5d62] flex-shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-4">
-                  No hay documentos. {canAddDocuments && 'Haz clic en "Agregar" para subir uno.'}
-                </p>
-              )}
-            </div>
-          ) : null}
-
-          {/* Recruiter Notes (only for specialist) - Legacy JobAssignment notes */}
-          {showRecruiterNotes && recruiterNotes && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-purple-600" />
-                Notas del Reclutador (Vacante)
-              </h3>
-              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{recruiterNotes}</p>
-              </div>
-            </div>
-          )}
-
-          {/* FEAT-5: Sección de Notas de Evaluación */}
-          {canViewEvaluationNotes && application?.id && (
-            <div className="mb-6 border-t pt-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-[#2b5d62]" />
-                Notas de Evaluación
-              </h3>
-
-              {/* Notas existentes */}
-              {loadingNotes ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                  <span className="ml-2 text-sm text-gray-500">Cargando notas...</span>
-                </div>
-              ) : evaluationNotes.length > 0 ? (
-                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                  {evaluationNotes.map((note) => (
-                    <div key={note.id} className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium px-2 py-0.5 rounded text-xs ${
-                            note.authorRole === 'recruiter'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-purple-100 text-purple-700'
-                          }`}>
-                            {note.authorRole === 'recruiter' ? 'Reclutador' : 'Especialista'}
-                          </span>
-                          {userRole !== 'company' && (
-                            note.isPublic ? (
-                              <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700 font-medium">
-                                Visible empresa
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500 font-medium">
-                                Solo INAKAT
-                              </span>
-                            )
+                      {/* Formulario para nueva nota (solo recruiter/specialist) */}
+                      {canAddEvaluationNotes && (
+                        <div className="mt-4 space-y-3.5 rounded-xl border border-line bg-paper/70 p-4">
+                          {/* #PERF-014/#PERF-015: antes cualquier fallo sólo iba a la
+                              consola y el spinner desaparecía sin decir nada. */}
+                          {noteError && (
+                            <Aviso compacto>{noteError}</Aviso>
                           )}
-                        </div>
-                        <span className="text-xs text-gray-400">
-                          {new Date(note.createdAt).toLocaleDateString('es-MX', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-                      {editingNoteId === note.id ? (
-                        <div className="space-y-2">
-                          <textarea
-                            value={editingNoteContent}
-                            onChange={(e) => setEditingNoteContent(e.target.value)}
-                            rows={3}
-                            maxLength={5000}
-                            aria-label="Editar nota"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          <FormField etiqueta="Nueva nota">
+                            <Textarea
+                              value={newNoteContent}
+                              onChange={(e) => setNewNoteContent(e.target.value)}
+                              placeholder="Escribe tus observaciones sobre este candidato…"
+                              rows={3}
+                              className="resize-y bg-white"
+                            />
+                          </FormField>
+                          <Checkbox
+                            etiqueta="Visible para la empresa"
+                            descripcion={
+                              isNotePublic
+                                ? 'La empresa podrá leer esta nota.'
+                                : 'Sólo la verá el equipo de INAKAT.'
+                            }
+                            checked={isNotePublic}
+                            onChange={(e) => setIsNotePublic(e.target.checked)}
                           />
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => actualizarNota(note, { content: editingNoteContent.trim() })}
-                              disabled={noteActionId === note.id || !editingNoteContent.trim()}
-                              className="text-xs px-3 py-1 rounded bg-[#2b5d62] text-white disabled:opacity-50"
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              {/* El input de archivo va DENTRO de la etiqueta y sólo
+                                  oculto a la vista (sr-only): así se alcanza con
+                                  el tabulador (antes era display:none). */}
+                              <SelectorArchivo
+                                ref={noteFileRef}
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                                onChange={(e) => setNoteDocument(e.target.files?.[0] || null)}
+                              >
+                                {noteDocument ? 'Cambiar adjunto' : 'Adjuntar documento'}
+                              </SelectorArchivo>
+                              {noteDocument ? (
+                                <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg bg-white py-0.5 pl-2.5 pr-0.5 text-[13px] text-ink ring-1 ring-inset ring-line">
+                                  <Paperclip className="h-3.5 w-3.5 flex-none text-ink-muted" aria-hidden="true" />
+                                  <span className="truncate">{noteDocument.name}</span>
+                                  <IconButton
+                                    etiqueta="Quitar archivo"
+                                    icono={X}
+                                    tamano="sm"
+                                    variante="peligro"
+                                    onClick={() => {
+                                      setNoteDocument(null);
+                                      if (noteFileRef.current) noteFileRef.current.value = '';
+                                    }}
+                                  />
+                                </span>
+                              ) : (
+                                <span className="text-[13px] text-ink-muted">Opcional, máx. {MAX_ADJUNTO_LABEL}</span>
+                              )}
+                            </div>
+                            <Button
+                              variante="secundario"
+                              icono={Save}
+                              onClick={handleSaveNote}
+                              disabled={!newNoteContent.trim() || savingNote}
+                              cargando={savingNote}
+                              textoCargando="Guardando…"
                             >
-                              Guardar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingNoteId(null)}
-                              className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-600"
-                            >
-                              Cancelar
-                            </button>
+                              Guardar nota
+                            </Button>
                           </div>
                         </div>
-                      ) : (
-                        <p className="text-gray-700 whitespace-pre-wrap">{note.content}</p>
                       )}
-                      {note.canEdit && userRole !== 'company' && editingNoteId !== note.id && (
-                        <div className="flex flex-wrap gap-3 mt-2 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => actualizarNota(note, { isPublic: !note.isPublic })}
-                            disabled={noteActionId === note.id}
-                            className="text-[#2b5d62] hover:underline disabled:opacity-50"
-                          >
-                            {note.isPublic ? 'Ocultar a la empresa' : 'Hacer visible a la empresa'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingNoteId(note.id);
-                              setEditingNoteContent(note.content);
-                            }}
-                            disabled={noteActionId === note.id}
-                            className="text-gray-600 hover:underline disabled:opacity-50"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => borrarNota(note)}
-                            disabled={noteActionId === note.id}
-                            className="text-red-600 hover:underline disabled:opacity-50"
-                          >
-                            Borrar
-                          </button>
-                        </div>
-                      )}
-                      {note.documentUrl && (
-                        <a
-                          href={note.documentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#2b5d62] text-xs underline mt-2 inline-flex items-center gap-1 hover:text-[#1e4347]"
-                        >
-                          <FileText size={12} />
-                          {note.documentName || 'Documento adjunto'}
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm mb-4">No hay notas de evaluación aún.</p>
-              )}
-              {noteActionError && (
-                <p role="alert" className="text-sm text-red-600 mb-3">{noteActionError}</p>
-              )}
-
-              {/* Formulario para nueva nota (solo recruiter/specialist) */}
-              {canAddEvaluationNotes && (
-                <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  {/* #PERF-014/#PERF-015: antes cualquier fallo sólo iba a la
-                      consola y el spinner desaparecía sin decir nada. */}
-                  {noteError && (
-                    <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
-                      {noteError}
-                    </p>
+                    </Seccion>
                   )}
-                  <textarea
-                    value={newNoteContent}
-                    onChange={(e) => setNewNoteContent(e.target.value)}
-                    placeholder="Escribe tus observaciones sobre este candidato..."
-                    className="w-full border border-gray-300 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-[#2b5d62] focus:border-transparent"
-                    rows={3}
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={isNotePublic}
-                      onChange={(e) => setIsNotePublic(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#2b5d62] focus:ring-[#2b5d62]"
-                    />
-                    <span className="text-sm text-gray-600">Visible para empresa</span>
-                    {isNotePublic && (
-                      <span className="text-xs text-green-600 font-medium">(La empresa podrá leer esta nota)</span>
-                    )}
-                  </label>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer hover:text-gray-700 flex-1">
-                      <Upload className="w-4 h-4" />
-                      <span className="truncate">
-                        {noteDocument ? noteDocument.name : `Adjuntar documento (opcional, máx. ${MAX_ADJUNTO_LABEL})`}
-                      </span>
-                      <input
-                        type="file"
-                        ref={noteFileRef}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                        onChange={(e) => setNoteDocument(e.target.files?.[0] || null)}
-                      />
-                    </label>
-                    {noteDocument && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNoteDocument(null);
-                          if (noteFileRef.current) noteFileRef.current.value = '';
-                        }}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        Quitar archivo
-                      </button>
-                    )}
-                    <button
-                      onClick={handleSaveNote}
-                      disabled={!newNoteContent.trim() || savingNote}
-                      className="bg-[#2b5d62] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1e4347] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 justify-center"
+
+                  {/* Notas internas.
+                      PRIVACIDAD (#50/#51), defensa en profundidad: `adminNotas`
+                      (Candidate.notas) y `notes` (Application.notes) son material
+                      interno de INAKAT. Las rutas de empresa ya no los envían, pero
+                      este modal los pintaba sin mirar el rol, así que bastaba con que
+                      una ruta volviera a incluirlos para reabrir la fuga. */}
+                  {verNotasInternas && (
+                    <Seccion
+                      titulo="Notas internas"
+                      insignia={
+                        <Badge tono="neutro" icono={Lock} tamano="sm">
+                          Solo INAKAT
+                        </Badge>
+                      }
                     >
-                      {savingNote ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Guardando...
-                        </>
-                      ) : (
-                        <>
-                          <Save size={16} />
-                          Guardar nota
-                        </>
-                      )}
-                    </button>
-                  </div>
+                      <div className="space-y-3">
+                        {puedeVerNotasInternas && data.adminNotas && (
+                          <NotaInterna titulo="Notas del admin" texto={data.adminNotas} />
+                        )}
+                        {puedeVerNotasInternas && data.notes && (
+                          <NotaInterna titulo="Notas de la postulación" texto={data.notes} />
+                        )}
+                      </div>
+                    </Seccion>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Admin Notes.
-              PRIVACIDAD (#50/#51), defensa en profundidad: `adminNotas`
-              (Candidate.notas) y `notes` (Application.notes) son material
-              interno de INAKAT. Las rutas de empresa ya no los envían, pero
-              este modal los pintaba sin mirar el rol, así que bastaba con que
-              una ruta volviera a incluirlos para reabrir la fuga. */}
-          {puedeVerNotasInternas && data.adminNotas && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-gray-500" />
-                Notas del Admin
-              </h3>
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.adminNotas}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Application Notes */}
-          {puedeVerNotasInternas && data.notes && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-blue-500" />
-                Notas de la Aplicación
-              </h3>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{data.notes}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-3 md:p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-          {/* Navigation */}
-          {(onPrev || onNext) && (
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-              <button
-                onClick={onPrev}
-                disabled={!onPrev || currentIndex === 0}
-                className="flex items-center gap-1 px-2 md:px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Anterior</span>
-              </button>
-              {currentIndex !== undefined && totalCount !== undefined && (
-                <span className="text-sm text-gray-500 px-2">
-                  {currentIndex + 1}/{totalCount}
-                </span>
-              )}
-              <button
-                onClick={onNext}
-                disabled={!onNext || (currentIndex !== undefined && totalCount !== undefined && currentIndex >= totalCount - 1)}
-                className="flex items-center gap-1 px-2 md:px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <span className="hidden sm:inline">Siguiente</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          {!(onPrev || onNext) && <div className="hidden sm:block" />}
-
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-
-      {/* Modal de Agregar Documento */}
-      {showAddDocModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
-          // #PERF-017: este sub-modal es HIJO del overlay externo; sin esto,
-          // cualquier interacción dentro (nombre, selector de archivo, Guardar)
-          // llegaba al overlay y cerraba toda la ficha.
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div role="dialog" aria-modal="true" aria-label="Agregar documento" className="bg-white rounded-lg w-full max-w-md">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-lg font-bold">Agregar Documento</h3>
-              <button
-                onClick={() => {
-                  setShowAddDocModal(false);
-                  setNewDocName('');
-                  setNewDocFile(null);
-                  setDocError('');
-                }}
-                aria-label="Cerrar"
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {docError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                  {docError}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre del documento *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Título universitario, Certificación AWS"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2b5d62] focus:border-[#2b5d62]"
-                  value={newDocName}
-                  onChange={(e) => setNewDocName(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Archivo *
-                </label>
-                <input
-                  type="file"
-                  ref={docInputRef}
-                  onChange={(e) => setNewDocFile(e.target.files?.[0] || null)}
-                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#2b5d62] file:text-white hover:file:bg-[#1e4347]"
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                />
-                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG (máx. {MAX_ADJUNTO_LABEL})</p>
-              </div>
-
-              {newDocFile && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-700">
-                    Archivo seleccionado: <span className="font-medium">{newDocFile.name}</span>
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 p-4 border-t">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddDocModal(false);
-                  setNewDocName('');
-                  setNewDocFile(null);
-                  setDocError('');
-                }}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleAddDocument}
-                disabled={savingDoc || !newDocName.trim() || !newDocFile}
-                className="flex items-center gap-2 px-4 py-2 bg-[#2b5d62] text-white rounded-lg hover:bg-[#1e4347] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {savingDoc ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} />
-                    Guardar
-                  </>
-                )}
-              </button>
-            </div>
+              </PanelPestana>
+            )}
           </div>
         </div>
-      )}
+      </Modal>
+
+      {/* Agregar documento: Modal apilado encima de la ficha. Escape y la X
+          cancelan sólo este sub-modal (#PERF-035); pulsar el fondo no lo cierra
+          (tampoco lo hacía antes) y nada de lo que pase dentro llega a la
+          ficha (#PERF-017). */}
+      <Modal
+        abierto={showAddDocModal}
+        alCerrar={cancelarDocumento}
+        titulo="Agregar documento"
+        subtitulo={
+          <>
+            Al expediente de <span className="font-medium text-ink">{data.name}</span>
+          </>
+        }
+        tamano="sm"
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={cancelarDocumento}>
+              Cancelar
+            </Button>
+            <Button
+              icono={Save}
+              onClick={handleAddDocument}
+              disabled={savingDoc || !newDocName.trim() || !newDocFile}
+              cargando={savingDoc}
+              textoCargando="Guardando…"
+            >
+              Guardar documento
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {docError && <Aviso compacto>{docError}</Aviso>}
+
+          <FormField etiqueta="Nombre del documento" requerido>
+            <Input
+              type="text"
+              placeholder="Ej: Título universitario, Certificación AWS"
+              value={newDocName}
+              onChange={(e) => setNewDocName(e.target.value)}
+            />
+          </FormField>
+
+          <FormField etiqueta="Archivo" requerido ayuda={`PDF, DOC, DOCX, JPG o PNG (máx. ${MAX_ADJUNTO_LABEL})`}>
+            <Input
+              type="file"
+              ref={docInputRef}
+              onChange={(e) => setNewDocFile(e.target.files?.[0] || null)}
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              className="h-auto cursor-pointer px-2 py-2 text-ink-muted file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-ink file:px-3 file:py-1.5 file:font-display file:text-[13px] file:font-semibold file:text-white hover:file:bg-teal"
+            />
+          </FormField>
+
+          {newDocFile && (
+            <p className="flex min-w-0 items-center gap-2 rounded-lg bg-paper px-3 py-2 text-sm text-ink">
+              <Paperclip className="h-4 w-4 flex-none text-ink-muted" aria-hidden="true" />
+              <span className="min-w-0 truncate">
+                Archivo seleccionado: <span className="font-medium">{newDocFile.name}</span>
+              </span>
+            </p>
+          )}
+        </div>
+      </Modal>
+
+      {/* ¿Borrar esta nota? (antes, un confirm() del navegador con este texto). */}
+      <Modal
+        abierto={notaABorrar !== null}
+        alCerrar={() => setNotaABorrar(null)}
+        titulo="¿Borrar esta nota?"
+        descripcion="No se puede deshacer."
+        tamano="sm"
+        pie={
+          <>
+            <Button variante="contorno" onClick={() => setNotaABorrar(null)}>
+              Cancelar
+            </Button>
+            <Button variante="peligro" icono={Trash2} onClick={confirmarBorrado}>
+              Borrar nota
+            </Button>
+          </>
+        }
+      >
+        {notaABorrar && (
+          <blockquote className="line-clamp-4 whitespace-pre-wrap rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm leading-relaxed text-ink">
+            {notaABorrar.content}
+          </blockquote>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Piezas de presentación de la ficha
+// ---------------------------------------------------------------------------
+
+/** Grupo de la columna de datos: antetítulo pequeño y su contenido. */
+function BloqueLateral({ titulo, children, className }: { titulo: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('min-w-0', className)}>
+      <h3 className="font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">{titulo}</h3>
+      <div className="mt-2.5">{children}</div>
     </div>
+  );
+}
+
+/** Un texto del candidato (su carta): se respeta su formato y se marca como cita. */
+function Carta({ texto }: { texto: string }) {
+  return (
+    <blockquote className="rounded-r-xl border-l-[3px] border-teal/70 bg-paper/80 px-4 py-3.5">
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{texto}</p>
+    </blockquote>
+  );
+}
+
+/** Nota interna de INAKAT (admin o postulación). */
+function NotaInterna({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-line-strong/60 bg-paper/70 px-4 py-3.5">
+      <h4 className="font-display text-[13px] font-semibold text-ink">{titulo}</h4>
+      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">{texto}</p>
+    </div>
+  );
+}
+
+/** Estrellas de sólo lectura (empresa): la cifra va escrita, no sólo pintada. */
+function EstrellasLectura({ valor }: { valor: number }) {
+  if (!valor) return <span className="text-[13px] text-ink-muted">Sin calificar</span>;
+  return (
+    <span className="flex items-center gap-2">
+      <span className="flex" aria-hidden="true">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Star
+            key={n}
+            strokeWidth={1.75}
+            className={cn('h-4 w-4', n <= valor ? 'fill-orange text-orange-dark' : 'fill-transparent text-line-strong')}
+          />
+        ))}
+      </span>
+      <span className="font-display text-[13px] tabular-nums text-ink-muted">
+        <span className="sr-only">{valor} de 5</span>
+        <span aria-hidden="true">{valor}/5</span>
+      </span>
+    </span>
   );
 }

@@ -2,21 +2,38 @@
 
 'use client';
 
+/**
+ * Mis postulaciones (rol candidato). Registro de aplicación (docs/DISENO.md):
+ * PageHeader → aviso de error → cifras → lista de postulaciones.
+ *
+ * La lógica es la de siempre: una sola llamada a /api/candidate/applications
+ * (con credenciales), las mismas cuatro cifras calculadas aquí y el mismo
+ * «Actualizar». Las etiquetas de estado llegan hechas de la API (mapa único de
+ * src/lib/application-status.ts).
+ */
+
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
-  Briefcase,
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
   AlertCircle,
+  Banknote,
+  Briefcase,
+  CalendarCheck,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Monitor,
   RefreshCw,
-  Calendar,
-  DollarSign,
-  ExternalLink
+  Search
 } from 'lucide-react';
-import CompanyLogo from '@/components/shared/CompanyLogo';
+import PageHeader from '@/components/ui/PageHeader';
+import StatCard from '@/components/ui/StatCard';
+import Card from '@/components/ui/Card';
+import EmptyState from '@/components/ui/EmptyState';
+import Button, { ButtonLink } from '@/components/ui/Button';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+// La tarjeta de postulación y sus formatos (fecha corta, modalidad, aviso por
+// estado) son los mismos que en /my-applications: viven en FilaPostulacion.
+import FilaPostulacion, { avisoDeEstado, etiquetaModalidad, fechaCorta } from '../_componentes/FilaPostulacion';
 
 interface Application {
   id: number;
@@ -82,45 +99,6 @@ export default function CandidateApplicationsPage() {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'accepted':
-        return <CheckCircle className="text-green-500" size={20} />;
-      // 'discarded' y 'archived' también cierran el proceso (la API ya los
-      // etiqueta 'No seleccionado' / 'Proceso finalizado'); con el reloj de
-      // "en espera" el icono contradecía a la etiqueta.
-      case 'rejected':
-      case 'discarded':
-      case 'archived':
-        return <XCircle className="text-gray-500" size={20} />;
-      case 'interviewed':
-        return <CheckCircle className="text-indigo-500" size={20} />;
-      default:
-        return <Clock className="text-yellow-500" size={20} />;
-    }
-  };
-
-  const getStatusBadgeClass = (color: string) => {
-    const colors: Record<string, string> = {
-      yellow: 'bg-yellow-100 text-yellow-800',
-      blue: 'bg-blue-100 text-blue-800',
-      purple: 'bg-purple-100 text-purple-800',
-      indigo: 'bg-indigo-100 text-indigo-800',
-      green: 'bg-green-100 text-green-800',
-      gray: 'bg-gray-100 text-gray-800'
-    };
-    return colors[color] || colors.yellow;
-  };
-
-  const getWorkModeLabel = (workMode: string) => {
-    const modes: Record<string, string> = {
-      remote: 'Remoto',
-      hybrid: 'Híbrido',
-      presential: 'Presencial'
-    };
-    return modes[workMode] || workMode;
-  };
-
   // Estadísticas
   // 'evaluating' y 'company_interested' también son estados en proceso (los ponen
   // el especialista y la empresa). Faltaban aquí, así que esas postulaciones no
@@ -143,222 +121,104 @@ export default function CandidateApplicationsPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="animate-spin mx-auto mb-4 text-blue-600" size={40} />
-          <p className="text-gray-600">Cargando tus postulaciones...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonPagina />;
   }
 
+  // Un error sin datos no es «no tienes postulaciones»: se dice que falló y se
+  // ofrece reintentar, sin cifras en cero ni estado vacío engañosos.
+  const sinDatosPorError = Boolean(error) && applications.length === 0;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Mis Postulaciones
-          </h1>
-          {candidate && (
-            <p className="text-gray-600">
-              Hola, {candidate.nombre}. Aquí puedes ver el estado de tus postulaciones.
-            </p>
-          )}
-        </div>
+    <>
+      <PageHeader
+        antetitulo="Tu búsqueda"
+        titulo="Mis postulaciones"
+        descripcion={
+          candidate
+            ? `Hola, ${candidate.nombre}. Aquí puedes ver el estado de tus postulaciones.`
+            : 'Aquí puedes ver el estado de tus postulaciones.'
+        }
+        acciones={
+          <>
+            <Button variante="contorno" icono={RefreshCw} onClick={fetchApplications}>
+              Actualizar
+            </Button>
+            <ButtonLink href="/talents" icono={Search}>
+              Buscar vacantes
+            </ButtonLink>
+          </>
+        }
+      />
 
-        {/* Error */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-2">
-            <AlertCircle size={20} />
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex items-center gap-2">
+            <AlertCircle size={18} className="flex-none" aria-hidden="true" />
             {error}
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-            <div className="flex items-center gap-3">
-              <Briefcase className="text-blue-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
-            <div className="flex items-center gap-3">
-              <Clock className="text-yellow-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">En Proceso</p>
-                <p className="text-2xl font-bold">{stats.inProcess}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-indigo-500">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="text-indigo-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Entrevistado</p>
-                <p className="text-2xl font-bold">{stats.interviewed}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="text-green-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Aceptado</p>
-                <p className="text-2xl font-bold">{stats.accepted}</p>
-              </div>
-            </div>
-          </div>
+          </span>
+          <Button variante="contorno" tamano="sm" icono={RefreshCw} onClick={fetchApplications}>
+            Reintentar
+          </Button>
         </div>
+      )}
 
-        {/* Lista de postulaciones */}
-        {applications.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <Briefcase className="mx-auto mb-4 text-gray-400" size={48} />
-            <h2 className="text-xl font-semibold text-gray-700 mb-2">
-              No tienes postulaciones aún
-            </h2>
-            <p className="text-gray-500 mb-6">
-              Cuando apliques a vacantes, aparecerán aquí para que puedas darles seguimiento.
-            </p>
-            <Link
-              href="/talents"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Briefcase size={20} />
-              Ver Vacantes Disponibles
-            </Link>
+      {!sinDatosPorError && (
+        <>
+          {/* Cifras */}
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:mb-8 xl:grid-cols-4">
+            <StatCard etiqueta="Postulaciones" valor={stats.total} detalle="En total" icono={Briefcase} tono="ink" />
+            <StatCard etiqueta="En proceso" valor={stats.inProcess} icono={Clock} tono="orange" />
+            <StatCard etiqueta="Con entrevista" valor={stats.interviewed} icono={CalendarCheck} tono="teal" />
+            <StatCard etiqueta="Aceptadas" valor={stats.accepted} icono={CheckCircle2} tono="lime" />
           </div>
-        ) : (
-          <div className="space-y-4">
-            {applications.map(app => (
-              <div
-                key={app.id}
-                className="bg-white rounded-lg shadow hover:shadow-md transition-shadow"
-              >
-                <div className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    {/* Info de la vacante */}
-                    <div className="flex-1">
-                      <div className="flex items-start gap-3">
-                        <CompanyLogo
-                          logoUrl={app.job.logoUrl}
-                          companyName={app.job.company}
-                          size="md"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {app.job.title}
-                            </h3>
-                            {getStatusIcon(app.status)}
-                          </div>
-                          <p className="text-gray-600 mt-1">{app.job.company}</p>
-                        </div>
-                      </div>
 
-                      {/* Detalles */}
-                      <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <MapPin size={14} />
-                          {app.job.location}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <DollarSign size={14} />
-                          {app.job.salary}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Briefcase size={14} />
-                          {app.job.jobType}
-                        </div>
-                        <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
-                          {getWorkModeLabel(app.job.workMode)}
-                        </span>
-                      </div>
-
-                      {/* Tags */}
-                      {(app.job.profile || app.job.seniority) && (
-                        <div className="mt-3 flex gap-2">
-                          {app.job.profile && (
-                            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
-                              {app.job.profile}
-                            </span>
-                          )}
-                          {app.job.seniority && (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                              {app.job.seniority}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Status y fecha */}
-                    <div className="flex flex-col items-end gap-2">
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadgeClass(
-                          app.statusColor
-                        )}`}
-                      >
-                        {app.statusLabel}
-                      </span>
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Calendar size={14} />
-                        Aplicado: {new Date(app.createdAt).toLocaleDateString('es-MX', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mensaje según status */}
-                  {app.status === 'accepted' && (
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-green-800 text-sm">
-                        ¡Felicidades! Has sido seleccionado para este puesto. La empresa se pondrá en contacto contigo pronto.
-                      </p>
-                    </div>
-                  )}
-
-                  {app.status === 'interviewed' && (
-                    <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                      <p className="text-indigo-800 text-sm">
-                        Tu entrevista ha sido registrada. El equipo está evaluando tu perfil.
-                      </p>
-                    </div>
-                  )}
-
-                  {app.status === 'sent_to_company' && (
-                    <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                      <p className="text-purple-800 text-sm">
-                        ¡Buenas noticias! Tu perfil ha sido enviado a la empresa. Pronto podrías recibir noticias.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Refresh button */}
-        <div className="mt-8 text-center">
-          <button
-            onClick={fetchApplications}
-            className="inline-flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900"
+          {/* Lista de postulaciones */}
+          <Card
+            titulo="Tus postulaciones"
+            descripcion={applications.length > 0 ? 'De la más reciente a la más antigua.' : undefined}
+            sinRelleno
           >
-            <RefreshCw size={16} />
-            Actualizar
-          </button>
-        </div>
-      </div>
-    </div>
+            {applications.length === 0 ? (
+              <EmptyState
+                frase="Todo empieza con una postulación."
+                titulo="No tienes postulaciones aún"
+                descripcion="Cuando apliques a vacantes, aparecerán aquí para que puedas darles seguimiento."
+                accion={
+                  <ButtonLink href="/talents" variante="secundario" tamano="sm" icono={Briefcase}>
+                    Ver vacantes disponibles
+                  </ButtonLink>
+                }
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {applications.map(app => (
+                  <FilaPostulacion
+                    key={app.id}
+                    titulo={app.job.title}
+                    empresa={app.job.company}
+                    logoUrl={app.job.logoUrl}
+                    estado={app.status}
+                    etiquetaEstado={app.statusLabel}
+                    colorEstado={app.statusColor}
+                    detalles={[
+                      { icono: MapPin, etiqueta: 'Ubicación', valor: app.job.location },
+                      { icono: Banknote, etiqueta: 'Salario', valor: app.job.salary },
+                      { icono: Briefcase, etiqueta: 'Jornada', valor: app.job.jobType },
+                      { icono: Monitor, etiqueta: 'Modalidad', valor: etiquetaModalidad(app.job.workMode) }
+                    ]}
+                    etiquetas={[app.job.profile ?? '', app.job.seniority ?? '']}
+                    fechas={[{ etiqueta: 'Aplicado', valor: fechaCorta(app.createdAt) }]}
+                    aviso={avisoDeEstado(app.status)}
+                  />
+                ))}
+              </ul>
+            )}
+          </Card>
+        </>
+      )}
+    </>
   );
 }

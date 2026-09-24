@@ -1,28 +1,38 @@
 'use client';
 
+/**
+ * Mis postulaciones (rol usuario). Registro de aplicación (docs/DISENO.md):
+ * PageHeader → tarjeta «Tus postulaciones» con las pestañas de estado y su
+ * conteo → lista de postulaciones.
+ *
+ * Es la hermana de /candidate/applications (rol candidato) y se pinta igual:
+ * mismo título, la misma tarjeta de postulación (FilaPostulacion) con los
+ * mismos detalles, la misma fecha corta y el mismo aviso por estado. La única
+ * diferencia es que aquí se filtra por estado: las pestañas SON los filtros de
+ * antes (mismo estado `filterStatus`) y llevan el conteo de cada grupo, que
+ * antes se repetía en seis tarjetas. No lleva además tarjetas de cifras: sus
+ * grupos no coinciden con los de las pestañas («En proceso» cuenta cosas
+ * distintas en cada sitio) y en la misma pantalla se contradecían.
+ *
+ * La lógica es la de siempre: GET /api/my-applications (401 → login con
+ * redirect), los mismos grupos de filtro y los conteos calculados aquí.
+ */
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Briefcase,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Eye,
-  FileText,
-  AlertCircle
-} from 'lucide-react';
-import CompanyLogo from '@/components/shared/CompanyLogo';
+import { AlertCircle, Banknote, Briefcase, MapPin, Monitor, Search } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import EmptyState from '@/components/ui/EmptyState';
+import Button, { ButtonLink } from '@/components/ui/Button';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
 import { getCandidateStatusView } from '@/lib/application-status';
-
-/** Clases del badge según el color que devuelve el mapa de estados. */
-const CLASES_COLOR_ESTADO: Record<string, string> = {
-  yellow: 'bg-yellow-100 text-yellow-800',
-  blue: 'bg-blue-100 text-blue-800',
-  purple: 'bg-purple-100 text-purple-800',
-  indigo: 'bg-indigo-100 text-indigo-800',
-  green: 'bg-green-100 text-green-800',
-  gray: 'bg-gray-100 text-gray-800'
-};
+import FilaPostulacion, {
+  avisoDeEstado,
+  etiquetaModalidad,
+  fechaCorta
+} from '../candidate/_componentes/FilaPostulacion';
 
 /**
  * Filtros de la página agrupados como los ve el candidato. Cada filtro cubre
@@ -133,57 +143,6 @@ export default function MyApplicationsPage() {
     }
   };
 
-  /**
-   * La etiqueta sale del mapa ÚNICO de src/lib/application-status.ts, el mismo
-   * que usan /api/candidate/applications, /api/my-applications y el modal de
-   * postulación. Esta página tenía su propio mapa, así que el mismo registro se
-   * leía 'Pendiente' aquí, 'En revisión' en /candidate/applications y 'En
-   * proceso' en el modal.
-   */
-  const getStatusBadge = (status: string) => {
-    const vista = getCandidateStatusView(status);
-    const clases = CLASES_COLOR_ESTADO[vista.color] || CLASES_COLOR_ESTADO.yellow;
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${clases}`}>
-        {vista.label}
-      </span>
-    );
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-      case 'injected_by_admin':
-        return <Clock className="w-5 h-5 text-yellow-600" />;
-      case 'reviewing':
-      case 'evaluating':
-      case 'sent_to_specialist':
-      case 'sent_to_company':
-      case 'company_interested':
-        return <Eye className="w-5 h-5 text-blue-600" />;
-      case 'interviewed':
-        return <FileText className="w-5 h-5 text-purple-600" />;
-      case 'accepted':
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'rejected':
-      case 'discarded':
-      case 'archived':
-        return <XCircle className="w-5 h-5 text-red-600" />;
-      default:
-        return <Clock className="w-5 h-5 text-gray-600" />;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
   const todasLasAplicaciones = data?.applications || [];
 
   const filteredApplications =
@@ -215,260 +174,131 @@ export default function MyApplicationsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-button-orange mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando aplicaciones...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonPagina conCifras={false} />;
   }
+
+  const cabecera = (conAcciones: boolean) => (
+    <PageHeader
+      antetitulo="Tu búsqueda"
+      titulo="Mis postulaciones"
+      descripcion="Aquí puedes ver el estado de tus postulaciones."
+      acciones={
+        conAcciones ? (
+          <ButtonLink href="/talents" icono={Search}>
+            Buscar vacantes
+          </ButtonLink>
+        ) : undefined
+      }
+    />
+  );
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Error al cargar
-          </h2>
-          <p className="text-gray-600 mb-4">
-            {error || 'No se pudieron cargar las aplicaciones'}
-          </p>
-          <button
-            onClick={() => router.push('/talents')}
-            className="px-6 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90 transition-colors"
-          >
-            Ver Vacantes
-          </button>
+      <>
+        {cabecera(false)}
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-4 text-sm text-danger-dark sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle size={18} className="mt-0.5 flex-none" aria-hidden="true" />
+            <div>
+              <p className="font-display font-semibold">Error al cargar</p>
+              <p className="mt-0.5">{error || 'No se pudieron cargar tus postulaciones'}</p>
+            </div>
+          </div>
+          <Button variante="contorno" tamano="sm" icono={Briefcase} onClick={() => router.push('/talents')}>
+            Ver vacantes
+          </Button>
         </div>
-      </div>
+      </>
     );
   }
 
+  const pestanas = [
+    { id: 'all', etiqueta: 'Todas', contador: conteos.total },
+    { id: 'pending', etiqueta: NOMBRES_FILTRO.pending, contador: conteos.pending },
+    { id: 'reviewing', etiqueta: NOMBRES_FILTRO.reviewing, contador: conteos.reviewing },
+    { id: 'interviewed', etiqueta: NOMBRES_FILTRO.interviewed, contador: conteos.interviewed },
+    { id: 'accepted', etiqueta: NOMBRES_FILTRO.accepted, contador: conteos.accepted },
+    { id: 'rejected', etiqueta: NOMBRES_FILTRO.rejected, contador: conteos.rejected }
+  ];
+
   return (
-    <div className="min-h-screen bg-custom-beige py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-title-dark mb-1 md:mb-2">
-            Mis Aplicaciones
-          </h1>
-          <p className="text-gray-600 text-sm md:text-base">Seguimiento de tus postulaciones</p>
-        </div>
+    <>
+      {cabecera(true)}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Briefcase className="w-5 h-5 text-gray-500" />
-              <span className="text-2xl font-bold text-gray-900">
-                {conteos.total}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Total</p>
-          </div>
+      <Card
+        titulo="Tus postulaciones"
+        descripcion={todasLasAplicaciones.length > 0 ? 'De la más reciente a la más antigua.' : undefined}
+        sinRelleno
+      >
+        {/* Filtros: las mismas seis opciones de antes, con su conteo. */}
+        <Tabs
+          idBase="mis-aplicaciones"
+          etiqueta="Filtrar por estado"
+          pestanas={pestanas}
+          activa={filterStatus}
+          alCambiar={setFilterStatus}
+          className="px-2 sm:px-3"
+        />
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Clock className="w-5 h-5 text-yellow-500" />
-              <span className="text-2xl font-bold text-yellow-600">
-                {conteos.pending}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.pending}</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Eye className="w-5 h-5 text-blue-500" />
-              <span className="text-2xl font-bold text-blue-600">
-                {conteos.reviewing}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.reviewing}</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <FileText className="w-5 h-5 text-purple-500" />
-              <span className="text-2xl font-bold text-purple-600">
-                {conteos.interviewed}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Entrevistados</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <span className="text-2xl font-bold text-green-600">
-                {conteos.accepted}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Aceptados</p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <XCircle className="w-5 h-5 text-red-500" />
-              <span className="text-2xl font-bold text-red-600">
-                {conteos.rejected}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">{NOMBRES_FILTRO.rejected}</p>
-          </div>
-        </div>
-
-        {/* Filters - Scrollable on mobile */}
-        <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-6 overflow-x-auto">
-          <div className="flex gap-2 min-w-max md:flex-wrap">
-            <button
-              onClick={() => setFilterStatus('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        <PanelPestana idBase="mis-aplicaciones" id={filterStatus} activa={filterStatus} className="pt-0 focus-visible:outline-offset-[-2px]">
+          {filteredApplications.length === 0 ? (
+            <EmptyState
+              frase={filterStatus === 'all' ? 'Todo empieza con una postulación.' : 'Nada en este grupo, por ahora.'}
+              titulo={filterStatus === 'all' ? 'No tienes postulaciones aún' : 'No hay postulaciones en este grupo'}
+              descripcion={
                 filterStatus === 'all'
-                  ? 'bg-button-orange text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Todas ({conteos.total})
-            </button>
-            <button
-              onClick={() => setFilterStatus('pending')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === 'pending'
-                  ? 'bg-yellow-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {NOMBRES_FILTRO.pending} ({conteos.pending})
-            </button>
-            <button
-              onClick={() => setFilterStatus('reviewing')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === 'reviewing'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {NOMBRES_FILTRO.reviewing} ({conteos.reviewing})
-            </button>
-            <button
-              onClick={() => setFilterStatus('interviewed')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === 'interviewed'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Entrevistados ({conteos.interviewed})
-            </button>
-            <button
-              onClick={() => setFilterStatus('accepted')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === 'accepted'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Aceptados ({conteos.accepted})
-            </button>
-            <button
-              onClick={() => setFilterStatus('rejected')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === 'rejected'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {NOMBRES_FILTRO.rejected} ({conteos.rejected})
-            </button>
-          </div>
-        </div>
-
-        {/* Applications List */}
-        {filteredApplications.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <Briefcase className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No hay aplicaciones
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {filterStatus === 'all'
-                ? 'Aún no has aplicado a ninguna vacante'
-                : `No tienes aplicaciones con estado "${NOMBRES_FILTRO[filterStatus] || filterStatus}"`}
-            </p>
-            <button
-              onClick={() => router.push('/talents')}
-              className="px-6 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90 transition-colors"
-            >
-              Explorar Vacantes
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredApplications.map((application) => (
-              <div
-                key={application.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-6"
-              >
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                  {/* Left Side - Job Info */}
-                  <div className="flex-1">
-                    <div className="flex items-start gap-3 mb-3">
-                      <CompanyLogo
-                        logoUrl={application.job.logoUrl}
-                        companyName={application.job.company}
-                        size="md"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {application.job.title}
-                          </h3>
-                          {getStatusIcon(application.status)}
-                        </div>
-                        <p className="text-gray-600 mb-2">
-                          {application.job.company} • {application.job.location}
-                        </p>
-                        <div className="flex flex-wrap gap-2 text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Briefcase className="w-4 h-4" />
-                            {application.job.jobType}
-                          </span>
-                          <span>•</span>
-                          <span>{application.job.salary}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Application.notes NO se pinta aquí: es la nota INTERNA
-                        que escriben admin, empresa y el inyector de candidatos
-                        ("Candidato inyectado por Admin. Fuente original: occ…",
-                        motivos de descarte). Se mostraba al candidato como
-                        "Nota de la empresa". Cuando exista un campo público
-                        (publicNote) se repone con ese. */}
-                  </div>
-
-                  {/* Right Side - Status & Date */}
-                  <div className="flex flex-col items-end gap-3">
-                    {getStatusBadge(application.status)}
-                    <div className="text-sm text-gray-500">
-                      Aplicado: {formatDate(application.createdAt)}
-                    </div>
-                    {application.reviewedAt && (
-                      <div className="text-sm text-gray-500">
-                        Revisado: {formatDate(application.reviewedAt)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+                  ? 'Cuando apliques a vacantes, aparecerán aquí para que puedas darles seguimiento.'
+                  : `No tienes postulaciones con estado «${NOMBRES_FILTRO[filterStatus] || filterStatus}».`
+              }
+              accion={
+                <Button variante="secundario" tamano="sm" icono={Briefcase} onClick={() => router.push('/talents')}>
+                  Ver vacantes disponibles
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {filteredApplications.map((application) => {
+                const vista = getCandidateStatusView(application.status);
+                const fechas = [{ etiqueta: 'Aplicado', valor: fechaCorta(application.createdAt) }];
+                if (application.reviewedAt) {
+                  fechas.push({ etiqueta: 'Revisado', valor: fechaCorta(application.reviewedAt) });
+                }
+                return (
+                  // Application.notes NO se pinta aquí: es la nota INTERNA que
+                  // escriben admin, empresa y el inyector de candidatos
+                  // ("Candidato inyectado por Admin. Fuente original: occ…",
+                  // motivos de descarte). Se mostraba al candidato como "Nota de
+                  // la empresa". Cuando exista un campo público (publicNote) se
+                  // repone con ese.
+                  // La misma tarjeta que /candidate/applications: los mismos
+                  // detalles en el mismo orden y el mismo aviso por estado.
+                  <FilaPostulacion
+                    key={application.id}
+                    titulo={application.job.title}
+                    empresa={application.job.company}
+                    logoUrl={application.job.logoUrl}
+                    estado={application.status}
+                    etiquetaEstado={vista.label}
+                    colorEstado={vista.color}
+                    detalles={[
+                      { icono: MapPin, etiqueta: 'Ubicación', valor: application.job.location },
+                      { icono: Banknote, etiqueta: 'Salario', valor: application.job.salary },
+                      { icono: Briefcase, etiqueta: 'Jornada', valor: application.job.jobType },
+                      { icono: Monitor, etiqueta: 'Modalidad', valor: etiquetaModalidad(application.job.workMode) }
+                    ]}
+                    fechas={fechas}
+                    aviso={avisoDeEstado(application.status)}
+                  />
+                );
+              })}
+            </ul>
+          )}
+        </PanelPestana>
+      </Card>
+    </>
   );
 }

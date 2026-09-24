@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Building2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface CompanyLogoProps {
   logoUrl?: string | null;
@@ -13,6 +14,7 @@ interface CompanyLogoProps {
   className?: string;
 }
 
+/** Tamaños: xs 24 · sm 32 · md 40 · lg 48 · xl 64 px. */
 const sizeMap = {
   xs: { container: 'w-6 h-6', icon: 12 },
   sm: { container: 'w-8 h-8', icon: 16 },
@@ -21,6 +23,12 @@ const sizeMap = {
   xl: { container: 'w-16 h-16', icon: 32 },
 };
 
+/**
+ * Logo de la empresa en un cuadro redondeado. Los logos suelen venir con fondo
+ * transparente y proporciones libres: van sobre blanco y enteros
+ * (object-contain), sin recortarlos. Sin logo, un edificio en verde azulado
+ * sobre su tinte (6.18:1), con el mismo nombre accesible que tendría la imagen.
+ */
 export default function CompanyLogo({
   logoUrl,
   companyName,
@@ -40,13 +48,17 @@ export default function CompanyLogo({
   if (logoUrl && urlFallida !== logoUrl) {
     return (
       <div
-        className={`${container} relative rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 ${className}`}
+        className={cn(
+          container,
+          'relative flex-none overflow-hidden rounded-lg bg-white ring-1 ring-inset ring-line',
+          className
+        )}
       >
         <Image
           src={logoUrl}
           alt={`Logo de ${companyName}`}
           fill
-          className="object-cover"
+          className="object-contain p-[8%]"
           sizes={`(max-width: 768px) ${icon * 2}px, ${icon * 2}px`}
           onError={() => setUrlFallida(logoUrl)}
         />
@@ -54,13 +66,19 @@ export default function CompanyLogo({
     );
   }
 
-  // Fallback: Icono de edificio con inicial de empresa
+  // Sin logo (o no cargó): edificio sobre el tinte verde azulado.
   return (
     <div
-      className={`${container} rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 ${className}`}
+      role="img"
+      aria-label={`Logo de ${companyName}`}
       title={companyName}
+      className={cn(
+        container,
+        'flex flex-none items-center justify-center rounded-lg bg-teal-tint text-teal',
+        className
+      )}
     >
-      <Building2 className="text-gray-400" size={icon} />
+      <Building2 size={icon} aria-hidden="true" />
     </div>
   );
 }

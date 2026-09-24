@@ -2,32 +2,51 @@
 
 'use client';
 
+/**
+ * Candidatos de una vacante asignada al reclutador, por etapa: Por revisar →
+ * En proceso → Enviadas (al especialista) · Descartados.
+ *
+ * Registro de aplicación (docs/DISENO.md): PageHeader con migas → equipo de la
+ * vacante → Card con pestañas y DataTable. La lógica es la de siempre (una
+ * llamada con ?jobId=, las transiciones de RECRUITER_TRANSITIONS, la
+ * actualización local tras cada movimiento, los vistos en localStorage y el
+ * modal de perfil con navegación); sólo cambió la presentación.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
-  Users,
-  Clock,
   Send,
-  Archive,
   Eye,
   PlayCircle,
-  Trash2,
+  UserX,
   RotateCcw,
   CheckCircle,
-  Loader2,
   AlertCircle,
-  Building2,
+  AlertTriangle,
   MapPin,
   Mail,
   Phone,
-  Inbox,
   GraduationCap,
-  Briefcase
+  Briefcase,
+  RefreshCw,
+  UserCheck,
+  X
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 import CompanyLogo from '@/components/shared/CompanyLogo';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import StatusBadge, { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { paginacionLocal } from '@/components/ui/Pagination';
 
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_recruiter';
@@ -76,6 +95,45 @@ const SENT_STATUS_LABELS: Record<string, string> = {
 };
 
 type TabType = 'pending' | 'reviewing' | 'sent' | 'discarded';
+
+/** Filas por página de la tabla (se pagina en el cliente). */
+const FILAS_POR_PAGINA = 25;
+
+/** Qué hacer en cada pestaña, en una línea (sobre la tabla). */
+const AYUDA_PESTANA: Record<TabType, string> = {
+  pending: 'Pulsa «Revisar» para pasar a un candidato a «En proceso».',
+  reviewing: 'Desde aquí envías al especialista o regresas al candidato a «Por revisar».',
+  sent: 'Sólo lectura: desde el envío, el estado lo actualizan el especialista y la empresa.',
+  discarded: 'Puedes reactivar a un candidato o moverlo directamente a «En proceso».'
+};
+
+/** La voz humana del estado vacío de cada pestaña. */
+const FRASE_VACIO: Record<TabType, string> = {
+  pending: 'Bandeja al día.',
+  reviewing: 'Nada en proceso.',
+  sent: 'Aún no envías a nadie.',
+  discarded: 'Nadie descartado.'
+};
+
+/**
+ * Nombre en pantalla de cada estado al que se mueve un candidato (el de las
+ * pestañas). La API ya responde con estos nombres («Candidato movido a
+ * «En proceso»»); la guardia local y una API anterior citan el estado crudo
+ * («"reviewing"»): al PINTARLOS se cambia por este nombre. El mensaje guardado
+ * en el estado es el de siempre.
+ */
+const NOMBRE_ESTADO: Record<string, string> = {
+  pending: 'Por revisar',
+  injected_by_admin: 'Por revisar',
+  reviewing: 'En proceso',
+  sent_to_specialist: 'Enviado al especialista',
+  discarded: 'Descartados'
+};
+
+const legible = (texto: string) =>
+  texto.replace(/"([a-z_]+)"/g, (entero, estado: string) =>
+    NOMBRE_ESTADO[estado] ? `«${NOMBRE_ESTADO[estado]}»` : entero
+  );
 
 interface CandidateProfile {
   id?: number;
@@ -180,15 +238,15 @@ export default function RecruiterJobCandidates() {
   // IDs de candidatos vistos (localStorage)
   const [viewedIds, setViewedIds] = useState<number[]>([]);
 
-  // Hover tooltip para candidatos
-  const [hoveredAppId, setHoveredAppId] = useState<number | null>(null);
+  // Página de la tabla (presentación: la lista de la pestaña ya llega entera).
+  const [pagina, setPagina] = useState(1);
 
   // Pestañas configuración - "Sin Revisar" → "Por revisar"
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
-    { id: 'pending', label: 'Por revisar', icon: <Inbox size={18} />, color: 'yellow' },
-    { id: 'reviewing', label: 'En proceso', icon: <Clock size={18} />, color: 'blue' },
-    { id: 'sent', label: 'Enviadas', icon: <Send size={18} />, color: 'green' },
-    { id: 'discarded', label: 'Descartados', icon: <Archive size={18} />, color: 'gray' }
+  const tabs: { id: TabType; label: string }[] = [
+    { id: 'pending', label: 'Por revisar' },
+    { id: 'reviewing', label: 'En proceso' },
+    { id: 'sent', label: 'Enviadas' },
+    { id: 'discarded', label: 'Descartados' }
   ];
 
   useEffect(() => {
@@ -408,406 +466,417 @@ export default function RecruiterJobCandidates() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-button-green" size={40} />
-      </div>
-    );
+    return <SkeletonPagina conCifras={false} />;
   }
 
   if (loadError || !assignment) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <p className="text-gray-600">{loadError || 'Vacante no encontrada'}</p>
-          <button
-            onClick={() => router.push('/recruiter/dashboard')}
-            className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-          >
-            Volver al dashboard
-          </button>
+      <>
+        <PageHeader
+          migas={[{ etiqueta: 'Panel', href: '/recruiter/dashboard' }, { etiqueta: 'Vacante' }]}
+          antetitulo="Vacante asignada"
+          titulo="No pudimos abrir la vacante"
+        />
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-center gap-2 text-sm font-medium text-danger-dark">
+            <AlertCircle size={18} className="flex-none" aria-hidden="true" />
+            {loadError || 'Vacante no encontrada'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variante="contorno" tamano="sm" icono={RefreshCw} onClick={() => fetchJobData()}>
+              Reintentar
+            </Button>
+            <Button variante="secundario" tamano="sm" icono={ArrowLeft} onClick={() => router.push('/recruiter/dashboard')}>
+              Volver al panel
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const job = assignment.job;
   const filteredApps = filterApplicationsByTab(job.applications);
+  const empresa = job.user?.companyRequest?.nombreEmpresa || job.company;
+  const etiquetaPestana = tabs.find((t) => t.id === activeTab)?.label ?? '';
+  const totalPaginas = Math.max(1, Math.ceil(filteredApps.length / FILAS_POR_PAGINA));
+  const paginaActual = Math.min(pagina, totalPaginas);
+
+  // Formación y experiencia de un candidato (se usan en su columna y, cuando
+  // la tabla es estrecha y la columna se esconde, dentro de la celda principal).
+  const formacion = (perfil?: CandidateProfile | null) =>
+    perfil && (perfil.universidad || perfil.carrera || perfil.nivelEstudios) ? (
+      <div className="min-w-0 text-[13px]">
+        {perfil.universidad && (
+          <p className="inline-flex items-center gap-1.5 text-ink">
+            <GraduationCap size={14} className="flex-none text-ink-muted" aria-hidden="true" />
+            {perfil.universidad}
+          </p>
+        )}
+        {(perfil.carrera || perfil.nivelEstudios) && (
+          <p className="mt-0.5 text-ink-muted">
+            {[perfil.carrera, perfil.nivelEstudios].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+    ) : null;
+
+  const experiencia = (perfil?: CandidateProfile | null) =>
+    perfil &&
+    ((perfil.añosExperiencia !== undefined && perfil.añosExperiencia > 0) ||
+      perfil.profile ||
+      perfil.seniority ||
+      perfil.source) ? (
+      <div className="min-w-0">
+        <div className="flex flex-wrap gap-1">
+          {perfil.añosExperiencia !== undefined && perfil.añosExperiencia > 0 && (
+            <Badge tono="neutro" icono={Briefcase} tamano="sm">
+              {perfil.añosExperiencia} {perfil.añosExperiencia === 1 ? 'año' : 'años'} exp.
+            </Badge>
+          )}
+          {perfil.profile && (
+            <Badge tono="info" sinPunto tamano="sm">
+              {perfil.profile}
+            </Badge>
+          )}
+          {perfil.seniority && (
+            <Badge tono="neutro" sinPunto tamano="sm">
+              {perfil.seniority}
+            </Badge>
+          )}
+        </div>
+        {perfil.source && <p className="mt-1 text-xs text-ink-muted">Fuente: {perfil.source}</p>}
+      </div>
+    ) : null;
+
+  const sinDato = (
+    <span className="text-ink-muted" aria-label="Sin dato">
+      —
+    </span>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Columnas (declarativas: DataTable pinta y pasa a tarjetas en móvil)
+  // ---------------------------------------------------------------------------
+  const columnas: Columna<Application>[] = [
+    {
+      id: 'candidate',
+      encabezado: 'Candidato',
+      enTarjeta: 'titulo',
+      className: 'min-w-[15rem]',
+      celda: (app) => {
+        const isUnseen = !viewedIds.includes(app.id);
+        return (
+          <div className="flex min-w-0 items-start gap-3">
+            {/* FEAT-2: Foto de perfil del candidato */}
+            <CandidatePhoto
+              fotoUrl={app.candidateProfile?.fotoUrl}
+              candidateName={app.candidateName}
+              size="sm"
+            />
+            <div className="min-w-0">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-semibold text-ink">{app.candidateName}</span>
+                {isUnseen && (
+                  <Badge tono="info" tamano="sm">
+                    Sin ver
+                  </Badge>
+                )}
+              </p>
+              <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-ink-muted">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <Mail size={13} className="flex-none" aria-hidden="true" />
+                  <span className="truncate">{app.candidateEmail}</span>
+                </span>
+                {app.candidatePhone && (
+                  <span className="inline-flex items-center gap-1 tabular-nums">
+                    <Phone size={13} className="flex-none" aria-hidden="true" />
+                    {app.candidatePhone}
+                  </span>
+                )}
+              </p>
+              {/* Tabla estrecha: formación y perfil suben aquí (sus columnas se esconden). */}
+              {(formacion(app.candidateProfile) || experiencia(app.candidateProfile)) && (
+                <div data-solo-bajo="lg" className="mt-2 space-y-1.5">
+                  {formacion(app.candidateProfile)}
+                  {experiencia(app.candidateProfile)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'education',
+      encabezado: 'Formación',
+      ocultarBajo: 'lg',
+      className: 'min-w-[11rem]',
+      celda: (app) => formacion(app.candidateProfile) ?? sinDato,
+    },
+    {
+      id: 'profile',
+      encabezado: 'Perfil',
+      ocultarBajo: 'lg',
+      celda: (app) => experiencia(app.candidateProfile) ?? sinDato,
+    },
+    {
+      id: 'actions',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'completa',
+      className: 'w-px whitespace-nowrap',
+      celda: (app) => (
+        // Sin flex-wrap: con w-px la celda toma el ancho mínimo del contenido,
+        // y con wrap ese mínimo es el botón más ancho, así que cada acción caía
+        // en su propia línea (filas de 133 px; en tarjeta, una columna de tres).
+        // En una sola fila el ancho es el de las acciones juntas; en tarjeta
+        // quedan alineadas al inicio porque la caja abraza su contenido.
+        <div className="flex flex-nowrap items-center justify-end gap-1.5">
+          {/* Ver perfil - siempre disponible */}
+          <IconButton
+            etiqueta={`Ver perfil de ${app.candidateName}`}
+            icono={Eye}
+            variante="contorno"
+            tamano="sm"
+            onClick={() => openApplicationProfile(app, filteredApps)}
+          />
+
+          {/* Acciones según pestaña */}
+          {activeTab === 'pending' && (
+            <>
+              <Button
+                variante="secundario"
+                tamano="sm"
+                icono={PlayCircle}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'reviewing')}
+                aria-label={`Revisar a ${app.candidateName}`}
+                title="Iniciar revisión"
+              >
+                Revisar
+              </Button>
+              {/* Sin botón "Enviar": la API exige pasar por
+                  'En proceso' (pending → sent_to_specialist no
+                  es una transición permitida). */}
+              <IconButton
+                etiqueta={`Descartar a ${app.candidateName}`}
+                icono={UserX}
+                variante="peligro"
+                tamano="sm"
+                disabled={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'discarded')}
+              />
+            </>
+          )}
+
+          {activeTab === 'reviewing' && (
+            <>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={ArrowLeft}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'pending')}
+                aria-label={`Regresar a ${app.candidateName} a Por revisar`}
+                title="Regresar a por revisar"
+              >
+                Regresar
+              </Button>
+              <Button
+                variante="secundario"
+                tamano="sm"
+                icono={Send}
+                cargando={actionLoading === app.id}
+                disabled={!assignment.specialist}
+                onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
+                aria-label={`Enviar a ${app.candidateName} al especialista`}
+                title={assignment.specialist ? 'Enviar al especialista' : 'No hay especialista asignado'}
+              >
+                Enviar
+              </Button>
+              <IconButton
+                etiqueta={`Descartar a ${app.candidateName}`}
+                icono={UserX}
+                variante="peligro"
+                tamano="sm"
+                disabled={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'discarded')}
+              />
+            </>
+          )}
+
+          {activeTab === 'sent' && (
+            /* Badge de sólo lectura con el estado REAL: a partir
+               del envío mandan el especialista y la empresa. */
+            <StatusBadge estado={app.status} etiqueta={SENT_STATUS_LABELS[app.status] || 'Enviado'} />
+          )}
+
+          {activeTab === 'discarded' && (
+            <>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={RotateCcw}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'pending')}
+                aria-label={`Reactivar a ${app.candidateName}`}
+                title="Reactivar candidato"
+              >
+                Reactivar
+              </Button>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={PlayCircle}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'reviewing')}
+                aria-label={`Mover a ${app.candidateName} a En proceso`}
+                title="Mover a en proceso"
+              >
+                En proceso
+              </Button>
+              {/* Sin botón "Enviar": desde 'Descartados' la API
+                  sólo deja reactivar a 'pending' o 'reviewing'. */}
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-5xl mx-auto px-4">
-        {/* Header con botón volver */}
-        <div className="mb-6">
-          <button
-            onClick={() => router.push('/recruiter/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span>Volver al dashboard</span>
-          </button>
-
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-start gap-3 mb-2">
-              <CompanyLogo
-                logoUrl={job.user?.companyRequest?.logoUrl}
-                companyName={job.user?.companyRequest?.nombreEmpresa || job.company}
-                size="md"
-              />
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900">
-                  {job.title}
-                </h1>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500">
-              <span className="flex items-center gap-1">
-                <Building2 size={16} />
-                {job.user?.companyRequest?.nombreEmpresa || job.company}
-              </span>
-              <span className="flex items-center gap-1">
-                <MapPin size={16} />
-                {job.location}
-              </span>
-              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
+    <>
+      <PageHeader
+        migas={[{ etiqueta: 'Panel', href: '/recruiter/dashboard' }, { etiqueta: job.title }]}
+        antetitulo="Vacante asignada"
+        titulo={job.title}
+        descripcion={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="inline-flex items-center gap-2 font-medium text-ink">
+              <CompanyLogo logoUrl={job.user?.companyRequest?.logoUrl} companyName={empresa} size="xs" />
+              {empresa}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin size={15} className="flex-none" aria-hidden="true" />
+              {job.location}
+            </span>
+            <span className="flex flex-wrap gap-1">
+              <Badge tono="neutro" sinPunto>
                 {getWorkModeLabel(job.workMode)}
-              </span>
+              </Badge>
               {job.profile && (
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                <Badge tono="info" sinPunto>
                   {job.profile}
-                </span>
+                </Badge>
               )}
               {job.seniority && (
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                <Badge tono="neutro" sinPunto>
                   {job.seniority}
-                </span>
+                </Badge>
               )}
-            </div>
-
-            {/* Info del especialista */}
-            {assignment.specialist ? (
-              <div className="mt-3 p-2 bg-purple-50 rounded-lg text-sm text-purple-700 flex items-center gap-2">
-                <CheckCircle size={16} />
-                Especialista: {assignment.specialist.nombre} {assignment.specialist.apellidoPaterno}
-                {assignment.specialist.specialty && ` (${assignment.specialist.specialty})`}
-              </div>
-            ) : (
-              <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700 flex items-center gap-2">
-                <AlertCircle size={16} />
-                Sin especialista asignado - No podrás enviar candidatos
-              </div>
-            )}
+            </span>
           </div>
-        </div>
+        }
+      />
 
-        {/* Alerts */}
+      {/* Info del especialista */}
+      {assignment.specialist ? (
+        <p className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink shadow-ap-1">
+          <UserCheck size={16} className="flex-none text-teal" aria-hidden="true" />
+          <span className="text-ink-muted">Especialista:</span>
+          <span className="font-medium">
+            {assignment.specialist.nombre} {assignment.specialist.apellidoPaterno}
+          </span>
+          {assignment.specialist.specialty && (
+            <Badge tono="info" sinPunto tamano="sm">
+              {assignment.specialist.specialty}
+            </Badge>
+          )}
+        </p>
+      ) : (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-orange/40 bg-orange-tint px-4 py-3 text-sm text-orange-dark">
+          <AlertTriangle size={18} className="mt-px flex-none" aria-hidden="true" />
+          <p>
+            <span className="font-semibold">Sin especialista asignado.</span> No podrás enviar candidatos
+            hasta que el equipo de INAKAT asigne uno a esta vacante.
+          </p>
+        </div>
+      )}
+
+      {/* Avisos: fijos bajo la cabecera para que se vean desde cualquier fila.
+          El error es role="alert" (se anuncia al momento); el éxito vive en
+          una región polite que existe siempre, para que se anuncie al llegar. */}
+      <div className="sticky top-16 z-20">
         {actionError && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={20} />
-            {actionError}
-            <button onClick={() => setActionError(null)} className="ml-auto text-xl">×</button>
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark shadow-ap-2"
+          >
+            <AlertCircle size={18} className="mt-px flex-none" aria-hidden="true" />
+            <p className="min-w-0 flex-1">{legible(actionError)}</p>
+            <IconButton
+              etiqueta="Cerrar aviso"
+              icono={X}
+              tamano="sm"
+              onClick={() => setActionError(null)}
+              className="-my-1.5 -mr-1.5 text-danger-dark hover:bg-danger/10"
+            />
           </div>
         )}
 
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Pestañas */}
-        <div className="bg-white rounded-lg shadow-sm border mb-6">
-          <div className="flex border-b overflow-x-auto">
-            {tabs.map((tab) => {
-              const count = getTabCount(tab.id);
-              const isActive = activeTab === tab.id;
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 min-w-[100px] px-4 py-3 flex items-center justify-center gap-2 font-medium transition-colors relative ${
-                    isActive
-                      ? 'border-b-2'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
-                  style={isActive ? {
-                    color: tab.color === 'yellow' ? '#b45309' : tab.color === 'blue' ? '#1d4ed8' : tab.color === 'green' ? '#15803d' : '#374151',
-                    backgroundColor: tab.color === 'yellow' ? '#fef9c3' : tab.color === 'blue' ? '#dbeafe' : tab.color === 'green' ? '#dcfce7' : '#f3f4f6',
-                    borderBottomColor: tab.color === 'yellow' ? '#eab308' : tab.color === 'blue' ? '#3b82f6' : tab.color === 'green' ? '#22c55e' : '#6b7280'
-                  } : {}}
-                >
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                    isActive ? 'bg-white shadow-sm' : 'bg-gray-100'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Lista de candidatos */}
-        <div className="bg-white rounded-lg shadow-sm border">
-          {filteredApps.length === 0 ? (
-            <div className="p-12 text-center">
-              <Users className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">
-                No hay candidatos en &quot;{tabs.find(t => t.id === activeTab)?.label}&quot;
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {filteredApps.map((app) => {
-                const isUnseen = !viewedIds.includes(app.id);
-
-                return (
-                  <div
-                    key={app.id}
-                    className={`p-4 hover:bg-gray-50 transition-colors relative ${isUnseen ? 'bg-blue-50/30' : ''}`}
-                    onMouseEnter={() => setHoveredAppId(app.id)}
-                    onMouseLeave={() => setHoveredAppId(null)}
-                  >
-                    {/* Tooltip de información rápida */}
-                    {hoveredAppId === app.id && app.candidateProfile && (
-                      <div className="absolute left-4 top-0 -translate-y-full z-20 pointer-events-none mb-2">
-                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg max-w-xs">
-                          <p className="font-semibold mb-2 text-sm">{app.candidateName}</p>
-                          <div className="space-y-1">
-                            {app.candidateProfile.universidad && (
-                              <p><span className="text-gray-400">Universidad:</span> {app.candidateProfile.universidad}</p>
-                            )}
-                            {app.candidateProfile.carrera && (
-                              <p><span className="text-gray-400">Carrera:</span> {app.candidateProfile.carrera}</p>
-                            )}
-                            {app.candidateProfile.nivelEstudios && (
-                              <p><span className="text-gray-400">Nivel:</span> {app.candidateProfile.nivelEstudios}</p>
-                            )}
-                            {app.candidateProfile.añosExperiencia !== undefined && app.candidateProfile.añosExperiencia > 0 && (
-                              <p><span className="text-gray-400">Experiencia:</span> {app.candidateProfile.añosExperiencia} {app.candidateProfile.añosExperiencia === 1 ? 'año' : 'años'}</p>
-                            )}
-                            {app.candidateProfile.profile && (
-                              <p><span className="text-gray-400">Área:</span> {app.candidateProfile.profile}</p>
-                            )}
-                            {app.candidateProfile.seniority && (
-                              <p><span className="text-gray-400">Seniority:</span> {app.candidateProfile.seniority}</p>
-                            )}
-                            {app.candidateProfile.source && (
-                              <p><span className="text-gray-400">Fuente:</span> {app.candidateProfile.source}</p>
-                            )}
-                          </div>
-                          <div className="absolute left-4 bottom-0 translate-y-full">
-                            <div className="border-8 border-transparent border-t-gray-900"></div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        {/* FEAT-2: Foto de perfil del candidato */}
-                        <CandidatePhoto
-                          fotoUrl={app.candidateProfile?.fotoUrl}
-                          candidateName={app.candidateName}
-                          size="sm"
-                        />
-                        <div className="flex-1 min-w-0">
-                        {/* Nombre y badges */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-gray-900">
-                            {app.candidateName}
-                          </p>
-                          {isUnseen && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
-                              Sin ver
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Contacto */}
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Mail size={14} />
-                            <span className="truncate">{app.candidateEmail}</span>
-                          </span>
-                          {app.candidatePhone && (
-                            <span className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {app.candidatePhone}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Info del perfil */}
-                        {app.candidateProfile && (
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            {app.candidateProfile.universidad && (
-                              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1">
-                                <GraduationCap size={12} />
-                                {app.candidateProfile.universidad}
-                              </span>
-                            )}
-                            {app.candidateProfile.carrera && (
-                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                                {app.candidateProfile.carrera}
-                              </span>
-                            )}
-                            {app.candidateProfile.añosExperiencia !== undefined && app.candidateProfile.añosExperiencia > 0 && (
-                              <span className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full flex items-center gap-1">
-                                <Briefcase size={12} />
-                                {app.candidateProfile.añosExperiencia} {app.candidateProfile.añosExperiencia === 1 ? 'año' : 'años'} exp.
-                              </span>
-                            )}
-                            {app.candidateProfile.profile && (
-                              <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full">
-                                {app.candidateProfile.profile}
-                              </span>
-                            )}
-                            {app.candidateProfile.seniority && (
-                              <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full">
-                                {app.candidateProfile.seniority}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        </div>
-                      </div>
-
-                      {/* Acciones */}
-                      <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                        {/* Ver perfil - siempre disponible */}
-                        <button
-                          onClick={() => openApplicationProfile(app, filteredApps)}
-                          className="p-2 text-[#2b5d62] hover:bg-[#e8f4f4] rounded-lg transition-colors"
-                          title="Ver perfil"
-                        >
-                          <Eye size={18} />
-                        </button>
-
-                        {/* Acciones según pestaña */}
-                        {activeTab === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'reviewing')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Iniciar revisión"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <PlayCircle size={14} />
-                              )}
-                              <span className="hidden sm:inline">Revisar</span>
-                            </button>
-                            {/* Sin botón "Enviar": la API exige pasar por
-                                'En proceso' (pending → sent_to_specialist no
-                                es una transición permitida). */}
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'discarded')}
-                              disabled={actionLoading === app.id}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Descartar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        )}
-
-                        {activeTab === 'reviewing' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'pending')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Regresar a por revisar"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <ArrowLeft size={14} />
-                              )}
-                              <span className="hidden sm:inline">Regresar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                              disabled={actionLoading === app.id || !assignment.specialist}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title={assignment.specialist ? 'Enviar al especialista' : 'No hay especialista asignado'}
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'discarded')}
-                              disabled={actionLoading === app.id}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Descartar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        )}
-
-                        {activeTab === 'sent' && (
-                          /* Badge de sólo lectura con el estado REAL: a partir
-                             del envío mandan el especialista y la empresa. */
-                          <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm flex items-center gap-1">
-                            <CheckCircle size={14} />
-                            {SENT_STATUS_LABELS[app.status] || 'Enviado'}
-                          </span>
-                        )}
-
-                        {activeTab === 'discarded' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'pending')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Reactivar candidato"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <RotateCcw size={14} />
-                              )}
-                              <span className="hidden sm:inline">Reactivar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'reviewing')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Mover a en proceso"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <PlayCircle size={14} />
-                              )}
-                              <span className="hidden sm:inline">En proceso</span>
-                            </button>
-                            {/* Sin botón "Enviar": desde 'Descartados' la API
-                                sólo deja reactivar a 'pending' o 'reviewing'. */}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div aria-live="polite">
+          {success && (
+            <p className="mb-4 flex items-center gap-2 rounded-xl border border-lime/50 bg-lime-tint px-4 py-3 text-sm font-medium text-lime-dark shadow-ap-2">
+              <CheckCircle size={18} className="flex-none" aria-hidden="true" />
+              {legible(success)}
+            </p>
           )}
         </div>
       </div>
+
+      {/* Candidatos por etapa */}
+      <Card sinRelleno>
+        <div className="border-b border-line px-2 sm:px-4">
+          <Tabs
+            idBase="etapas"
+            etiqueta="Etapas de la vacante"
+            activa={activeTab}
+            alCambiar={(id) => {
+              setActiveTab(id as TabType);
+              setPagina(1);
+            }}
+            pestanas={tabs.map((tab) => ({ id: tab.id, etiqueta: tab.label, contador: getTabCount(tab.id) }))}
+            className="border-b-0"
+          />
+        </div>
+
+        <PanelPestana idBase="etapas" id={activeTab} activa={activeTab} className="pt-0">
+          <p className="border-b border-line bg-paper/60 px-5 py-2.5 text-[13px] text-ink-muted">
+            {AYUDA_PESTANA[activeTab]}
+          </p>
+          <DataTable
+            etiqueta={`Candidatos: ${etiquetaPestana}`}
+            columnas={columnas}
+            filas={filteredApps.slice((paginaActual - 1) * FILAS_POR_PAGINA, paginaActual * FILAS_POR_PAGINA)}
+            claveFila={(app) => app.id}
+            alActivarFila={(app) => openApplicationProfile(app, filteredApps)}
+            paginacion={paginacionLocal(filteredApps.length, paginaActual, FILAS_POR_PAGINA)}
+            alCambiarPagina={setPagina}
+            etiquetaTotal="candidatos"
+            vacio={
+              <EmptyState
+                frase={FRASE_VACIO[activeTab]}
+                titulo={`No hay candidatos en «${etiquetaPestana}»`}
+              />
+            }
+          />
+        </PanelPestana>
+      </Card>
 
       {/* Modal de perfil de candidato */}
       <CandidateProfileModal
@@ -829,6 +898,6 @@ export default function RecruiterJobCandidates() {
         jobLatitude={job?.latitude}
         jobLongitude={job?.longitude}
       />
-    </div>
+    </>
   );
 }

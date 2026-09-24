@@ -5,36 +5,55 @@
 // FIX-02: Helper para asegurar que URLs externos tengan protocolo https://
 const ensureUrl = (url: string) => url.startsWith('http') ? url : `https://${url}`;
 
+/**
+ * Candidatos de una vacante que el reclutador envió al especialista, por
+ * etapa: Por revisar → En proceso → Enviadas (a la empresa) · Descartados.
+ *
+ * Registro de aplicación (docs/DISENO.md): PageHeader con migas → equipo y
+ * notas del reclutador → Card con pestañas y DataTable. La lógica es la de
+ * siempre (una llamada con ?jobId=, las transiciones de SPECIALIST_TRANSITIONS,
+ * la actualización local tras cada movimiento, los vistos en localStorage y el
+ * modal de perfil con navegación); sólo cambió la presentación.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
-  Users,
-  Clock,
   Send,
-  Archive,
   Eye,
   PlayCircle,
-  Trash2,
+  UserX,
   RotateCcw,
   CheckCircle,
-  Loader2,
   AlertCircle,
-  Building2,
   MapPin,
   Mail,
   Phone,
-  Inbox,
   FileText,
   ExternalLink,
   Star,
   GraduationCap,
-  Briefcase
+  Briefcase,
+  RefreshCw,
+  UserRound,
+  X
 } from 'lucide-react';
 import CandidateProfileModal from '@/components/shared/CandidateProfileModal';
 import CompanyLogo from '@/components/shared/CompanyLogo';
 import CandidatePhoto from '@/components/shared/CandidatePhoto'; // FEAT-2: Foto de perfil
 import DistanceBadge from '@/components/shared/DistanceBadge';
+import { getDistanceInfo } from '@/lib/distance';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import StatusBadge, { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { paginacionLocal } from '@/components/ui/Pagination';
 
 // Key para localStorage de candidatos vistos
 const VIEWED_CANDIDATES_KEY = 'inakat_viewed_candidates_specialist';
@@ -76,6 +95,44 @@ const SENT_STATUS_LABELS: Record<string, string> = {
 };
 
 type TabType = 'pending' | 'evaluating' | 'sent' | 'discarded';
+
+/** Filas por página de la tabla (se pagina en el cliente). */
+const FILAS_POR_PAGINA = 25;
+
+/** Qué hacer en cada pestaña, en una línea (sobre la tabla). */
+const AYUDA_PESTANA: Record<TabType, string> = {
+  pending: 'Pulsa «Evaluar» para pasar a un candidato a «En proceso».',
+  evaluating: 'Desde aquí envías a la empresa o regresas al candidato a «Por revisar».',
+  sent: 'Sólo lectura: desde el envío, el estado lo actualiza la empresa.',
+  discarded: 'Puedes reactivar a un candidato o moverlo directamente a «En proceso».'
+};
+
+/** La voz humana del estado vacío de cada pestaña. */
+const FRASE_VACIO: Record<TabType, string> = {
+  pending: 'Bandeja al día.',
+  evaluating: 'Nada en proceso.',
+  sent: 'Aún no envías a nadie.',
+  discarded: 'Nadie descartado.'
+};
+
+/**
+ * Nombre en pantalla de cada estado al que se mueve un candidato (el de las
+ * pestañas). La API ya responde con estos nombres («Candidato movido a
+ * «En proceso»»); la guardia local y una API anterior citan el estado crudo
+ * («"evaluating"»): al PINTARLOS se cambia por este nombre. El mensaje guardado
+ * en el estado es el de siempre.
+ */
+const NOMBRE_ESTADO: Record<string, string> = {
+  sent_to_specialist: 'Por revisar',
+  evaluating: 'En proceso',
+  sent_to_company: 'Enviado a la empresa',
+  discarded: 'Descartados'
+};
+
+const legible = (texto: string) =>
+  texto.replace(/"([a-z_]+)"/g, (entero, estado: string) =>
+    NOMBRE_ESTADO[estado] ? `«${NOMBRE_ESTADO[estado]}»` : entero
+  );
 
 interface CandidateProfile {
   id?: number;
@@ -184,15 +241,15 @@ export default function SpecialistJobCandidates() {
   // IDs de candidatos vistos (localStorage)
   const [viewedIds, setViewedIds] = useState<number[]>([]);
 
-  // Hover tooltip para candidatos
-  const [hoveredAppId, setHoveredAppId] = useState<number | null>(null);
+  // Página de la tabla (presentación: la lista de la pestaña ya llega entera).
+  const [pagina, setPagina] = useState(1);
 
   // Pestañas configuración - "Sin Revisar" → "Por revisar"
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string }[] = [
-    { id: 'pending', label: 'Por revisar', icon: <Inbox size={18} />, color: 'yellow' },
-    { id: 'evaluating', label: 'En proceso', icon: <Clock size={18} />, color: 'purple' },
-    { id: 'sent', label: 'Enviadas', icon: <Send size={18} />, color: 'green' },
-    { id: 'discarded', label: 'Descartados', icon: <Archive size={18} />, color: 'gray' }
+  const tabs: { id: TabType; label: string }[] = [
+    { id: 'pending', label: 'Por revisar' },
+    { id: 'evaluating', label: 'En proceso' },
+    { id: 'sent', label: 'Enviadas' },
+    { id: 'discarded', label: 'Descartados' }
   ];
 
   useEffect(() => {
@@ -406,454 +463,477 @@ export default function SpecialistJobCandidates() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-purple-600" size={40} />
-      </div>
-    );
+    return <SkeletonPagina conCifras={false} />;
   }
 
   if (loadError || !assignment) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-          <p className="text-gray-600">{loadError || 'Vacante no encontrada'}</p>
-          <button
-            onClick={() => router.push('/specialist/dashboard')}
-            className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-          >
-            Volver al dashboard
-          </button>
+      <>
+        <PageHeader
+          migas={[{ etiqueta: 'Panel', href: '/specialist/dashboard' }, { etiqueta: 'Vacante' }]}
+          antetitulo="Vacante por evaluar"
+          titulo="No pudimos abrir la vacante"
+        />
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-center gap-2 text-sm font-medium text-danger-dark">
+            <AlertCircle size={18} className="flex-none" aria-hidden="true" />
+            {loadError || 'Vacante no encontrada'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variante="contorno" tamano="sm" icono={RefreshCw} onClick={() => fetchJobData()}>
+              Reintentar
+            </Button>
+            <Button variante="secundario" tamano="sm" icono={ArrowLeft} onClick={() => router.push('/specialist/dashboard')}>
+              Volver al panel
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const job = assignment.job;
   const filteredApps = filterApplicationsByTab(assignment.applications);
+  const empresa = job.user?.companyRequest?.nombreEmpresa || job.company;
+  const etiquetaPestana = tabs.find((t) => t.id === activeTab)?.label ?? '';
+  const totalPaginas = Math.max(1, Math.ceil(filteredApps.length / FILAS_POR_PAGINA));
+  const paginaActual = Math.min(pagina, totalPaginas);
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-5xl mx-auto px-4">
-        {/* Header con botón volver */}
-        <div className="mb-6">
-          <button
-            onClick={() => router.push('/specialist/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span>Volver al dashboard</span>
-          </button>
+  // Formación y perfil de un candidato (se usan en su columna y, cuando la
+  // tabla es estrecha y la columna se esconde, dentro de la celda principal).
+  const formacion = (perfil?: CandidateProfile | null) =>
+    perfil && (perfil.universidad || perfil.carrera || perfil.nivelEstudios) ? (
+      <div className="min-w-0 text-[13px]">
+        {perfil.universidad && (
+          <p className="inline-flex items-center gap-1.5 text-ink">
+            <GraduationCap size={14} className="flex-none text-ink-muted" aria-hidden="true" />
+            {perfil.universidad}
+          </p>
+        )}
+        {(perfil.carrera || perfil.nivelEstudios) && (
+          <p className="mt-0.5 text-ink-muted">
+            {[perfil.carrera, perfil.nivelEstudios].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+    ) : null;
 
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <CompanyLogo
-                  logoUrl={job.user?.companyRequest?.logoUrl}
-                  companyName={job.user?.companyRequest?.nombreEmpresa || job.company}
-                  size="md"
-                />
-                <div>
-                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
-                    {job.title}
-                  </h1>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Building2 size={16} />
-                      {job.user?.companyRequest?.nombreEmpresa || job.company}
-                    </span>
-                  <span className="flex items-center gap-1">
-                    <MapPin size={16} />
-                    {job.location}
-                  </span>
-                  <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
-                    {getWorkModeLabel(job.workMode)}
-                  </span>
-                  {job.profile && (
-                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                      {job.profile}
-                    </span>
-                  )}
-                  {job.seniority && (
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
-                      {job.seniority}
-                    </span>
-                  )}
-                </div>
-                </div>
-              </div>
+  const perfilCandidato = (perfil?: CandidateProfile | null) =>
+    perfil &&
+    ((perfil.añosExperiencia !== undefined && perfil.añosExperiencia > 0) ||
+      perfil.profile ||
+      perfil.seniority ||
+      perfil.source ||
+      getDistanceInfo(perfil.latitude, perfil.longitude, job.latitude, job.longitude)) ? (
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1">
+          {perfil.añosExperiencia !== undefined && perfil.añosExperiencia > 0 && (
+            <Badge tono="neutro" icono={Briefcase} tamano="sm">
+              {perfil.añosExperiencia} {perfil.añosExperiencia === 1 ? 'año' : 'años'} exp.
+            </Badge>
+          )}
+          {perfil.profile && (
+            <Badge tono="info" sinPunto tamano="sm">
+              {perfil.profile}
+            </Badge>
+          )}
+          {perfil.seniority && (
+            <Badge tono="neutro" sinPunto tamano="sm">
+              {perfil.seniority}
+            </Badge>
+          )}
+          <DistanceBadge
+            candidateLat={perfil.latitude}
+            candidateLng={perfil.longitude}
+            jobLat={assignment?.job.latitude}
+            jobLng={assignment?.job.longitude}
+            compact
+          />
+        </div>
+        {perfil.source && <p className="mt-1 text-xs text-ink-muted">Fuente: {perfil.source}</p>}
+      </div>
+    ) : null;
 
-              {specialist?.specialty && (
-                <span className="hidden sm:flex items-center gap-1 text-sm text-yellow-600">
-                  <Star size={16} />
-                  {specialist.specialty}
+  const sinDato = (
+    <span className="text-ink-muted" aria-label="Sin dato">
+      —
+    </span>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Columnas (declarativas: DataTable pinta y pasa a tarjetas en móvil)
+  // ---------------------------------------------------------------------------
+  const columnas: Columna<Application>[] = [
+    {
+      id: 'candidate',
+      encabezado: 'Candidato',
+      enTarjeta: 'titulo',
+      className: 'min-w-[15rem]',
+      celda: (app) => {
+        const isUnseen = !viewedIds.includes(app.id);
+        const cv = app.cvUrl || app.candidateProfile?.cvUrl;
+        return (
+          <div className="flex min-w-0 items-start gap-3">
+            {/* FEAT-2: Foto de perfil del candidato */}
+            <CandidatePhoto
+              fotoUrl={app.candidateProfile?.fotoUrl}
+              candidateName={app.candidateName}
+              size="sm"
+            />
+            <div className="min-w-0">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-semibold text-ink">{app.candidateName}</span>
+                {isUnseen && (
+                  <Badge tono="info" tamano="sm">
+                    Sin ver
+                  </Badge>
+                )}
+              </p>
+              <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-ink-muted">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <Mail size={13} className="flex-none" aria-hidden="true" />
+                  <span className="truncate">{app.candidateEmail}</span>
                 </span>
+                {app.candidatePhone && (
+                  <span className="inline-flex items-center gap-1 tabular-nums">
+                    <Phone size={13} className="flex-none" aria-hidden="true" />
+                    {app.candidatePhone}
+                  </span>
+                )}
+              </p>
+
+              {/* Links rápidos */}
+              {(cv || app.candidateProfile?.linkedinUrl) && (
+                <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
+                  {cv && (
+                    <a
+                      href={ensureUrl(app.cvUrl || app.candidateProfile?.cvUrl || '#')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded font-medium text-teal underline-offset-2 hover:text-teal-dark hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <FileText size={13} aria-hidden="true" />
+                      CV
+                      <span className="sr-only"> de {app.candidateName} (se abre en otra pestaña)</span>
+                    </a>
+                  )}
+                  {app.candidateProfile?.linkedinUrl && (
+                    <a
+                      href={ensureUrl(app.candidateProfile.linkedinUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded font-medium text-teal underline-offset-2 hover:text-teal-dark hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink size={13} aria-hidden="true" />
+                      LinkedIn
+                      <span className="sr-only"> de {app.candidateName} (se abre en otra pestaña)</span>
+                    </a>
+                  )}
+                </p>
+              )}
+
+              {/* Tabla estrecha: formación y perfil suben aquí (sus columnas se esconden). */}
+              {(formacion(app.candidateProfile) || perfilCandidato(app.candidateProfile)) && (
+                <div data-solo-bajo="lg" className="mt-2 space-y-1.5">
+                  {formacion(app.candidateProfile)}
+                  {perfilCandidato(app.candidateProfile)}
+                </div>
               )}
             </div>
-
-            {/* Info del reclutador */}
-            {assignment.recruiter && (
-              <div className="mt-3 p-2 bg-gray-50 rounded text-sm text-gray-600">
-                Reclutador: {assignment.recruiter.nombre} {assignment.recruiter.apellidoPaterno} ({assignment.recruiter.email})
-              </div>
-            )}
-
-            {/* Notas del reclutador */}
-            {assignment.recruiterNotes && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm font-medium text-blue-800 mb-1 flex items-center gap-1">
-                  <FileText size={14} />
-                  Notas del Reclutador:
-                </p>
-                <p className="text-sm text-blue-700 whitespace-pre-wrap">
-                  {assignment.recruiterNotes}
-                </p>
-              </div>
-            )}
           </div>
-        </div>
+        );
+      },
+    },
+    {
+      id: 'education',
+      encabezado: 'Formación',
+      ocultarBajo: 'lg',
+      className: 'min-w-[11rem]',
+      celda: (app) => formacion(app.candidateProfile) ?? sinDato,
+    },
+    {
+      id: 'profile',
+      encabezado: 'Perfil',
+      ocultarBajo: 'lg',
+      celda: (app) => perfilCandidato(app.candidateProfile) ?? sinDato,
+    },
+    {
+      id: 'actions',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'completa',
+      className: 'w-px whitespace-nowrap',
+      celda: (app) => (
+        // Sin flex-wrap: con w-px la celda toma el ancho mínimo del contenido,
+        // y con wrap ese mínimo es el botón más ancho, así que cada acción caía
+        // en su propia línea (filas de 133 px; en tarjeta, una columna de tres).
+        // En una sola fila el ancho es el de las acciones juntas; en tarjeta
+        // quedan alineadas al inicio porque la caja abraza su contenido.
+        <div className="flex flex-nowrap items-center justify-end gap-1.5">
+          {/* Ver perfil - siempre disponible */}
+          <IconButton
+            etiqueta={`Ver perfil completo de ${app.candidateName}`}
+            icono={Eye}
+            variante="contorno"
+            tamano="sm"
+            onClick={() => openApplicationProfile(app, filteredApps)}
+          />
 
-        {/* Alerts */}
+          {/* Acciones según pestaña */}
+          {activeTab === 'pending' && (
+            <>
+              <Button
+                variante="secundario"
+                tamano="sm"
+                icono={PlayCircle}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'evaluating')}
+                aria-label={`Evaluar a ${app.candidateName}`}
+                title="Iniciar evaluación"
+              >
+                Evaluar
+              </Button>
+              <IconButton
+                etiqueta={`Descartar a ${app.candidateName}`}
+                icono={UserX}
+                variante="peligro"
+                tamano="sm"
+                disabled={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'discarded')}
+              />
+            </>
+          )}
+
+          {activeTab === 'evaluating' && (
+            <>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={ArrowLeft}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
+                aria-label={`Regresar a ${app.candidateName} a Por revisar`}
+                title="Regresar a por revisar"
+              >
+                Regresar
+              </Button>
+              <Button
+                variante="secundario"
+                tamano="sm"
+                icono={Send}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'sent_to_company')}
+                aria-label={`Enviar a ${app.candidateName} a la empresa`}
+                title="Enviar a empresa"
+              >
+                Enviar
+              </Button>
+              <IconButton
+                etiqueta={`Descartar a ${app.candidateName}`}
+                icono={UserX}
+                variante="peligro"
+                tamano="sm"
+                disabled={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'discarded')}
+              />
+            </>
+          )}
+
+          {activeTab === 'sent' && (
+            /* Badge de sólo lectura con el estado REAL: a partir
+               de 'sent_to_company' manda la empresa. */
+            <StatusBadge estado={app.status} etiqueta={SENT_STATUS_LABELS[app.status] || 'Enviado'} />
+          )}
+
+          {activeTab === 'discarded' && (
+            <>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={RotateCcw}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
+                aria-label={`Reactivar a ${app.candidateName}`}
+                title="Reactivar candidato"
+              >
+                Reactivar
+              </Button>
+              <Button
+                variante="contorno"
+                tamano="sm"
+                icono={PlayCircle}
+                cargando={actionLoading === app.id}
+                onClick={() => handleMoveApplication(app.id, 'evaluating')}
+                aria-label={`Mover a ${app.candidateName} a En proceso`}
+                title="Mover a en proceso"
+              >
+                En proceso
+              </Button>
+              {/* Sin botón "Enviar a empresa": desde 'discarded'
+                  la API sólo deja reactivar a 'sent_to_specialist'
+                  o 'evaluating'. */}
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        migas={[{ etiqueta: 'Panel', href: '/specialist/dashboard' }, { etiqueta: job.title }]}
+        antetitulo="Vacante por evaluar"
+        titulo={job.title}
+        descripcion={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="inline-flex items-center gap-2 font-medium text-ink">
+              <CompanyLogo logoUrl={job.user?.companyRequest?.logoUrl} companyName={empresa} size="xs" />
+              {empresa}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin size={15} className="flex-none" aria-hidden="true" />
+              {job.location}
+            </span>
+            <span className="flex flex-wrap gap-1">
+              <Badge tono="neutro" sinPunto>
+                {getWorkModeLabel(job.workMode)}
+              </Badge>
+              {job.profile && (
+                <Badge tono="info" sinPunto>
+                  {job.profile}
+                </Badge>
+              )}
+              {job.seniority && (
+                <Badge tono="neutro" sinPunto>
+                  {job.seniority}
+                </Badge>
+              )}
+            </span>
+          </div>
+        }
+      />
+
+      {/* Equipo: reclutador y tu especialidad */}
+      {(assignment.recruiter || specialist?.specialty) && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink shadow-ap-1">
+          {assignment.recruiter && (
+            <p className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <UserRound size={16} className="flex-none text-teal" aria-hidden="true" />
+              <span className="text-ink-muted">Reclutador:</span>
+              <span className="font-medium">
+                {assignment.recruiter.nombre} {assignment.recruiter.apellidoPaterno}
+              </span>
+              <a
+                href={`mailto:${assignment.recruiter.email}`}
+                className="break-all rounded text-teal underline-offset-2 hover:text-teal-dark hover:underline"
+              >
+                {assignment.recruiter.email}
+              </a>
+            </p>
+          )}
+          {specialist?.specialty && (
+            <p className="inline-flex items-center gap-2">
+              <Star size={16} className="flex-none text-orange-dark" aria-hidden="true" />
+              <span className="text-ink-muted">Tu especialidad:</span>
+              <span className="font-medium">{specialist.specialty}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Notas del reclutador */}
+      {assignment.recruiterNotes && (
+        <Card
+          titulo={
+            <span className="inline-flex items-center gap-2">
+              <FileText size={16} className="text-teal" aria-hidden="true" />
+              Notas del reclutador
+            </span>
+          }
+          className="mb-5"
+          claseCuerpo="px-5 py-4"
+        >
+          <p className="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-ink">{assignment.recruiterNotes}</p>
+        </Card>
+      )}
+
+      {/* Avisos: fijos bajo la cabecera para que se vean desde cualquier fila.
+          El error es role="alert" (se anuncia al momento); el éxito vive en
+          una región polite que existe siempre, para que se anuncie al llegar. */}
+      <div className="sticky top-16 z-20">
         {actionError && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={20} />
-            {actionError}
-            <button onClick={() => setActionError(null)} className="ml-auto text-xl">×</button>
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark shadow-ap-2"
+          >
+            <AlertCircle size={18} className="mt-px flex-none" aria-hidden="true" />
+            <p className="min-w-0 flex-1">{legible(actionError)}</p>
+            <IconButton
+              etiqueta="Cerrar aviso"
+              icono={X}
+              tamano="sm"
+              onClick={() => setActionError(null)}
+              className="-my-1.5 -mr-1.5 text-danger-dark hover:bg-danger/10"
+            />
           </div>
         )}
 
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Pestañas */}
-        <div className="bg-white rounded-lg shadow-sm border mb-6">
-          <div className="flex border-b overflow-x-auto scrollbar-hide">
-            {tabs.map((tab) => {
-              const count = getTabCount(tab.id);
-              const isActive = activeTab === tab.id;
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 min-w-[100px] px-4 py-3 flex items-center justify-center gap-2 font-medium transition-colors relative ${
-                    isActive
-                      ? 'border-b-2'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
-                  style={isActive ? {
-                    color: tab.color === 'yellow' ? '#b45309' : tab.color === 'purple' ? '#7c3aed' : tab.color === 'green' ? '#15803d' : '#374151',
-                    backgroundColor: tab.color === 'yellow' ? '#fef9c3' : tab.color === 'purple' ? '#f3e8ff' : tab.color === 'green' ? '#dcfce7' : '#f3f4f6',
-                    borderBottomColor: tab.color === 'yellow' ? '#eab308' : tab.color === 'purple' ? '#8b5cf6' : tab.color === 'green' ? '#22c55e' : '#6b7280'
-                  } : {}}
-                >
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                    isActive ? 'bg-white shadow-sm' : 'bg-gray-100'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Lista de candidatos */}
-        <div className="bg-white rounded-lg shadow-sm border">
-          {filteredApps.length === 0 ? (
-            <div className="p-12 text-center">
-              <Users className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">
-                No hay candidatos en &quot;{tabs.find(t => t.id === activeTab)?.label}&quot;
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {filteredApps.map((app) => {
-                const isUnseen = !viewedIds.includes(app.id);
-
-                return (
-                  <div
-                    key={app.id}
-                    className={`p-4 hover:bg-gray-50 transition-colors relative ${isUnseen ? 'bg-purple-50/30' : ''}`}
-                    onMouseEnter={() => setHoveredAppId(app.id)}
-                    onMouseLeave={() => setHoveredAppId(null)}
-                  >
-                    {/* Tooltip de información rápida */}
-                    {hoveredAppId === app.id && app.candidateProfile && (
-                      <div className="absolute right-4 top-2 z-30 pointer-events-none">
-                        <div className="absolute right-8 top-0 -translate-y-full">
-                          <div className="border-8 border-transparent border-b-gray-900"></div>
-                        </div>
-                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl max-w-[280px] border border-gray-700">
-                          <p className="font-semibold mb-2 text-sm">{app.candidateName}</p>
-                          <div className="space-y-1">
-                            {app.candidateProfile.universidad && (
-                              <p><span className="text-gray-400">Universidad:</span> {app.candidateProfile.universidad}</p>
-                            )}
-                            {app.candidateProfile.carrera && (
-                              <p><span className="text-gray-400">Carrera:</span> {app.candidateProfile.carrera}</p>
-                            )}
-                            {app.candidateProfile.nivelEstudios && (
-                              <p><span className="text-gray-400">Nivel:</span> {app.candidateProfile.nivelEstudios}</p>
-                            )}
-                            {app.candidateProfile.añosExperiencia !== undefined && app.candidateProfile.añosExperiencia > 0 && (
-                              <p><span className="text-gray-400">Experiencia:</span> {app.candidateProfile.añosExperiencia} {app.candidateProfile.añosExperiencia === 1 ? 'año' : 'años'}</p>
-                            )}
-                            {app.candidateProfile.profile && (
-                              <p><span className="text-gray-400">Área:</span> {app.candidateProfile.profile}</p>
-                            )}
-                            {app.candidateProfile.seniority && (
-                              <p><span className="text-gray-400">Seniority:</span> {app.candidateProfile.seniority}</p>
-                            )}
-                            {app.candidateProfile.source && (
-                              <p><span className="text-gray-400">Fuente:</span> {app.candidateProfile.source}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        {/* FEAT-2: Foto de perfil del candidato */}
-                        <CandidatePhoto
-                          fotoUrl={app.candidateProfile?.fotoUrl}
-                          candidateName={app.candidateName}
-                          size="sm"
-                        />
-                        <div className="flex-1 min-w-0">
-                        {/* Nombre y badges */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-gray-900">
-                            {app.candidateName}
-                          </p>
-                          {isUnseen && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
-                              Sin ver
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Contacto */}
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Mail size={14} />
-                            <span className="truncate">{app.candidateEmail}</span>
-                          </span>
-                          {app.candidatePhone && (
-                            <span className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {app.candidatePhone}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Info del perfil */}
-                        {app.candidateProfile && (
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            {app.candidateProfile.universidad && (
-                              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1">
-                                <GraduationCap size={12} />
-                                {app.candidateProfile.universidad}
-                              </span>
-                            )}
-                            {app.candidateProfile.carrera && (
-                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                                {app.candidateProfile.carrera}
-                              </span>
-                            )}
-                            {app.candidateProfile.añosExperiencia !== undefined && app.candidateProfile.añosExperiencia > 0 && (
-                              <span className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full flex items-center gap-1">
-                                <Briefcase size={12} />
-                                {app.candidateProfile.añosExperiencia} {app.candidateProfile.añosExperiencia === 1 ? 'año' : 'años'} exp.
-                              </span>
-                            )}
-                            {app.candidateProfile.profile && (
-                              <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full">
-                                {app.candidateProfile.profile}
-                              </span>
-                            )}
-                            {app.candidateProfile.seniority && (
-                              <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full">
-                                {app.candidateProfile.seniority}
-                              </span>
-                            )}
-                            <DistanceBadge
-                              candidateLat={app.candidateProfile.latitude}
-                              candidateLng={app.candidateProfile.longitude}
-                              jobLat={assignment?.job.latitude}
-                              jobLng={assignment?.job.longitude}
-                              compact
-                            />
-                          </div>
-                        )}
-
-                        {/* Links rápidos */}
-                        <div className="flex items-center gap-3 mt-2">
-                          {(app.cvUrl || app.candidateProfile?.cvUrl) && (
-                            <a
-                              href={ensureUrl(app.cvUrl || app.candidateProfile?.cvUrl || '#')}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <FileText size={12} />
-                              CV
-                            </a>
-                          )}
-                          {app.candidateProfile?.linkedinUrl && (
-                            <a
-                              href={ensureUrl(app.candidateProfile.linkedinUrl)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <ExternalLink size={12} />
-                              LinkedIn
-                            </a>
-                          )}
-                        </div>
-                        </div>
-                      </div>
-
-                      {/* Acciones */}
-                      <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                        {/* Ver perfil - siempre disponible */}
-                        <button
-                          onClick={() => openApplicationProfile(app, filteredApps)}
-                          className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                          title="Ver perfil completo"
-                        >
-                          <Eye size={18} />
-                        </button>
-
-                        {/* Acciones según pestaña */}
-                        {activeTab === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'evaluating')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Iniciar evaluación"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <PlayCircle size={14} />
-                              )}
-                              <span className="hidden sm:inline">Evaluar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'discarded')}
-                              disabled={actionLoading === app.id}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Descartar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        )}
-
-                        {activeTab === 'evaluating' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Regresar a por revisar"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <ArrowLeft size={14} />
-                              )}
-                              <span className="hidden sm:inline">Regresar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_company')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Enviar a empresa"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Send size={14} />
-                              )}
-                              <span className="hidden sm:inline">Enviar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'discarded')}
-                              disabled={actionLoading === app.id}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Descartar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                        )}
-
-                        {activeTab === 'sent' && (
-                          /* Badge de sólo lectura con el estado REAL: a partir
-                             de 'sent_to_company' manda la empresa. */
-                          <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm flex items-center gap-1">
-                            <CheckCircle size={14} />
-                            {SENT_STATUS_LABELS[app.status] || 'Enviado'}
-                          </span>
-                        )}
-
-                        {activeTab === 'discarded' && (
-                          <>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'sent_to_specialist')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Reactivar candidato"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <RotateCcw size={14} />
-                              )}
-                              <span className="hidden sm:inline">Reactivar</span>
-                            </button>
-                            <button
-                              onClick={() => handleMoveApplication(app.id, 'evaluating')}
-                              disabled={actionLoading === app.id}
-                              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1 text-sm"
-                              title="Mover a en proceso"
-                            >
-                              {actionLoading === app.id ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <PlayCircle size={14} />
-                              )}
-                              <span className="hidden sm:inline">En proceso</span>
-                            </button>
-                            {/* Sin botón "Enviar a empresa": desde 'discarded'
-                                la API sólo deja reactivar a 'sent_to_specialist'
-                                o 'evaluating'. */}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div aria-live="polite">
+          {success && (
+            <p className="mb-4 flex items-center gap-2 rounded-xl border border-lime/50 bg-lime-tint px-4 py-3 text-sm font-medium text-lime-dark shadow-ap-2">
+              <CheckCircle size={18} className="flex-none" aria-hidden="true" />
+              {legible(success)}
+            </p>
           )}
         </div>
       </div>
+
+      {/* Candidatos por etapa. En móvil las pestañas se desplazan de lado sin
+          barra visible (lo resuelve el componente Tabs). */}
+      <Card sinRelleno>
+        <div className="border-b border-line px-2 sm:px-4">
+          <Tabs
+            idBase="etapas"
+            etiqueta="Etapas de la evaluación"
+            activa={activeTab}
+            alCambiar={(id) => {
+              setActiveTab(id as TabType);
+              setPagina(1);
+            }}
+            pestanas={tabs.map((tab) => ({ id: tab.id, etiqueta: tab.label, contador: getTabCount(tab.id) }))}
+            className="border-b-0"
+          />
+        </div>
+
+        <PanelPestana idBase="etapas" id={activeTab} activa={activeTab} className="pt-0">
+          <p className="border-b border-line bg-paper/60 px-5 py-2.5 text-[13px] text-ink-muted">
+            {AYUDA_PESTANA[activeTab]}
+          </p>
+          <DataTable
+            etiqueta={`Candidatos: ${etiquetaPestana}`}
+            columnas={columnas}
+            filas={filteredApps.slice((paginaActual - 1) * FILAS_POR_PAGINA, paginaActual * FILAS_POR_PAGINA)}
+            claveFila={(app) => app.id}
+            alActivarFila={(app) => openApplicationProfile(app, filteredApps)}
+            paginacion={paginacionLocal(filteredApps.length, paginaActual, FILAS_POR_PAGINA)}
+            alCambiarPagina={setPagina}
+            etiquetaTotal="candidatos"
+            vacio={
+              <EmptyState
+                frase={FRASE_VACIO[activeTab]}
+                titulo={`No hay candidatos en «${etiquetaPestana}»`}
+              />
+            }
+          />
+        </PanelPestana>
+      </Card>
 
       {/* Modal de perfil de candidato */}
       <CandidateProfileModal
@@ -877,6 +957,6 @@ export default function SpecialistJobCandidates() {
         jobLatitude={assignment.job.latitude}
         jobLongitude={assignment.job.longitude}
       />
-    </div>
+    </>
   );
 }
