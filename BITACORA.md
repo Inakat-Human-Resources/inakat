@@ -12,65 +12,59 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 ---
 
-## 📸 ESTADO AL 23/09/2026
+## 📸 ESTADO AL 24/09/2026
 
 *(Esta sección se reescribe completa en cada actualización.)*
 
 **Hecho y funcionando**
 - **Todo el sitio rediseñado («Arco») está en producción**: las 40 páginas, públicas y
   de aplicación, con el sistema de diseño de `src/components/ui`. Despliegue
-  `inakat-4bhp379j9-izalith` (commits `eb22dd9..997ecce`). Verificado en vivo: rutas
-  públicas 200, rutas de la app 307 al login sin sesión, `/xyz` 404, `/diseno` **404
-  duro** (el banco de pruebas no existe en producción), 1440 y 390 px sin desbordes ni
-  errores de consola, y las 2 vacantes confidenciales siguen sin fugas.
-- **Si hay que volver atrás:** `vercel rollback inakat-kbmoiljye-izalith` (portada
-  nueva y arreglos, sin el rediseño del resto) o `inakat-28tg0ux2w-izalith` (antes de
-  todo el rediseño).
-- **El árbol está verde**: `tsc` 0 · `npm run lint` 0 errores · **1999 tests pasan**
-  (131 suites, 7 saltados) · `next build` OK.
-- **Dependencias: de 26 vulnerabilidades a 8**, ninguna crítica (next 15.5.10 → 15.5.25,
-  prisma 6.6 → 6.19, nodemailer 8 → 10).
-- **Arreglado y desplegado, con test cada uno** (despliegue `inakat-kbmoiljye-izalith`):
-  cuatro formas de publicar vacantes sin pagar; dos carreras de créditos; comisiones de
-  ventas nunca cobradas contadas como ingresos; cargos de tarjeta que podían quedarse
-  sin registro; doble acreditación de créditos; precios de compra que podían no ser los
-  cobrados; cinco fugas de notas internas hacia la empresa y el integrador; el oráculo
-  público de postulaciones; la des-anonimización de vacantes confidenciales; el XSS
-  almacenado contra el admin (`javascript:` en URLs del registro); subir y borrar el CV;
-  el registro de empresa con el sitio web vacío; y las entrevistas, que siempre decían
-  «Error al guardar» y guardaban 1970 como fecha.
-- **Comprobado en producción, no sólo en el código:** `/api/applications/check` responde
-  401, `/api/credit-packages` sirve los paquetes reales, y de las 27 vacantes públicas
-  las 2 confidenciales salen sin `userId` ni coordenadas y ninguna trae `notasInternas`.
-- **La auditoría integral está documentada**: 483 hallazgos en 166 archivos
-  (1 crítico, 51 altos, 189 medios, 242 bajos) en `docs/AUDITORIA-2026-09.md` y
-  `docs/auditoria-2026-09/`.
+  `inakat-4bhp379j9-izalith` (commits hasta `997ecce`). Revisado de nuevo el 24/09:
+  públicas 200, app 307 al login sin sesión, `/xyz` 404 y `/diseno` 404 duro.
+- **Los arreglos de la auditoría están en producción, con test cada uno** (la primera
+  tanda del 22/09 y 327 hallazgos más en la Parte A): vacantes publicadas sin pagar, carreras y doble acreditación de créditos,
+  comisiones de compras no pagadas contadas como ingresos, cargos sin registro, fugas de
+  notas internas, des-anonimización de vacantes confidenciales, XSS contra el admin,
+  CV, registro de empresa y entrevistas. En vivo: de 27 vacantes públicas, las 2
+  confidenciales salen sin `userId` ni coordenadas y ninguna trae `notasInternas`.
+- **El árbol está verde**: `tsc` 0 · lint 0 errores · **1999 tests pasan** (131 suites,
+  7 saltados) · `next build` OK. Dependencias: de 26 vulnerabilidades a 8, ninguna crítica.
+- **Si hay que volver atrás:** `vercel rollback inakat-kbmoiljye-izalith` (portada nueva
+  y arreglos, sin el rediseño del resto) o `inakat-28tg0ux2w-izalith` (antes de todo).
+- Documentación: auditoría en `docs/AUDITORIA-2026-09.md`, plan en
+  `docs/PLAN-OPUS-2026-09.md`, sistema de diseño en `docs/DISENO.md`.
 
 **A medias**
-- **Parte A cerrada**: de los 483 hallazgos quedan 277 saltados con motivo (decisiones de negocio, columnas que exigen migración, y bajos de a11y/ux que rehace la Parte B). Detalle en la entrada del 23/09.
-- **Parte B cerrada**; quedan las decisiones de contenido de la entrada de integración
-  (textos legales provisionales, enlace a `/applications` en el menú, texto del modal
-  de precio al borrar, el campo «departamento»).
-- Migración `20260922000000` escrita pero sin aplicar a producción.
+- **277 hallazgos saltados con motivo** en la Parte A: decisiones de negocio y columnas
+  que exigen migración. **La lista no quedó en el repo**, sólo el conteo; para
+  retomarlos hay que cruzar `docs/auditoria-2026-09/*.md` con el código actual.
+- **Migración `20260922000000` escrita, sin aplicar a producción** (aditiva e
+  idempotente). Falta correrla con `prisma migrate deploy` contra producción.
+- **Bloqueo a empresas no aprobadas apagado** (`ENFORCE_COMPANY_APPROVAL`): falta que
+  INAKAT apruebe a las empresas legítimas; después se enciende en Vercel.
+- **Chequeo de variables en modo aviso** (`STRICT_ENV_CHECK`): se vuelve estricto en
+  cuanto estén las tres variables de abajo.
 
 **Bloqueado**
-- **En Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`** (desde siempre, descubierto el 23/09/2026). Depende de Memo.
-- **Bloqueo a empresas no aprobadas apagado** hasta que INAKAT apruebe a las legítimas.
-- **Tres decisiones esperan a INAKAT** (desde el 21/09/2026):
-  1. La foto del hero es generada por IA. Ya no se presenta como el equipo real, pero
-     está publicada; hace falta una fotografía de verdad.
+- **En Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`**: faltan
+  desde siempre; se descubrió el 23/09/2026 y se comprobó otra vez el 24/09. Sin ellas
+  no sale ningún correo y el webhook responde 500, así que los pagos por OXXO y SPEI
+  nunca se confirman. Depende de Memo.
+- **Google Maps responde `BillingNotEnabled`** (desde el 23/09/2026). Depende de Memo.
+- **Decisiones de contenido que esperan a INAKAT** (desde el 21/09/2026):
+  1. La foto del hero es generada por IA; hace falta una fotografía de verdad.
   2. Las cifras de la portada (100 %, 150+ especialistas, 15+ estados, 11 etapas) no
      son verificables desde el código.
   3. La cobertura se contradice sola: la FAQ dice «Monterrey, Morelia, CDMX, Puebla y
      Guadalajara»; el mapa y los chips dicen CDMX, Monterrey, Guadalajara, Puebla,
      Querétaro, León y Mérida.
+  4. `/privacy` y `/terms` dicen «Provisional» hasta tener el texto legal definitivo.
+  5. Pendientes menores del rediseño: el enlace a `/applications` en el menú, el texto
+     del modal de precio al borrar y el campo «departamento».
 
 **Siguiente paso**
-- **Memo:** dar de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS` (sin ellas no hay correos ni confirmación de pagos asíncronos).
-- **Memo:** activar la facturación de Google Maps (hoy responde `BillingNotEnabled`).
-- **Después:** con las variables dadas de alta, poner `STRICT_ENV_CHECK=true`; aprobar
-  a las empresas legítimas y encender `ENFORCE_COMPANY_APPROVAL=true`; aplicar la
-  migración `20260922000000` (aditiva e idempotente).
+- **Memo da de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`**:
+  es lo único que hoy rompe algo en producción (correos y pagos asíncronos).
 
 ---
 
