@@ -17,10 +17,17 @@ propio en cookie · MercadoPago · Vercel Blob.
 *(Esta sección se reescribe completa en cada actualización.)*
 
 **Hecho y funcionando**
-- **La portada rediseñada está en producción** y verificada en vivo. Aguanta las
-  condiciones que rompen este tipo de páginas: cinco anchos sin desbordes,
-  `prefers-reduced-motion` con 0 animaciones corriendo, y **legible sin JavaScript**.
-- **El árbol está verde otra vez**: `tsc` 0 · `npm run lint` 0 errores · **1778 tests pasan** · `next build` OK · **CI en verde en `main`** desde `c2e0fbc`.
+- **Todo el sitio rediseñado («Arco») está en producción**: las 40 páginas, públicas y
+  de aplicación, con el sistema de diseño de `src/components/ui`. Despliegue
+  `inakat-4bhp379j9-izalith` (commits `eb22dd9..997ecce`). Verificado en vivo: rutas
+  públicas 200, rutas de la app 307 al login sin sesión, `/xyz` 404, `/diseno` **404
+  duro** (el banco de pruebas no existe en producción), 1440 y 390 px sin desbordes ni
+  errores de consola, y las 2 vacantes confidenciales siguen sin fugas.
+- **Si hay que volver atrás:** `vercel rollback inakat-kbmoiljye-izalith` (portada
+  nueva y arreglos, sin el rediseño del resto) o `inakat-28tg0ux2w-izalith` (antes de
+  todo el rediseño).
+- **El árbol está verde**: `tsc` 0 · `npm run lint` 0 errores · **1999 tests pasan**
+  (131 suites, 7 saltados) · `next build` OK.
 - **Dependencias: de 26 vulnerabilidades a 8**, ninguna crítica (next 15.5.10 → 15.5.25,
   prisma 6.6 → 6.19, nodemailer 8 → 10).
 - **Arreglado y desplegado, con test cada uno** (despliegue `inakat-kbmoiljye-izalith`):
@@ -41,7 +48,9 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 **A medias**
 - **Parte A cerrada**: de los 483 hallazgos quedan 277 saltados con motivo (decisiones de negocio, columnas que exigen migración, y bajos de a11y/ux que rehace la Parte B). Detalle en la entrada del 23/09.
-- **Parte B (rediseño «Arco») integrada en el árbol local, sin commit ni deploy**: las 40 páginas rehechas por 13 bloques en paralelo y la integración (entrada de abajo). Árbol verde: `tsc` 0 · lint 0 errores · **1924 tests pasan** (124 suites) · `next build` OK. Falta mirarlo en el navegador (el banco `/diseno/vista`), commit y deploy.
+- **Parte B cerrada**; quedan las decisiones de contenido de la entrada de integración
+  (textos legales provisionales, enlace a `/applications` en el menú, texto del modal
+  de precio al borrar, el campo «departamento»).
 - Migración `20260922000000` escrita pero sin aplicar a producción.
 
 **Bloqueado**
@@ -58,7 +67,27 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 **Siguiente paso**
 - **Memo:** dar de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS` (sin ellas no hay correos ni confirmación de pagos asíncronos).
-- **Rediseño:** recorrer `/diseno/vista/*` en el navegador (contador naranja en cero, 1440/1024/390 px), revisar las decisiones pendientes de la entrada del 23/09 (integración) y, con eso, commit y deploy.
+- **Memo:** activar la facturación de Google Maps (hoy responde `BillingNotEnabled`).
+- **Después:** con las variables dadas de alta, poner `STRICT_ENV_CHECK=true`; aprobar
+  a las empresas legítimas y encender `ENFORCE_COMPANY_APPROVAL=true`; aplicar la
+  migración `20260922000000` (aditiva e idempotente).
+
+---
+
+## 23/09/2026 — Parte B en producción
+
+**Qué cambió**
+- El rediseño completo salió a producción en 9 commits (`eb22dd9..997ecce`) y el
+  despliegue `inakat-4bhp379j9-izalith`.
+- `/diseno` (el banco de pruebas con datos de ejemplo) respondía **200 en producción**:
+  su layout llama a `notFound()`, pero el `loading.tsx` raíz abre el streaming antes y
+  el estado ya salió. Ahora lo corta el middleware: 404 duro en producción, paso libre
+  sin sesión en desarrollo. Con test, y comprobado con `next start` y en vivo.
+
+**Cómo lo sabemos**
+- En producción: públicas 200, app 307, `/xyz` 404, `/diseno` 404; capturas de
+  `/`, `/companies`, `/about` y `/register` a 1440 y 390 px sin desbordes ni errores
+  de consola.
 
 ---
 
