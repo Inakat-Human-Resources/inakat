@@ -41,7 +41,7 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 **A medias**
 - **Parte A cerrada**: de los 483 hallazgos quedan 277 saltados con motivo (decisiones de negocio, columnas que exigen migración, y bajos de a11y/ux que rehace la Parte B). Detalle en la entrada del 23/09.
-- **Parte B sin empezar**: sistema de diseño y rediseño de las 40 páginas (plan en `docs/PLAN-OPUS-2026-09.md`).
+- **Parte B (rediseño «Arco») integrada en el árbol local, sin commit ni deploy**: las 40 páginas rehechas por 13 bloques en paralelo y la integración (entrada de abajo). Árbol verde: `tsc` 0 · lint 0 errores · **1924 tests pasan** (124 suites) · `next build` OK. Falta mirarlo en el navegador (el banco `/diseno/vista`), commit y deploy.
 - Migración `20260922000000` escrita pero sin aplicar a producción.
 
 **Bloqueado**
@@ -57,7 +57,29 @@ propio en cookie · MercadoPago · Vercel Blob.
      Querétaro, León y Mérida.
 
 **Siguiente paso**
-- **Memo:** dar de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS` (sin ellas no hay correos ni confirmación de pagos asíncronos). Después, Parte B del plan: sistema de diseño y rediseño de las 40 páginas.
+- **Memo:** dar de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS` (sin ellas no hay correos ni confirmación de pagos asíncronos).
+- **Rediseño:** recorrer `/diseno/vista/*` en el navegador (contador naranja en cero, 1440/1024/390 px), revisar las decisiones pendientes de la entrada del 23/09 (integración) y, con eso, commit y deploy.
+
+---
+
+## 23/09/2026 — Parte B: integración de la tanda de rediseño «Arco»
+
+**Qué cambió**
+- 13 bloques en paralelo (9 de aplicación, 4 públicos) rehicieron las 40 páginas con el sistema de diseño; un integrador revisó sus 74 handoffs (aplicó la gran mayoría; los que no, con motivo) y dejó el árbol verde: `tsc` 0 · lint 0 errores (sin warnings nuevos) · **1924 tests pasan, 124 suites** · `next build` OK.
+- **Subió a `src/components/ui` lo que cada bloque había copiado**: `Switch`, `Aviso`/`AvisoError`, `useConfirmacion` (había dos), `ConfirmarModal`, `MenuAcciones`, `EtapasPipeline`, `CampoContrasena` (había tres), `SelectorArchivo`, `CampoArchivo`, `TarjetaRepetible`, `ErrorDePanel`, `Dato`/`Seccion`, `IconLink`. Y amplió los de siempre: selección múltiple en `DataTable`, «aplicar al enviar» y filtros plegables en `FilterToolbar`, `sufijo` en `Input`, `anunciarError` y «obligatorio sólo a la vista» en `FormField`, `compacta` en `StatCard`, `mantenerMontado` en `PanelPestana`, `pasoMaximo` en `Stepper`, piel pública en `Button`, `externo` en `ButtonLink`. Todo documentado en `docs/DISENO.md` §4 y en la galería `/diseno`.
+- **Arreglado un fallo que afectaba a todo el sistema**: `cn()` (tailwind-merge 3, pensado para Tailwind 4) borraba `focus-visible:outline` cuando iba con `outline-2`; los `<label>` de subir archivo se quedaban sin anillo de foco. Ajustado en `src/lib/utils.ts`, con test.
+- Borrado el código muerto que ya no importaba nadie (verificado con grep): `CompanyRequestTable`, `RequestDetailModal`, `RejectModal`, `ApplicationsManagementPanel` (su test VAC-014 ya lo cubre `b7-aplicaciones-cv`), `CTAFinalSection`, `HowItWorksSection` y dos imágenes de `6-login`.
+- `/admin/direct-applications` ya lee la paginación de la API (el TODO de la ruta): la primera página se pide igual que siempre y el contador dice el total del servidor.
+- Los PUT de `/api/recruiter/dashboard` y `/api/specialist/dashboard` responden «Candidato movido a «En proceso»» en vez del código crudo; `/api/admin/vendors*` añaden `total`/`hasNext`/`hasPrev` sin quitar `totalCount`.
+
+**Decisiones y descartes**
+- **/about**: la foto de `AboutUsSection` lleva un alt honesto («Fotografía de archivo: dos profesionales revisan una tableta»): no se presenta como el equipo real. /about tiene su propio cierre (`AboutCloseSection`) en lugar de `CTAFinalSection`, que pintaba blanco sobre naranja (2.54:1).
+- **/privacy y /terms** muestran «Provisional» y el aviso de que el texto definitivo está pendiente: así están hoy los dos textos (lista de decisiones del cliente en `docs/PLAN-OPUS-2026-09.md`, A.3). La maqueta vive ahora en `src/app/privacy/_documento` (`DocumentoLegal` + `ContactoLegal`, `documento.css`, prefijo `dl-`; `/terms` la importa de ahí).
+- **No se aplicó** (decide INAKAT): el texto del modal de borrar precio («solo si no hay vacantes activas») no coincide con la API, que también bloquea con pausadas o en borrador; el campo «departamento» del registro de empresa se pide pero no se guarda (añadirlo exige migración); si `/applications` («Gestión de aplicaciones», sólo admin) merece un enlace en el menú o es una pantalla heredada.
+- `/talents` y el resto de páginas públicas no están en el banco `/diseno/vista`: el banco monta el AppShell; una vista pública necesita su propio marco.
+
+**Lo que salió mal**
+- Nada bloqueante. Al integrar, un test que leía el archivo del ojo de la contraseña cambió de ruta (ahora vive en `ui/CampoContrasena`): se actualizó conservando su intención.
 
 ---
 
