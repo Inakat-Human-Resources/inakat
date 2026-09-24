@@ -1,0 +1,223 @@
+/* RUTA: src/app/_estados/estados.css
+   Páginas de estado del sitio (404, error y carga) en el registro «Arco»,
+   prefijo es-. Las cargan src/app/not-found.tsx, error.tsx y loading.tsx
+   (global-error.tsx no: sustituye al layout raíz y lleva sus estilos en línea).
+
+   Se ven en rutas públicas (con la barra encima) y en rutas de aplicación
+   (sin barra ni AppShell): cada una lleva su propia salida visible.
+
+   Pares medidos: tinta/arena 9.91 · teal/arena 5.91 · tinta .8/arena 5.74 ·
+   tinta/naranja 4.87 */
+
+.es {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  display: flex;
+  align-items: center;
+  min-height: calc(100svh - var(--nav));
+  padding-block: clamp(3rem, 8svh, 6rem);
+}
+.es__arcos {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.es__dentro {
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+@media (min-width: 1024px) {
+  .es__dentro {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+  .es--error .es__dentro {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 60rem;
+  }
+}
+.es__titulo {
+  font-size: clamp(2.4rem, calc(6.4vw - 4px), 6.5rem);
+}
+.es__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: clamp(1.75rem, 4vw, 2.5rem);
+}
+.es__codigo {
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+  color: rgb(40 55 57 / 0.8);
+}
+.es__codigo code {
+  padding: 0.15em 0.45em;
+  border-radius: 0.35rem;
+  background: rgb(40 55 57 / 0.08);
+  font-size: 0.95em;
+}
+
+/* Atajos a las páginas del sitio (la 404 de una ruta de aplicación no tiene
+   barra: esta es su salida). */
+.es__atajos {
+  margin-top: clamp(2rem, 5vw, 3rem);
+  padding-top: 1.25rem;
+  border-top: 1px solid rgb(40 55 57 / 0.25);
+}
+.es__atajos-titulo {
+  font-family: var(--disp);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.es__atajos ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.es__atajos a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-weight: 600;
+  color: var(--teal);
+  text-decoration: underline;
+  text-decoration-color: rgb(43 93 98 / 0.35);
+  text-underline-offset: 0.3em;
+}
+.es__atajos a:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
+/* ---------- el «404»: el cero es el puente, con la persona debajo ---------- */
+.es__cifra {
+  display: flex;
+  /* baseline: el arco (sin texto) apoya su borde inferior en la línea base
+     de los dos «4», como si fuera un dígito más. */
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.04em;
+  /* En una columna va arriba (es decorativo: el orden visual no cambia lo que
+     oye el lector). «4∩4» mide ~1.9 cuerpos: 30vw cabe en móvil, 18vw en la
+     columna de 5/12 desde 1024. */
+  order: -1;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(6.5rem, 30vw, 14rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: var(--ink);
+  user-select: none;
+}
+@media (min-width: 1024px) {
+  .es__cifra {
+    order: 0;
+    font-size: min(16rem, 18vw);
+  }
+}
+.es__puente {
+  position: relative;
+  display: block;
+  width: 0.62em;
+  height: 0.72em;
+  margin-inline: 0.03em;
+  border: 0.12em solid var(--teal);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+}
+.es__punto {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0.2em;
+  height: 0.2em;
+  margin-left: -0.1em;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.hm--js .es__punto {
+  animation: hm-pop 0.9s var(--ease) 0.9s both;
+}
+.hm--js .es__puente {
+  animation: es-arco 1.1s var(--ease) 0.35s both;
+}
+@keyframes es-arco {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* ---------- carga: el punto recorre el arco ---------- */
+.es-carga {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  min-height: calc(100svh - var(--nav));
+  background: var(--sand);
+  color: var(--ink);
+}
+.es-carga__arco {
+  position: relative;
+  display: block;
+  width: 4.5rem;
+  height: 2.25rem;
+  border: 3px solid rgb(43 93 98 / 0.28);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+}
+.es-carga__brazo {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0;
+  /* radio del arco menos medio borde: el punto va sobre la línea */
+  height: calc(2.25rem - 1.5px);
+  transform-origin: 50% 100%;
+  animation: es-recorre 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+}
+.es-carga__brazo::before {
+  content: '';
+  position: absolute;
+  left: -0.45rem;
+  top: -0.45rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--orange);
+}
+@keyframes es-recorre {
+  from {
+    transform: rotate(-78deg);
+  }
+  to {
+    transform: rotate(78deg);
+  }
+}
+.es-carga__texto {
+  font-family: var(--disp);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(40 55 57 / 0.8);
+}
+
+/* Movimiento reducido: todo quieto en su estado final; el punto, arriba. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .es__punto,
+  .hm--js .es__puente,
+  .es-carga__brazo {
+    animation: none !important;
+  }
+}

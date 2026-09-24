@@ -31,6 +31,9 @@ export default function robots(): MetadataRoute.Robots {
         '/forgot-password',
         '/reset-password',
         '/notifications',
+        // Banco de pruebas del sistema de diseño: sólo existe en desarrollo
+        // (en producción responde 404), pero no debe rastrearse nunca.
+        '/diseno',
       ],
     },
     sitemap: absoluteUrl('/sitemap.xml'),
