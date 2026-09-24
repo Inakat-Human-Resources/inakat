@@ -175,8 +175,14 @@ export async function GET(request: NextRequest) {
         pagination: {
           page,
           limit,
-          totalCount,
-          totalPages: Math.ceil(totalCount / limit)
+          // Forma estándar (buildPaginatedResponse): total/hasNext/hasPrev, así
+          // la página puede pasar `pagination` tal cual a DataTable.
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+          hasNext: page < Math.ceil(totalCount / limit),
+          hasPrev: page > 1,
+          // Compatibilidad: el nombre de siempre (lo leen /admin/vendors y sus tests).
+          totalCount
         }
       }
     });

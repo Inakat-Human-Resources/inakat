@@ -23,6 +23,21 @@ const allowedTransitions: Record<string, string[]> = {
 const TARGET_STATUSES = new Set(Object.values(allowedTransitions).flat());
 
 /**
+ * Nombre en pantalla de cada estado (el de las pestañas de /recruiter/jobs/[jobId]),
+ * para que los mensajes del PUT se lean «Candidato movido a «En proceso»» y
+ * no con el código crudo. El estado que se guarda no cambia.
+ */
+const NOMBRE_ESTADO: Record<string, string> = {
+  pending: 'Por revisar',
+  injected_by_admin: 'Por revisar',
+  reviewing: 'En proceso',
+  sent_to_specialist: 'Enviado al especialista',
+  discarded: 'Descartados'
+};
+const nombreEstado = (estado: string) =>
+  NOMBRE_ESTADO[estado] ? `«${NOMBRE_ESTADO[estado]}»` : `"${estado}"`;
+
+/**
  * GET /api/recruiter/dashboard
  * Obtener vacantes asignadas al reclutador
  *
@@ -403,7 +418,7 @@ export async function PUT(request: Request) {
 
       if (!allowed.includes(newApplicationStatus)) {
         return NextResponse.json(
-          { success: false, error: `No se puede mover de "${currentStatus}" a "${newApplicationStatus}"` },
+          { success: false, error: `No se puede mover de ${nombreEstado(currentStatus)} a ${nombreEstado(newApplicationStatus)}` },
           { status: 400 }
         );
       }
@@ -484,7 +499,7 @@ export async function PUT(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `Candidato movido a "${newApplicationStatus}"`,
+        message: `Candidato movido a ${nombreEstado(newApplicationStatus)}`,
         data: updatedApp
       });
     }

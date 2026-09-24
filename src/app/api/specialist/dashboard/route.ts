@@ -42,6 +42,20 @@ const allowedTransitions: Record<string, string[]> = {
 const TARGET_STATUSES = new Set(Object.values(allowedTransitions).flat());
 
 /**
+ * Nombre en pantalla de cada estado (el de las pestañas de /specialist/jobs/[jobId]),
+ * para que los mensajes del PUT se lean «Candidato movido a «En proceso»» y
+ * no con el código crudo. El estado que se guarda no cambia.
+ */
+const NOMBRE_ESTADO: Record<string, string> = {
+  sent_to_specialist: 'Por revisar',
+  evaluating: 'En proceso',
+  sent_to_company: 'Enviado a la empresa',
+  discarded: 'Descartados'
+};
+const nombreEstado = (estado: string) =>
+  NOMBRE_ESTADO[estado] ? `«${NOMBRE_ESTADO[estado]}»` : `"${estado}"`;
+
+/**
  * GET /api/specialist/dashboard
  * Obtener vacantes asignadas al especialista
  *
@@ -339,7 +353,7 @@ export async function PUT(request: Request) {
 
       if (!allowed.includes(newApplicationStatus)) {
         return NextResponse.json(
-          { success: false, error: `No se puede mover de "${currentStatus}" a "${newApplicationStatus}"` },
+          { success: false, error: `No se puede mover de ${nombreEstado(currentStatus)} a ${nombreEstado(newApplicationStatus)}` },
           { status: 400 }
         );
       }
@@ -420,7 +434,7 @@ export async function PUT(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: `Candidato movido a "${newApplicationStatus}"`,
+        message: `Candidato movido a ${nombreEstado(newApplicationStatus)}`,
         data: updatedApp
       });
     }

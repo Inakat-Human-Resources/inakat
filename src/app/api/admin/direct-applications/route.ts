@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 import { getPaginationParams, buildPaginatedResponse } from '@/lib/pagination';
 
-// Tope alto para no romper la pantalla actual (que aún no pagina) pero evitar
+// Tope alto (la pantalla pagina de 200 en 200 y casi nunca necesita más) pero evitar
 // que una avalancha de postulaciones tumbe la función serverless.
 const LIMITE_POR_DEFECTO = 200;
 const LIMITE_MAXIMO = 200;
@@ -81,8 +81,8 @@ export async function GET(request: Request) {
 
     const response = buildPaginatedResponse(applications, total, pagination);
 
-    // TODO(handoff): la pantalla /admin/direct-applications debe leer
-    // `pagination` y pintar controles; hoy sólo usa `data`.
+    // /admin/direct-applications lee `pagination`: cuenta el total del
+    // servidor y ofrece las demás páginas (?page=N) cuando hay más de 200.
     return NextResponse.json({
       success: true,
       ...response,
