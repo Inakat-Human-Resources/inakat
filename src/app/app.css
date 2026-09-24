@@ -1,0 +1,547 @@
+/* RUTA: src/app/app.css
+   Registro de APLICACIÓN (paneles de admin, empresa, candidato, reclutador,
+   especialista y vendedor). Prefijo ap-.
+
+   Casi todo el registro se escribe con clases de Tailwind y los componentes de
+   src/components/ui. Esta hoja guarda SÓLO lo que Tailwind no resuelve bien:
+   la tabla que pasa a tarjetas en móvil, la barra lima del ítem activo, las
+   entradas de capas, las pestañas que se desplazan, la figura de la marca y
+   el enlace «saltar al contenido».
+
+   Movimiento: NADA ligado al scroll. Sólo micro-interacciones (hover, foco,
+   transición de estado de 150–200 ms, esqueletos). Con movimiento reducido,
+   globals.css deja todas las duraciones en ~0.
+
+   Guía: docs/DISENO.md. */
+
+/* =====================================================================
+   ARMAZÓN
+   ===================================================================== */
+.ap {
+  /* Alto de la cabecera fija del contenido (h-14). Lo que se fije en una
+     página (una barra de acciones, la cabecera de una tabla) va en
+     top: var(--ap-top) — equivale a `sticky top-14`. */
+  --ap-top: 3.5rem;
+  --ap-lateral: 15.5rem;
+}
+
+/* Saltar al contenido: invisible hasta que recibe el foco con teclado. */
+.ap-saltar {
+  position: fixed;
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 600;
+  transform: translateY(-160%);
+  transition: transform 0.15s ease;
+}
+.ap-saltar:focus {
+  transform: none;
+}
+
+/* Ítem de la barra lateral: barra lima a la izquierda cuando está activo. */
+.ap-nav-item {
+  position: relative;
+}
+.ap-nav-item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lime);
+}
+/* Foco sobre la tinta: anillo lima (5.67:1), el teal no se vería. */
+.ap-sobre-tinta :focus-visible {
+  outline: 2px solid var(--lime) !important;
+  outline-offset: 2px;
+}
+
+/* La figura de la marca (MarcaInakat): recortada de logo.png con una máscara
+   y pintada con el color de fondo (lima por defecto). */
+.ap-simbolo {
+  -webkit-mask: var(--ap-simbolo) left center / auto 100% no-repeat;
+  mask: var(--ap-simbolo) left center / auto 100% no-repeat;
+}
+@media (forced-colors: active) {
+  .ap-simbolo {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+}
+
+/* =====================================================================
+   PESTAÑAS (Tabs): cuando no caben, se desplazan de lado y el borde que
+   esconde más pestañas se desvanece (antes se cortaban en seco: «Docu»,
+   «En contratación» fuera, y nada decía que había más). El margen de
+   desplazamiento deja la pestaña activa fuera del degradado.
+   ===================================================================== */
+.ap-pestanas {
+  scroll-padding-inline: 3rem;
+}
+.ap-pestanas[data-desborde='fin'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+}
+.ap-pestanas[data-desborde='inicio'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 3rem), transparent);
+}
+.ap-pestanas[data-desborde='ambos'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 3rem, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 3rem, #000 calc(100% - 3rem), transparent);
+}
+
+/* =====================================================================
+   CAPAS: modal, cajón, aviso
+   ===================================================================== */
+@keyframes ap-fundido {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ap-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+@keyframes ap-desde-izquierda {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes ap-desde-derecha {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes ap-aviso {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+.ap-fondo {
+  animation: ap-fundido 0.18s ease-out both;
+}
+.ap-panel {
+  animation: ap-entrar 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.ap-cajon--izquierda {
+  animation: ap-desde-izquierda 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.ap-cajon--derecha {
+  animation: ap-desde-derecha 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.ap-aviso {
+  animation: ap-aviso 0.18s ease-out both;
+}
+
+/* =====================================================================
+   TABLA DE DATOS (DataTable)
+   ===================================================================== */
+.ap-tabla {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+/* Cabecera fija: desde lg la tabla no vive en un contenedor con scroll (la
+   tarjeta recorta con overflow: clip, que NO crea contenedor de scroll), así que
+   la cabecera se queda bajo la barra del AppShell al bajar por la página. */
+@media (min-width: 1024px) {
+  .ap-tabla--fija thead th {
+    position: sticky;
+    top: var(--ap-top, 0px);
+    z-index: 2;
+  }
+}
+.ap-fila--clicable {
+  cursor: pointer;
+}
+.ap-fila--clicable:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
+/* El contenido de cada celda va en UN .ap-celda (lo pone DataTable). En la
+   tabla no pinta caja: es como si no estuviera. En tarjetas es el «valor» de
+   «etiqueta | valor» (ver abajo). */
+.ap-celda {
+  display: contents;
+}
+/* Columna con `truncarEn`: una línea con «…» a partir de ese ancho. */
+.ap-celda--truncar {
+  display: block;
+  max-width: var(--ap-truncar, 16rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-right > .ap-celda--truncar {
+  margin-left: auto;
+}
+
+/* ---- Anchos: se miden en la TABLA, no en la ventana ----
+   La caja de la tabla es un contenedor (container queries): lo que cuenta es
+   el sitio que de verdad tiene la tabla. A 1280 px de ventana, con la barra
+   lateral de 248 px, la tabla sólo tiene ~970 px; dentro de un modal, menos.
+   Con media queries de ventana las columnas se escondían tarde y la tabla se
+   salía por la derecha.
+
+     ocultarBajo '2xl' → se esconde si la tabla mide menos de 1280 px
+     ocultarBajo 'xl'  → se esconde si la tabla mide menos de 1100 px
+     ocultarBajo 'lg'  → menos de 960 px
+     ocultarBajo 'md'  → menos de 800 px
+     tarjetas          → menos de 600 px (móvil, columnas estrechas)
+
+   data-solo-bajo="2xl|xl|lg|md" (en un elemento DENTRO de una celda): sólo se ve
+   cuando la columna de ese nivel está escondida. Sirve para subir el dato de
+   una columna que se esconde a la celda principal (ver la especialidad en
+   src/app/admin/page.tsx). En tarjetas no hace falta: ahí se ven todas. */
+.ap-tabla-caja {
+  container: ap-tabla / inline-size;
+}
+/* La tabla no cabe y se desplaza de lado (DataTable pone data-desborda en la
+   caja y pinta esta sombra mientras quede algo a la derecha). Estrecha y sin
+   eventos: no tapa ni bloquea una columna fija a la derecha. */
+.ap-tabla-sombra {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(to left, rgb(40 55 57 / 0.14), rgb(40 55 57 / 0));
+}
+@container ap-tabla (max-width: 1279.98px) {
+  .ap-tabla [data-ocultar='2xl'] {
+    display: none;
+  }
+}
+@container ap-tabla (min-width: 1280px) {
+  .ap-tabla [data-solo-bajo='2xl'] {
+    display: none;
+  }
+}
+@container ap-tabla (max-width: 1099.98px) {
+  .ap-tabla [data-ocultar='xl'] {
+    display: none;
+  }
+}
+@container ap-tabla (max-width: 959.98px) {
+  .ap-tabla [data-ocultar='lg'] {
+    display: none;
+  }
+}
+@container ap-tabla (min-width: 1100px) {
+  .ap-tabla [data-solo-bajo='xl'] {
+    display: none;
+  }
+}
+@container ap-tabla (min-width: 960px) {
+  .ap-tabla [data-solo-bajo='lg'] {
+    display: none;
+  }
+}
+@container ap-tabla (min-width: 800px) {
+  .ap-tabla [data-solo-bajo='md'] {
+    display: none;
+  }
+}
+@container ap-tabla (max-width: 799.98px) {
+  .ap-tabla [data-ocultar='md'] {
+    display: none;
+  }
+}
+/* Columna de acciones con el patrón «w-px whitespace-nowrap» (docs/DISENO.md
+   §7): sus controles van en UNA fila. Con un flex-wrap dentro, la celda de
+   1 px tomaba el ancho del control más ancho y apilaba los demás en vertical
+   (filas de 133 px en /recruiter/jobs y /specialist/jobs). Sólo en tabla: en
+   tarjetas la celda ya no mide 1 px y envolver sí ayuda. */
+@container ap-tabla (min-width: 600px) {
+  .ap-tabla td.w-px .flex-wrap {
+    flex-wrap: nowrap;
+  }
+}
+
+/* data-solo-tarjeta: fuera de la vista en tarjetas no se ve (ver abajo).
+   Va ANTES de la container query: misma especificidad, gana la de abajo. */
+.ap-tabla [data-solo-tarjeta] {
+  display: none;
+}
+@container ap-tabla (max-width: 599.98px) {
+  .ap-tabla--tarjetas [data-solo-bajo] {
+    display: none;
+  }
+
+  /* ---- vista en tarjetas: la MISMA tabla, un solo DOM ----
+     Cada fila pasa a ser una tarjeta. Los roles explícitos (role="row" /
+     "cell") que pone DataTable conservan la semántica de tabla aunque cambie
+     el display.
+
+     La fila es una caja flexible que envuelve, en este orden:
+       0  título: se queda con la línea, menos lo que ocupen las acciones
+       1  acciones de icono, arriba a la derecha
+       2  (salto de línea: tr::after)
+       3  «meta»: en una sola línea, separadas por « · »
+       4  «Etiqueta | valor», y las celdas «completa» a lo ancho
+       6  acciones con texto o con campos, al pie
+
+     Antes era una rejilla de dos columnas y la celda de acciones heredaba el
+     w-px de su columna: medía 1 px y sus botones se desbordaban hacia la
+     izquierda, ENCIMA del título (/admin/requests, /admin/assignments,
+     /company/integrations, /admin/candidates). Aquí los anchos que la página
+     da a la columna (w-px, min-w-[12rem]…) no cuentan: son del escritorio. */
+  .ap-tabla--tarjetas,
+  .ap-tabla--tarjetas tbody {
+    display: block;
+  }
+  .ap-tabla--tarjetas thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ap-tabla--tarjetas tbody tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: 0.5rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #e4e2d6;
+  }
+  .ap-tabla--tarjetas tbody tr::after {
+    content: '';
+    order: 2;
+    flex: 0 0 100%;
+    height: 0;
+  }
+  .ap-tabla--tarjetas tbody td {
+    order: 4;
+    flex: 1 1 100%;
+    display: grid;
+    /* Etiqueta de ancho fijo: los valores de todas las celdas empiezan en la
+       misma x (con un % del ancho de cada celda no alineaban). */
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    align-items: baseline;
+    /* El valor abraza su contenido: sin esto, una insignia o un botón se
+       estiraban a todo el ancho de la columna. */
+    justify-items: start;
+    gap: 0.75rem;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    margin-top: 0.35rem;
+    padding: 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .ap-tabla--tarjetas tbody td[data-ocultar] {
+    display: grid;
+  }
+  .ap-tabla--tarjetas tbody td::before {
+    content: attr(data-etiqueta);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #5b6769;
+  }
+  /* El valor: UNA caja (DataTable envuelve la celda en .ap-celda). Una celda
+     con dos hijos («7» y «años») ya no manda el segundo a la columna de las
+     etiquetas. */
+  .ap-tabla--tarjetas .ap-celda {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Título: encabeza la tarjeta y comparte la primera línea con las acciones. */
+  .ap-tabla--tarjetas tbody td[data-tarjeta='titulo'] {
+    order: 0;
+    flex: 1 1 0%;
+    display: block;
+    margin-top: 0;
+    font-size: 0.95rem;
+    /* Red de seguridad: si algo no parte (un nowrap de la página), se recorta
+       en su sitio en vez de correr por debajo de las acciones. */
+    overflow-x: clip;
+    overflow-clip-margin: 0.25rem;
+  }
+  /* Sus filas internas (título + insignia, empresa · ciudad) envuelven. */
+  .ap-tabla--tarjetas tbody td[data-tarjeta='titulo'] .flex:not(.flex-nowrap) {
+    flex-wrap: wrap;
+  }
+
+  /* Acciones de icono: arriba a la derecha, a su medida. */
+  .ap-tabla--tarjetas tbody td[data-tarjeta='acciones'] {
+    order: 1;
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -0.25rem;
+    margin-left: auto;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='acciones'] .flex:not(.flex-nowrap) {
+    flex-wrap: wrap;
+  }
+  /* Acciones con texto («Aprobar», «Guardar», «Desactivar») o con campos: al
+     pie, a lo ancho, y el título se queda con toda la línea. Se fuerza con
+     `accionesAbajo` (data-acciones="abajo") o se decide solo: un Button lleva
+     data-boton="texto". Dos reglas: un navegador sin :has() descartaría la
+     lista entera. */
+  .ap-tabla--tarjetas[data-acciones='abajo'] tbody td[data-tarjeta='acciones'] {
+    order: 6;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0;
+  }
+  .ap-tabla--tarjetas:not([data-acciones='arriba'])
+    tbody
+    td[data-tarjeta='acciones']:has([data-boton='texto'], select, textarea, input:not([type='checkbox'], [type='radio'])) {
+    order: 6;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin: 0.75rem 0 0;
+  }
+
+  /* Meta: bajo el título, «Grupo Andes · Monterrey, NL · 23 sep 2026», sin
+     etiquetas. El separador lo lleva cada meta que tenga otra (no vacía)
+     antes. */
+  .ap-tabla--tarjetas tbody td[data-tarjeta='meta'] {
+    order: 3;
+    flex: 0 1 auto;
+    /* Texto e insignias de la misma línea, centrados entre sí. */
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.2rem;
+    font-size: 0.8125rem;
+    color: #5b6769;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='meta']::before {
+    content: none;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='meta']:not(:empty) ~ td[data-tarjeta='meta']::before {
+    content: '·';
+    flex: none;
+    width: 0.35rem;
+    text-align: center;
+    color: #7c8482;
+  }
+  /* La meta que empieza renglón (la marca DataTable) no lleva « · » delante:
+     el separador se esconde pero conserva su hueco, corrido a la izquierda
+     (margen negativo) y devuelto a la derecha (relleno): el ancho total no
+     cambia y la línea parte en el mismo sitio. 0.85rem = separador + hueco. */
+  .ap-tabla--tarjetas tbody td[data-tarjeta='meta'][data-meta-inicio] {
+    margin-left: -0.85rem;
+    padding-right: 0.85rem !important;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='meta'][data-meta-inicio]::before {
+    visibility: hidden;
+  }
+
+  .ap-tabla--tarjetas tbody td[data-tarjeta='titulo']::before,
+  .ap-tabla--tarjetas tbody td[data-tarjeta='acciones']::before,
+  .ap-tabla--tarjetas tbody td[data-tarjeta='completa']::before {
+    content: none;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='completa'] {
+    display: block;
+    margin-top: 0.5rem;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='oculta'] {
+    display: none;
+  }
+  /* Una celda vacía no deja su etiqueta suelta. */
+  .ap-tabla--tarjetas tbody td:empty {
+    display: none;
+  }
+  /* Filas de estado (cargando / vacío) no llevan etiqueta. */
+  .ap-tabla--tarjetas tbody td[colspan] {
+    display: block;
+    margin: 0;
+  }
+  .ap-tabla--tarjetas tbody td[colspan]::before {
+    content: none;
+  }
+
+  /* Selección múltiple (DataTable `seleccion`): la casilla, fija a la
+     izquierda de la tarjeta; todo lo demás, sangrado a la columna del texto. */
+  .ap-tabla--tarjetas.ap-tabla--seleccion tbody tr {
+    padding-left: 2.85rem;
+  }
+  .ap-tabla--tarjetas.ap-tabla--seleccion tbody td[data-tarjeta='seleccion'] {
+    position: absolute;
+    left: 1rem;
+    top: 1.05rem;
+    display: block;
+    margin: 0;
+  }
+  .ap-tabla--tarjetas.ap-tabla--seleccion tbody td[colspan] {
+    margin-left: -1.85rem;
+  }
+  .ap-tabla--tarjetas tbody td[data-tarjeta='seleccion']::before {
+    content: none;
+  }
+
+  /* data-solo-tarjeta: un texto que sólo hace falta en la tarjeta (la unidad
+     de una cifra que en la tabla da la cabecera: «4 candidatos»). */
+  .ap-tabla--tarjetas [data-solo-tarjeta] {
+    display: revert;
+  }
+  /* data-solo-tabla: su inverso. Lo que en la tabla va apilado debajo y en la
+     línea meta de la tarjeta va seguido (con un data-solo-tarjeta al lado):
+     «ACME10 · 10% desc.» en una línea en vez de dos. */
+  .ap-tabla--tarjetas [data-solo-tabla] {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   ESTADO VACÍO: el arco y el punto
+   ===================================================================== */
+.ap-vacio__arco {
+  position: relative;
+  width: 5.5rem;
+  aspect-ratio: 2 / 1;
+  border: 3px solid rgb(43 93 98 / 0.28);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+}
+.ap-vacio__arco::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0.35rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-left: -0.45rem;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.ap-vacio__arco::before {
+  content: '';
+  position: absolute;
+  inset: 0.75rem 0.75rem -1px;
+  border: 2px solid rgb(159 187 47 / 0.6);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+}

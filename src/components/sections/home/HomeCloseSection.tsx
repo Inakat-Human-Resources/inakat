@@ -1,6 +1,6 @@
 // RUTA: src/components/sections/home/HomeCloseSection.tsx
 // Cierre de la home: ventana fija (el fondo se queda quieto mientras la página pasa)
-// con los dos arcos del isotipo creciendo. /about sigue usando CTAFinalSection.
+// con los dos arcos del isotipo creciendo. /about tiene su propio cierre (AboutCloseSection).
 import Link from 'next/link';
 import { ArrowRight, Mail, Phone } from 'lucide-react';
 

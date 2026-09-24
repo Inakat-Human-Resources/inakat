@@ -1,26 +1,40 @@
-// RUTA: src/components/sections/home/HomeMotion.tsx
+// RUTA: src/components/ui/SiteMotion.tsx
 'use client';
 
 import { useEffect } from 'react';
 
-// Único JS de la home: lo que CSS no puede hacer.
-// - Paralaje del puntero en la portada: escribe --mx/--my EN la portada (no en :root).
-// - Botones imantados: usa la propiedad `translate`, así el transform del hover sigue vivo.
-// Solo con puntero fino y sin movimiento reducido. El rAF se detiene solo.
-const HomeMotion = () => {
+/**
+ * Único JS de movimiento del registro PÚBLICO (nació como HomeMotion, en la
+ * portada). Cualquier página pública lo monta una vez, dentro o fuera de su
+ * <main className="hm">:
+ *
+ *   <main className="hm">…</main>
+ *   <SiteMotion />
+ *
+ * Hace tres cosas, todas prescindibles (sin JS la página se lee completa):
+ *
+ * 1. EL CANDADO: pone .hm--js en cada raíz .hm, pero SÓLO con la pestaña
+ *    visible. Las animaciones de ENTRADA de site.css/home.css cuelgan de esa
+ *    clase. En una pestaña de fondo (ctrl+click, restaurar sesión, una captura
+ *    automática) el reloj de animación no avanza, y un `both` deja el título y
+ *    la foto congelados en su fotograma inicial: invisibles. Así, quien abre la
+ *    página en segundo plano la encuentra legible, y la animación arranca
+ *    limpia la primera vez que la mira.
+ * 2. Paralaje del puntero en [data-hm-hero]: escribe --mx/--my EN ese elemento
+ *    (no en :root); lo consumen los .hm-plane de dentro.
+ * 3. Botones imantados [data-hm-magnet]: usa la propiedad `translate`, así el
+ *    `transform` del hover sigue vivo.
+ *
+ * 2 y 3 sólo con puntero fino y sin movimiento reducido. El rAF se detiene solo.
+ */
+const SiteMotion = () => {
   useEffect(() => {
-    // Las animaciones de ENTRADA de home.css cuelgan de .hm--js, y la clase se pone
-    // sólo cuando la pestaña está VISIBLE. Motivo: en una pestaña de fondo (ctrl+click,
-    // restaurar sesión) el reloj de animación no avanza, y un `both` deja el título y
-    // la foto congelados en su fotograma inicial — es decir, invisibles. Así, quien
-    // abra la home en segundo plano la encuentra legible, y la animación arranca
-    // limpia la primera vez que la mira.
-    const root = document.querySelector('.hm');
+    const raices = Array.from(document.querySelectorAll<HTMLElement>('.hm'));
     const cleanups: Array<() => void> = [];
 
     const arm = () => {
       if (document.visibilityState !== 'visible') return false;
-      root?.classList.add('hm--js');
+      raices.forEach((raiz) => raiz.classList.add('hm--js'));
       return true;
     };
 
@@ -32,15 +46,13 @@ const HomeMotion = () => {
       cleanups.push(() => document.removeEventListener('visibilitychange', onVisible));
     }
 
-    cleanups.push(() => root?.classList.remove('hm--js'));
+    cleanups.push(() => raices.forEach((raiz) => raiz.classList.remove('hm--js')));
 
     const fine = window.matchMedia('(hover: hover) and (pointer: fine)');
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (!fine.matches || calm.matches) return () => cleanups.forEach((fn) => fn());
 
-    const hero = document.querySelector<HTMLElement>('[data-hm-hero]');
-
-    if (hero) {
+    document.querySelectorAll<HTMLElement>('[data-hm-hero]').forEach((hero) => {
       let tx = 0;
       let ty = 0;
       let x = 0;
@@ -67,7 +79,7 @@ const HomeMotion = () => {
         hero.removeEventListener('pointermove', onMove);
         if (raf) cancelAnimationFrame(raf);
       });
-    }
+    });
 
     document.querySelectorAll<HTMLElement>('[data-hm-magnet]').forEach((el) => {
       const onMove = (e: PointerEvent) => {
@@ -93,4 +105,4 @@ const HomeMotion = () => {
   return null;
 };
 
-export default HomeMotion;
+export default SiteMotion;

@@ -1,4 +1,7 @@
 import type { Config } from "tailwindcss";
+// Paleta de la marca con sus contrastes medidos: una sola fuente para las clases
+// (bg-ink, text-ink-muted, border-line…) y para los componentes de src/components/ui.
+import { colores } from "./src/components/ui/tokens";
 
 const config: Config = {
   darkMode: ["class"],
@@ -17,10 +20,21 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
+        // Outfit: estructura (títulos, cifras, botones).
         display: ['var(--font-outfit)', 'sans-serif'],
+        // DM Sans: texto corrido.
         body: ['var(--font-dm-sans)', 'sans-serif'],
+        // Instrument Serif itálica: la voz humana (remate de un titular, un
+        // estado vacío, una cita). Se carga en el layout raíz como --font-serif.
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
       },
       colors: {
+        // ── Sistema de diseño (septiembre 2026): nombres semánticos ──
+        // Úsalos en todo código nuevo. Los nombres viejos de abajo siguen
+        // vivos hasta que cada página se rehaga; no se borran.
+        ...colores,
+
+        // ── Nombres heredados (no usar en código nuevo) ──
         // Custom brand colors
         "primary-dark-green": "#657F33",
         "primary-light-green": "#A8C43A",
@@ -79,6 +93,23 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      // Sombras del registro de aplicación: suaves y teñidas de tinta, nunca negras.
+      boxShadow: {
+        "ap-1": "0 1px 2px rgb(40 55 57 / 0.06), 0 1px 1px rgb(40 55 57 / 0.04)",
+        "ap-2": "0 6px 20px -8px rgb(40 55 57 / 0.18), 0 2px 4px -2px rgb(40 55 57 / 0.06)",
+        "ap-3": "0 28px 60px -16px rgb(40 55 57 / 0.35), 0 8px 16px -8px rgb(40 55 57 / 0.12)",
+      },
+      transitionTimingFunction: {
+        marca: "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
+      maxWidth: {
+        // El ÚNICO ancho máximo de página de la aplicación (lo pone el AppShell).
+        app: "1400px",
+        // Páginas de lectura (notificaciones, un mensaje): la lista se estrecha
+        // POR DENTRO con max-w-lectura; la cabecera sigue a todo el ancho, así
+        // el borde derecho no salta al navegar.
+        lectura: "52rem",
       },
     },
   },

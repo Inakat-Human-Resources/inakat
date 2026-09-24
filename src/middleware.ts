@@ -22,6 +22,17 @@ import { prisma } from './lib/prisma';
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // El banco de pruebas de diseño (/diseno) sólo existe en desarrollo. Su layout
+  // ya llama a notFound() en producción, pero el loading.tsx raíz abre el
+  // streaming antes y la respuesta sale con estado 200 (página 404 con noindex).
+  // Aquí se corta antes de renderizar nada: 404 de verdad.
+  if (pathname === '/diseno' || pathname.startsWith('/diseno/')) {
+    // En desarrollo pasa sin sesión: el banco renderiza con datos de ejemplo.
+    return process.env.NODE_ENV === 'production'
+      ? new NextResponse('Not Found', { status: 404 })
+      : NextResponse.next();
+  }
+
   // Excepción: POST a company-requests es público (registro de empresas)
   if (pathname === '/api/company-requests' && request.method === 'POST') {
     return NextResponse.next();
@@ -357,6 +368,9 @@ function denySession(request: NextRequest, pathname: string, reason: string) {
  */
 export const config = {
   matcher: [
+    // Banco de pruebas de diseño: 404 duro en producción (ver arriba)
+    '/diseno',
+    '/diseno/:path*',
     // Base routes (sin :path*) para proteger la ruta raíz
     '/api/company-requests',
     '/api/applications',

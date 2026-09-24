@@ -1,19 +1,19 @@
 // RUTA: src/app/loading.tsx
+//
+// Carga de cualquier ruta sin loading propio (públicas y paneles). El isotipo
+// hecho indicador: el punto (la persona) recorre el arco (el puente) de un lado
+// a otro. Con movimiento reducido se queda quieto en lo alto del arco y el
+// texto dice lo que pasa. Estilos: _estados/estados.css (prefijo es-).
+import './_estados/estados.css';
+
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-custom-beige flex items-center justify-center">
-      {/* role/aria-live: el lector de pantalla no anunciaba la carga */}
-      <div
-        className="flex flex-col items-center gap-4"
-        role="status"
-        aria-live="polite"
-      >
-        <div
-          className="w-10 h-10 border-4 border-button-green border-t-transparent rounded-full animate-spin"
-          aria-hidden="true"
-        />
-        <p className="text-text-black/50 text-sm">Cargando...</p>
-      </div>
+    // role/aria-live: el lector de pantalla anuncia la carga
+    <div className="es-carga" role="status" aria-live="polite">
+      <span className="es-carga__arco" aria-hidden="true">
+        <span className="es-carga__brazo" />
+      </span>
+      <p className="es-carga__texto">Cargando…</p>
     </div>
   );
 }

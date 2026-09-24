@@ -1,13 +1,20 @@
 // RUTA: src/app/error.tsx
 'use client';
 
+import './_estados/estados.css';
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { RotateCcw } from 'lucide-react';
 
 /**
  * Error boundary raíz: cubre cualquier excepción de render en páginas públicas
  * y en los paneles (company/recruiter/specialist/candidate/vendor). Sin esto,
  * Next muestra su pantalla genérica en inglés, sin forma de volver.
+ *
+ * Registro «Arco» (estilos en _estados/estados.css, prefijo es-). Sustituye a
+ * todo lo que cuelga del layout raíz —también al AppShell de una sección—, así
+ * que lleva su propio <main> y sus propias salidas: reintentar e ir al inicio.
+ * Sin animaciones de entrada: quien llega aquí no necesita espectáculo.
  */
 export default function RootError({
   error,
@@ -21,38 +28,40 @@ export default function RootError({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-custom-beige flex items-center justify-center px-4">
-      <div className="text-center max-w-md">
-        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-          <span className="text-red-600 text-2xl font-bold">!</span>
+    <main className="hm">
+      <section className="hm-suelo--arena es es--error" aria-labelledby="es-titulo">
+        <div className="es__arcos" aria-hidden="true">
+          <span className="hm-arc hm-arc--b" />
+          <span className="hm-arc hm-arc--c" />
         </div>
-        <h2 className="font-display text-xl md:text-2xl font-bold text-title-dark mb-2">
-          Algo salió mal
-        </h2>
-        <p className="text-text-black/60 mb-6">
-          Ocurrió un error inesperado al mostrar esta página. Puedes intentarlo
-          de nuevo o volver al inicio.
-        </p>
-        {error.digest && (
-          <p className="text-xs text-text-black/40 mb-6">
-            Código de referencia: {error.digest}
-          </p>
-        )}
-        <div className="flex flex-wrap gap-3 justify-center">
-          <button
-            onClick={reset}
-            className="px-6 py-2 bg-button-orange text-white rounded-full hover:bg-opacity-90 transition-colors"
-          >
-            Reintentar
-          </button>
-          <Link
-            href="/"
-            className="px-6 py-2 border border-button-dark-green text-button-dark-green rounded-full hover:bg-button-dark-green hover:text-white transition-colors"
-          >
-            Ir al inicio
-          </Link>
+
+        <div className="hm-wrap es__dentro">
+          <div>
+            <p className="hm-eyebrow">Error inesperado</p>
+            <h1 id="es-titulo" className="hm-display es__titulo mt-5">
+              Algo salió mal. <em>No fue culpa tuya.</em>
+            </h1>
+            <p className="hm-lead mt-6">
+              Ocurrió un error inesperado al mostrar esta página. Puedes intentarlo
+              de nuevo o volver al inicio.
+            </p>
+            {error.digest && (
+              <p className="es__codigo">
+                Código de referencia: <code>{error.digest}</code>
+              </p>
+            )}
+            <div className="es__acciones">
+              <button type="button" onClick={reset} className="hm-btn hm-btn--orange">
+                <RotateCcw aria-hidden="true" />
+                Reintentar
+              </button>
+              <Link href="/" className="hm-btn hm-btn--ghost">
+                Ir al inicio
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

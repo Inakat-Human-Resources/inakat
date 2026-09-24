@@ -1,5 +1,39 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge, validators } from "tailwind-merge";
+
+/**
+ * tailwind-merge 3.x sigue la semántica de Tailwind 4, pero este proyecto usa
+ * Tailwind 3. La diferencia que se cobra: en Tailwind 4 `outline` es un ANCHO
+ * (1px) y en Tailwind 3 es un ESTILO (`outline-style: solid`). Sin este ajuste,
+ * `cn('focus-visible:outline focus-visible:outline-2 …')` quitaba
+ * `focus-visible:outline` por «chocar» con `outline-2` y el elemento se quedaba
+ * sin anillo de foco (salvo que globals.css se lo diera por su cuenta).
+ *
+ * - `outline` (sin sufijo) pasa al grupo de estilo, como en Tailwind 3.
+ * - `outline-N` sigue siendo el ancho.
+ * - `shadow-ap-1/2/3` (tailwind.config.ts) son sombras, no colores de sombra.
+ */
+const twMerge = extendTailwindMerge({
+  override: {
+    classGroups: {
+      "outline-w": [
+        {
+          outline: [
+            validators.isNumber,
+            validators.isArbitraryVariableLength,
+            validators.isArbitraryLength,
+          ],
+        },
+      ],
+    },
+  },
+  extend: {
+    classGroups: {
+      "outline-style": [{ outline: [""] }],
+      shadow: [{ shadow: ["ap-1", "ap-2", "ap-3"] }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

@@ -2,6 +2,11 @@
    Home «Arco» — el isotipo de INAKAT es un punto (la persona) y un arco (el puente).
    Todo el movimiento de la portada sale de esas dos formas.
 
+   Esta hoja guarda SÓLO lo que es de la portada (sus secciones). Los tokens, el
+   contenedor, el antetítulo, los titulares, los botones, los arcos, el punto,
+   las máscaras, los revelados, la barra de progreso y el acordeón viven en
+   src/app/site.css (registro público compartido), que carga el layout raíz.
+
    Reglas de esta hoja:
    - Prefijo hm- en todo: no pisa al resto de la app.
    - Solo se animan transform, opacity y clip-path.
@@ -10,39 +15,13 @@
      la página se lee completa sin JS, sin scroll timelines y con movimiento reducido.
 */
 
-.hm {
-  --ink: #283739;
-  --teal: #2b5d62;
-  --lime: #9fbb2f;
-  --orange: #f48602;
-  --sand: #e8e7d4;
-  --paper: #f7f5ee;
-  --nav: 56px; /* = pt-14 del body; abajo se ajusta al alto real de la barra en móvil */
-  --gut: clamp(1.25rem, 0.5rem + 3vw, 3.5rem);
-  --disp: var(--font-outfit), system-ui, sans-serif;
-  --serif: var(--font-serif), 'Times New Roman', serif;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  overflow-x: clip;
-  background: var(--sand);
-  color: var(--ink);
-  interpolate-size: allow-keywords;
-}
-
 /* globals.css declara `section { overflow: hidden }`, y eso convierte a cada <section> en
    contenedor de scroll: mata todo `position: sticky` que viva dentro. Las secciones de la
    home que fijan algo lo devuelven a visible; las que recortan usan `overflow: clip`
    (recorta igual, pero NO crea contenedor de scroll). */
-/* Alto REAL de la barra de navegación (medido): 44 px en escritorio, 64 en tablet, 60 en móvil. */
-@media (max-width: 1023px) {
-  .hm {
-    --nav: 64px;
-  }
-}
-@media (max-width: 640px) {
-  .hm {
-    --nav: 60px;
-  }
-}
+/* Alto de la barra de navegación: --nav (site.css) = 56 px en TODOS los anchos,
+   medido sobre PublicNav. La barra vieja medía 44/64/60 y aquí se compensaba por
+   ancho; ya no hace falta. */
 
 .hm-proc,
 .hm-duo,
@@ -51,135 +30,6 @@
 .hm-faq,
 .hm-close {
   overflow: visible;
-}
-
-.hm-wrap {
-  width: 100%;
-  max-width: 1480px;
-  margin-inline: auto;
-  padding-inline: var(--gut);
-}
-
-.hm em,
-.hm-serif {
-  font-family: var(--serif);
-  font-style: italic;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-}
-
-.hm-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7em;
-  font-family: var(--disp);
-  font-size: clamp(0.72rem, 0.66rem + 0.3vw, 0.9rem);
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.hm-eyebrow::before {
-  content: '';
-  width: 0.7em;
-  height: 0.7em;
-  border-radius: 50%;
-  background: var(--orange);
-  flex: none;
-}
-
-.hm-h2 {
-  font-family: var(--disp);
-  font-weight: 800;
-  font-size: clamp(2.3rem, calc(6.6vw - 4px), 6.75rem);
-  line-height: 0.95;
-  letter-spacing: -0.035em;
-  margin: 0;
-  text-wrap: balance;
-}
-.hm-h2 em {
-  letter-spacing: -0.02em;
-}
-
-/* ---------- botones ---------- */
-.hm-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6em;
-  min-height: 3.25rem;
-  padding: 0.9em 1.9em;
-  border-radius: 999px;
-  border: 2px solid transparent;
-  font-family: var(--disp);
-  font-weight: 700;
-  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
-  line-height: 1.1;
-  text-align: center;
-  text-decoration: none;
-  transition: transform 0.35s var(--ease), background-color 0.25s, color 0.25s, box-shadow 0.35s;
-}
-.hm-btn:hover {
-  transform: translateY(-2px);
-}
-.hm-btn:focus-visible {
-  outline: 3px solid currentColor;
-  outline-offset: 3px;
-}
-.hm-btn svg {
-  width: 1.1em;
-  height: 1.1em;
-  flex: none;
-  transition: transform 0.35s var(--ease);
-}
-.hm-btn:hover svg {
-  transform: translateX(4px);
-}
-.hm-btn--orange {
-  background: var(--orange);
-  color: var(--ink);
-}
-.hm-btn--orange:hover {
-  box-shadow: 0 14px 34px -14px rgb(244 134 2 / 0.75);
-}
-.hm-btn--lime {
-  background: var(--lime);
-  color: var(--ink);
-}
-.hm-btn--lime:hover {
-  box-shadow: 0 14px 34px -14px rgb(159 187 47 / 0.75);
-}
-.hm-btn--ink {
-  background: var(--ink);
-  color: #fff;
-}
-.hm-btn--ghost {
-  border-color: currentColor;
-  color: inherit;
-  background: transparent;
-}
-.hm-btn--ghost:hover {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: #fff;
-}
-.hm-on-dark .hm-btn--ghost:hover {
-  background: #fff;
-  border-color: #fff;
-  color: var(--ink);
-}
-
-/* ---------- barra de progreso: el punto recorre la página ---------- */
-.hm-progress {
-  position: fixed;
-  top: var(--nav);
-  left: 0;
-  right: 0;
-  height: 3px;
-  z-index: 40;
-  background: var(--lime);
-  transform: scaleX(0);
-  transform-origin: 0 50%;
-  pointer-events: none;
 }
 
 /* =====================================================================
@@ -200,9 +50,7 @@
 .hm-hero__inner {
   position: relative;
 }
-.hm-plane {
-  translate: calc(var(--mx, 0) * var(--f, 0) * 1px) calc(var(--my, 0) * var(--f, 0) * 0.6px);
-}
+/* .hm-plane (paralaje del puntero) vive en site.css: sirve a cualquier [data-hm-hero]. */
 .hm-hero__arcs {
   position: absolute;
   inset: 0;
@@ -210,33 +58,7 @@
   pointer-events: none;
   --f: -10;
 }
-.hm-arc {
-  position: absolute;
-  aspect-ratio: 2 / 1;
-  border: 2px solid rgb(43 93 98 / 0.22);
-  border-bottom: 0;
-  border-radius: 999vmax 999vmax 0 0;
-}
-.hm-arc--a {
-  width: min(118vw, 1900px);
-  left: 50%;
-  bottom: -2%;
-  margin-left: calc(min(118vw, 1900px) / -2);
-}
-.hm-arc--b {
-  width: min(84vw, 1350px);
-  left: 50%;
-  bottom: -2%;
-  margin-left: calc(min(84vw, 1350px) / -2);
-  border-color: rgb(159 187 47 / 0.55);
-}
-.hm-arc--c {
-  width: min(50vw, 800px);
-  left: 50%;
-  bottom: -2%;
-  margin-left: calc(min(50vw, 800px) / -2);
-  border-color: rgb(244 134 2 / 0.4);
-}
+/* .hm-arc y sus tres tamaños viven en site.css */
 
 .hm-title {
   position: static; /* SIN transform ni opacity: no debe crear contexto de apilamiento */
@@ -248,20 +70,8 @@
   letter-spacing: -0.045em;
   color: var(--ink);
 }
-.hm-line {
-  display: block;
-  overflow: hidden;
-  padding: 0.1em 0.06em 0.14em 0;
-  margin: -0.1em 0 -0.14em;
-  position: relative;
-}
-.hm-line > span {
-  display: block;
-}
-.hm--js .hm-line > span {
-  animation: hm-rise 1.25s var(--ease) both;
-  animation-delay: calc(0.12s + var(--i, 0) * 0.13s);
-}
+/* .hm-line (la máscara) y su entrada `.hm--js .hm-line > span` viven en site.css;
+   aquí sólo la composición escalonada de los tres renglones de la portada. */
 .hm-line--1 {
   z-index: 1;
 }
@@ -277,11 +87,6 @@
 .hm-line--3 em {
   letter-spacing: -0.03em;
   font-size: 1.06em;
-}
-@keyframes hm-rise {
-  from {
-    transform: translateY(112%);
-  }
 }
 
 .hm-hero__piece {
@@ -327,11 +132,7 @@
     transform: scale(1.22);
   }
 }
-.hm-dot {
-  position: absolute;
-  border-radius: 50%;
-  aspect-ratio: 1;
-}
+/* .hm-dot (el punto) vive en site.css */
 .hm-hero__dot {
   width: 24%;
   left: -12%;
@@ -350,11 +151,7 @@
 .hm--js .hm-hero__dot2 {
   animation: hm-pop 0.9s var(--ease) 1.3s both;
 }
-@keyframes hm-pop {
-  from {
-    transform: scale(0);
-  }
-}
+/* @keyframes hm-pop y hm-fade viven en site.css */
 
 .hm-hero__foot {
   position: relative;
@@ -380,12 +177,6 @@
   flex-wrap: wrap;
   gap: 0.85rem;
   margin-top: clamp(1.4rem, 3.4svh, 2.2rem);
-}
-@keyframes hm-fade {
-  from {
-    opacity: 0;
-    transform: translateY(22px);
-  }
 }
 .hm-cue {
   position: absolute;
@@ -890,36 +681,7 @@
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
-.hm-plus {
-  position: relative;
-  width: clamp(2.2rem, 3.2vw, 3rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  flex: none;
-  transition: transform 0.5s var(--ease), background-color 0.3s;
-}
-.hm-plus::before,
-.hm-plus::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 42%;
-  height: 2px;
-  margin: -1px 0 0 -21%;
-  background: currentColor;
-  transition: transform 0.5s var(--ease);
-}
-.hm-plus::after {
-  transform: rotate(90deg);
-}
-details[open] > summary .hm-plus {
-  transform: rotate(180deg);
-}
-details[open] > summary .hm-plus::after {
-  transform: rotate(0deg);
-}
+/* .hm-plus (el + que gira a −) vive en site.css */
 .hm-esp__subs {
   list-style: none;
   margin: 0;
@@ -950,15 +712,7 @@ details[open] > summary .hm-plus::after {
   }
 }
 
-/* acordeones nativos: abren con transición donde el motor lo soporta */
-.hm details::details-content {
-  block-size: 0;
-  overflow: clip;
-  transition: block-size 0.5s var(--ease), content-visibility 0.5s allow-discrete;
-}
-.hm details[open]::details-content {
-  block-size: auto;
-}
+/* La transición de apertura de los <details> vive en site.css */
 
 /* =====================================================================
    8. CIFRAS — números en contorno que se rellenan
@@ -1374,10 +1128,7 @@ details[open] > summary .hm-plus::after {
    ===================================================================== */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    .hm-progress {
-      animation: hm-grow linear both;
-      animation-timeline: scroll(root);
-    }
+    /* .hm-progress, .hm-rv y .hm-mask (genéricos) viven en site.css */
 
     /* portada: cada plano sale a su velocidad */
     .hm-hero__arcs {
@@ -1394,25 +1145,6 @@ details[open] > summary .hm-plus::after {
       animation: hm-hero-piece linear both;
       animation-timeline: --hm-hero;
       animation-range: exit 0% exit 100%;
-    }
-
-    /* revelados genéricos */
-    .hm-rv {
-      animation: hm-rv linear both;
-      animation-timeline: view();
-      animation-range: entry 5% entry 75%;
-    }
-    .hm-mask {
-      display: block;
-      overflow: hidden;
-      padding-block: 0.12em;
-      margin-block: -0.12em;
-    }
-    .hm-mask > span {
-      display: block;
-      animation: hm-rise linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 28%;
     }
 
     /* palabras que se encienden, de izquierda a derecha */
@@ -1660,11 +1392,6 @@ details[open] > summary .hm-plus::after {
   }
 }
 
-@keyframes hm-grow {
-  to {
-    transform: scaleX(1);
-  }
-}
 @keyframes hm-hero-arcs {
   to {
     transform: translateY(16%) scale(1.06);
@@ -1679,12 +1406,6 @@ details[open] > summary .hm-plus::after {
 @keyframes hm-hero-piece {
   to {
     transform: translateY(-20%) rotate(-3deg);
-  }
-}
-@keyframes hm-rv {
-  from {
-    opacity: 0;
-    transform: translateY(44px);
   }
 }
 @keyframes hm-lit {

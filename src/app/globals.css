@@ -229,9 +229,13 @@ section {
       transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
   }
 
-  /* Feedback de "press" sutil al pulsar botones. */
-  button:not(:disabled):active,
-  [role="button"]:active {
+  /* Feedback de "press" sutil al pulsar botones.
+     Excepción: un botón con la zona de clic estirada (su ::after cubre la
+     tarjeta entera) lleva data-sin-hundir. El transform lo convertiría en el
+     bloque contenedor de su ::after y la zona de clic encogería al pulsar.
+     :where() mantiene la especificidad de siempre. */
+  button:not(:disabled):not(:where([data-sin-hundir])):active,
+  [role="button"]:not(:where([data-sin-hundir])):active {
     transform: translateY(1px) scale(0.985);
   }
 }
@@ -306,6 +310,24 @@ section {
   .link-underline:hover::after,
   .link-underline:focus-visible::after {
     width: 100%;
+  }
+}
+
+/* Campos a 16 px en móvil. iOS Safari hace zoom al enfocar un campo de texto
+   de menos de 16 px y el formulario se descuadra (medido: 13–14 px en los
+   filtros del panel y en /contact). FormField y FiltroSelect ya piden
+   text-base bajo sm; esto cubre los campos sueltos que traen su text-sm o
+   text-[13px]. :root sube la especificidad por encima de las utilidades; los
+   campos que piden un tamaño mayor (text-lg…) se respetan. En escritorio no
+   cambia nada. */
+@media (max-width: 639.98px) {
+  :root
+    :is(
+      input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [type='submit'], [type='button'], [type='reset'], [type='image'], [type='hidden']),
+      select,
+      textarea
+    ):not([class*='text-lg'], [class*='text-xl'], [class*='text-2xl'], [class*='text-3xl']) {
+    font-size: max(1em, 16px);
   }
 }
 

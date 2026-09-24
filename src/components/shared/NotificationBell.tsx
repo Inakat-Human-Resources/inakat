@@ -3,7 +3,23 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell } from 'lucide-react';
+import {
+  Bell,
+  BarChart3,
+  Building2,
+  CalendarCheck,
+  CalendarClock,
+  CalendarX,
+  CheckCircle2,
+  ClipboardList,
+  Coins,
+  Inbox,
+  Mail,
+  Microscope,
+  Send,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 
 interface Notification {
@@ -24,8 +40,8 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // La campanita vive en el Navbar del layout raíz, es decir, en TODAS las
-  // páginas de todo usuario autenticado. Sin frenos, cada pestaña abierta
+  // La campanita vive en la cabecera del AppShell, es decir, en TODAS las
+  // páginas de la aplicación de todo usuario autenticado. Sin frenos, cada pestaña abierta
   // generaba una invocación serverless y dos consultas cada 30 s durante horas,
   // y una vez caducado el JWT seguía pidiendo 401 indefinidamente.
   const pollDetenido = useRef(false);
@@ -178,38 +194,38 @@ export default function NotificationBell() {
     return `${Math.floor(days / 7)}sem`;
   };
 
-  // Icono por tipo de notificación
-  const getTypeIcon = (type: string) => {
+  // Icono por tipo de notificación (decorativo: el título dice qué pasó).
+  const getTypeIcon = (type: string): LucideIcon => {
     switch (type) {
       case 'new_request':
-        return '🏢';
+        return Building2;
       case 'request_approved':
-        return '✅';
+        return CheckCircle2;
       case 'request_rejected':
-        return '❌';
+        return XCircle;
       case 'assignment':
-        return '📋';
+        return ClipboardList;
       case 'new_application':
-        return '📩';
+        return Inbox;
       case 'credits_purchased':
-        return '💰';
+        return Coins;
       case 'sent_to_specialist':
-        return '🔬';
+        return Microscope;
       case 'sent_to_company':
-        return '📤';
+        return Send;
       case 'application_status':
-        return '📊';
+        return BarChart3;
       case 'interview_requested':
       case 'interview_confirmed':
-        return '📅';
+        return CalendarCheck;
       case 'interview_rescheduled':
-        return '🔁';
+        return CalendarClock;
       case 'interview_cancelled':
-        return '🚫';
+        return CalendarX;
       case 'contact_message':
-        return '✉️';
+        return Mail;
       default:
-        return '🔔';
+        return Bell;
     }
   };
 
@@ -219,30 +235,36 @@ export default function NotificationBell() {
         ref={botonRef}
         type="button"
         onClick={handleToggle}
-        className="relative p-2 text-title-dark hover:bg-white/50 rounded-full transition-colors"
+        className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink transition-colors duration-150 hover:bg-ink/[0.06] aria-expanded:bg-ink/[0.06]"
         // El aria-label sustituye al contenido como nombre accesible: sin el
         // número dentro, el lector anunciaba "Notificaciones" aunque hubiera 5.
         aria-label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
         aria-expanded={isOpen}
         aria-haspopup="true"
+        title="Notificaciones"
       >
-        <Bell className="w-5 h-5" aria-hidden="true" />
+        <Bell className="h-5 w-5" aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+          // Tinta sobre naranja: 4.87:1 (blanco sobre naranja no pasa AA).
+          <span
+            aria-hidden="true"
+            className="absolute right-0.5 top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-orange px-1 font-display text-[10px] font-bold tabular-nums text-ink ring-2 ring-paper"
+          >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-900">Notificaciones</h3>
+        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-line bg-white shadow-ap-3">
+          {/* Cabecera */}
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+            <h3 className="font-display text-sm font-semibold text-ink">Notificaciones</h3>
             {unreadCount > 0 && (
               <button
+                type="button"
                 onClick={markAllRead}
-                className="text-xs text-button-green hover:underline"
+                className="rounded-md px-1.5 py-0.5 text-xs font-medium text-teal hover:bg-teal-tint"
               >
                 Marcar todas leídas
               </button>
@@ -250,31 +272,51 @@ export default function NotificationBell() {
           </div>
 
           {/* Lista */}
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto overscroll-contain">
             {loading ? (
-              <div className="py-8 text-center text-sm text-gray-400">Cargando...</div>
+              <div className="space-y-3 px-4 py-4" aria-label="Cargando notificaciones">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="skeleton h-8 w-8 rounded-full" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="skeleton h-3 w-3/4" />
+                      <div className="skeleton h-3 w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : notifications.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-400">
-                No tienes notificaciones
+              <div className="px-4 py-8 text-center">
+                <p className="font-serif text-lg italic text-ink">Todo en calma.</p>
+                <p className="mt-1 text-sm text-ink-muted">No tienes notificaciones</p>
               </div>
             ) : (
               notifications.map((notif) => {
+                const Icono = getTypeIcon(notif.type);
                 const content = (
                   <div
-                    className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
-                      !notif.read ? 'bg-blue-50/50' : ''
+                    className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-paper ${
+                      !notif.read ? 'bg-teal-tint/40' : ''
                     }`}
                   >
-                    <span className="text-lg flex-shrink-0 mt-0.5">{getTypeIcon(notif.type)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                    <span
+                      className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-mist text-teal"
+                      aria-hidden="true"
+                    >
+                      <Icono className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm ${!notif.read ? 'font-semibold text-ink' : 'text-ink'}`}>
                         {notif.title}
                       </p>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{timeAgo(notif.createdAt)}</p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">{notif.message}</p>
+                      <p className="mt-1 text-[11px] text-ink-muted">
+                        {timeAgo(notif.createdAt)}
+                        {!notif.read && <span className="sr-only"> · sin leer</span>}
+                      </p>
                     </div>
                     {!notif.read && (
-                      <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></span>
+                      <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-orange" aria-hidden="true"></span>
                     )}
                   </div>
                 );
@@ -284,6 +326,7 @@ export default function NotificationBell() {
                     key={notif.id}
                     href={notif.link}
                     onClick={() => handleNotificationClick(notif)}
+                    className="block focus-visible:outline-offset-[-2px]"
                   >
                     {content}
                   </Link>
@@ -309,11 +352,11 @@ export default function NotificationBell() {
             )}
           </div>
 
-          {/* Footer */}
+          {/* Pie */}
           <Link
             href="/notifications"
             onClick={() => setIsOpen(false)}
-            className="block text-center px-4 py-3 text-sm text-button-green font-medium hover:bg-gray-50 border-t border-gray-100 transition-colors"
+            className="block border-t border-line px-4 py-3 text-center text-sm font-medium text-teal transition-colors duration-150 hover:bg-paper"
           >
             Ver todas las notificaciones
           </Link>

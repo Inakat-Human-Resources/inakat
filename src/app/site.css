@@ -1,0 +1,978 @@
+/* RUTA: src/app/site.css
+   Registro PÚBLICO compartido — «Arco».
+
+   El isotipo de INAKAT es un punto (la persona) y un arco (el puente). Esta hoja
+   reúne las primitivas que nacieron en la portada (src/app/home.css) para que
+   cualquier página pública las use sin cargar la portada entera. Conserva el
+   prefijo hm- a propósito: así la portada no se reescribió y sigue idéntica.
+   Lo que sólo usa la portada (sus 12 secciones) sigue en home.css.
+
+   Se importa UNA vez, desde el layout raíz. Guía de uso: docs/DISENO.md.
+
+   Reglas de esta hoja (las mismas que home.css):
+   - Prefijo hm- en todo lo público; el registro de aplicación usa ap- (app.css).
+   - Sólo se animan transform, opacity y clip-path.
+   - Lo ligado al scroll vive dentro de @supports (animation-timeline: view()) y
+     prefers-reduced-motion: no-preference. Sin soporte, el estado natural es el
+     final: la página se lee completa sin JS, sin scroll timelines y con
+     movimiento reducido.
+   - Las animaciones de ENTRADA cuelgan de .hm--js, que SiteMotion pone sólo con
+     la pestaña visible (en una pestaña de fondo el reloj no avanza y un `both`
+     dejaría el contenido congelado en su fotograma inicial: invisible). */
+
+/* =====================================================================
+   TOKENS — los mismos seis colores que src/components/ui/tokens.ts
+   ===================================================================== */
+:root {
+  --ink: #283739;
+  --teal: #2b5d62;
+  --lime: #9fbb2f;
+  --orange: #f48602;
+  --sand: #e8e7d4;
+  --paper: #f7f5ee;
+  /* Alto REAL de la barra pública (PublicNav): 56 px en todos los anchos. La
+     barra lo usa para su altura y la portada para cuadrar el primer pliegue y
+     los elementos fijados. Si cambia la barra, cambia aquí y en ningún otro sitio. */
+  --nav: 56px;
+  --gut: clamp(1.25rem, 0.5rem + 3vw, 3.5rem);
+  --disp: var(--font-outfit), system-ui, sans-serif;
+  --serif: var(--font-serif), 'Times New Roman', serif;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Raíz de toda página pública: <main className="hm">. */
+.hm {
+  overflow-x: clip;
+  background: var(--sand);
+  color: var(--ink);
+  interpolate-size: allow-keywords;
+}
+
+/* Contenedor: ancho máximo y medianil fluido. */
+.hm-wrap {
+  width: 100%;
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-inline: var(--gut);
+}
+
+/* La voz humana: Instrument Serif itálica. Todo <em> dentro de .hm la usa. */
+.hm em,
+.hm-serif {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Antetítulo con el punto naranja (la persona del isotipo). */
+.hm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  font-family: var(--disp);
+  font-size: clamp(0.72rem, 0.66rem + 0.3vw, 0.9rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.hm-eyebrow::before {
+  content: '';
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--orange);
+  flex: none;
+}
+
+/* Titular de sección: llena el encuadre.
+   OJO con la cascada: esta hoja va DESPUÉS de las utilidades de Tailwind, así
+   que una propiedad declarada aquí gana a la utilidad de la misma propiedad
+   (un `margin: 0` aquí anulaba `mt-4`). Las primitivas de texto no declaran
+   margen: el preflight ya lo pone a 0 en h1–h6 y p. */
+.hm-h2 {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.3rem, calc(6.6vw - 4px), 6.75rem);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.hm-h2 em {
+  letter-spacing: -0.02em;
+}
+
+/* ---------- botones ---------- */
+.hm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 3.25rem;
+  padding: 0.9em 1.9em;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.35s var(--ease), background-color 0.25s, color 0.25s, box-shadow 0.35s;
+}
+.hm-btn:hover {
+  transform: translateY(-2px);
+}
+.hm-btn:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+.hm-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+  transition: transform 0.35s var(--ease);
+}
+.hm-btn:hover svg {
+  transform: translateX(4px);
+}
+/* Naranja SIEMPRE con texto tinta (4.87:1). Blanco sobre naranja da 2.54: no pasa. */
+.hm-btn--orange {
+  background: var(--orange);
+  color: var(--ink);
+}
+.hm-btn--orange:hover {
+  box-shadow: 0 14px 34px -14px rgb(244 134 2 / 0.75);
+}
+.hm-btn--lime {
+  background: var(--lime);
+  color: var(--ink);
+}
+.hm-btn--lime:hover {
+  box-shadow: 0 14px 34px -14px rgb(159 187 47 / 0.75);
+}
+.hm-btn--ink {
+  background: var(--ink);
+  color: #fff;
+}
+.hm-btn--ghost {
+  border-color: currentColor;
+  color: inherit;
+  background: transparent;
+}
+.hm-btn--ghost:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.hm-on-dark .hm-btn--ghost:hover {
+  background: #fff;
+  border-color: #fff;
+  color: var(--ink);
+}
+/* El anillo de foco es currentColor, y según el suelo desaparece: el blanco de
+   hm-btn--ink sobre naranja da 2.54 (no pasa) y el tinta de un botón lima o
+   naranja sobre un suelo tinta o teal es tinta sobre tinta. Sobre naranja y
+   lima, anillo tinta (4.87 · 5.67); sobre tinta y teal, blanco (12.38 · 7.38). */
+.hm-suelo--naranja .hm-btn:focus-visible,
+.hm-suelo--lima .hm-btn:focus-visible {
+  outline-color: var(--ink);
+}
+.hm-suelo--tinta .hm-btn--lime:focus-visible,
+.hm-suelo--teal .hm-btn--lime:focus-visible,
+.hm-suelo--tinta .hm-btn--orange:focus-visible,
+.hm-suelo--teal .hm-btn--orange:focus-visible {
+  outline-color: #fff;
+}
+
+/* ---------- barra de progreso: el punto recorre la página ---------- */
+.hm-progress {
+  position: fixed;
+  top: var(--nav);
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 40;
+  background: var(--lime);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+/* ---------- arcos: el puente, a escala de página ----------
+   Contenedor posicionado + tres arcos concéntricos que nacen del pie. */
+.hm-arc {
+  position: absolute;
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(43 93 98 / 0.22);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+}
+.hm-arc--a {
+  width: min(118vw, 1900px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(118vw, 1900px) / -2);
+}
+.hm-arc--b {
+  width: min(84vw, 1350px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(84vw, 1350px) / -2);
+  border-color: rgb(159 187 47 / 0.55);
+}
+.hm-arc--c {
+  width: min(50vw, 800px);
+  left: 50%;
+  bottom: -2%;
+  margin-left: calc(min(50vw, 800px) / -2);
+  border-color: rgb(244 134 2 / 0.4);
+}
+
+/* ---------- el punto ---------- */
+.hm-dot {
+  position: absolute;
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+
+/* ---------- paralaje del puntero ----------
+   SiteMotion escribe --mx/--my en cualquier [data-hm-hero]; cada plano dice
+   cuánto se mueve con --f (negativo: al revés que el puntero). Sin JS, o con
+   movimiento reducido, --mx/--my no existen y el plano no se mueve. */
+.hm-plane {
+  translate: calc(var(--mx, 0) * var(--f, 0) * 1px) calc(var(--my, 0) * var(--f, 0) * 0.6px);
+}
+
+/* ---------- máscara ligada al scroll: el renglón ----------
+   <span class="hm-mask"><span>renglón</span></span>. Cada máscara es un
+   renglón también SIN scroll timelines (Firefox, Safari anterior): si no,
+   dos máscaras seguidas se pegaban en la misma línea. El movimiento vive en
+   @supports, más abajo. */
+.hm-mask {
+  display: block;
+}
+
+/* ---------- titular con máscaras (entrada al cargar) ----------
+   <h1 aria-label="texto completo"> con cada renglón en
+   <span class="hm-line" aria-hidden="true"><span style="--i:0">…</span></span>.
+   Componente listo: src/components/ui/TituloMascara.tsx. */
+.hm-line {
+  display: block;
+  overflow: hidden;
+  padding: 0.1em 0.06em 0.14em 0;
+  margin: -0.1em 0 -0.14em;
+  position: relative;
+}
+.hm-line > span {
+  display: block;
+}
+.hm--js .hm-line > span {
+  animation: hm-rise 1.25s var(--ease) both;
+  animation-delay: calc(0.12s + var(--i, 0) * 0.13s);
+}
+@keyframes hm-rise {
+  from {
+    transform: translateY(112%);
+  }
+}
+
+/* Entrada genérica (fundido + subida) para lo que acompaña al titular. */
+.hm--js .hm-entra {
+  animation: hm-fade 1s var(--ease) both;
+  animation-delay: calc(0.45s + var(--i, 0) * 0.12s);
+}
+@keyframes hm-fade {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+@keyframes hm-pop {
+  from {
+    transform: scale(0);
+  }
+}
+
+/* ---------- acordeón: el signo + que gira a − ---------- */
+.hm-plus {
+  position: relative;
+  width: clamp(2.2rem, 3.2vw, 3rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  flex: none;
+  transition: transform 0.5s var(--ease), background-color 0.3s;
+}
+.hm-plus::before,
+.hm-plus::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42%;
+  height: 2px;
+  margin: -1px 0 0 -21%;
+  background: currentColor;
+  transition: transform 0.5s var(--ease);
+}
+.hm-plus::after {
+  transform: rotate(90deg);
+}
+details[open] > summary .hm-plus {
+  transform: rotate(180deg);
+}
+details[open] > summary .hm-plus::after {
+  transform: rotate(0deg);
+}
+
+/* acordeones nativos: abren con transición donde el motor lo soporta */
+.hm details::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition: block-size 0.5s var(--ease), content-visibility 0.5s allow-discrete;
+}
+.hm details[open]::details-content {
+  block-size: auto;
+}
+
+/* =====================================================================
+   PIEZAS NUEVAS PARA EL RESTO DE PÁGINAS PÚBLICAS
+   (la portada no las usa: añadirlas no la toca)
+   ===================================================================== */
+
+/* Suelos que alternan. Ninguna racha del mismo suelo pasa de dos pantallas. */
+.hm-suelo--arena {
+  background: var(--sand);
+  color: var(--ink);
+}
+.hm-suelo--papel {
+  background: var(--paper);
+  color: var(--ink);
+}
+.hm-suelo--tinta {
+  background: var(--ink);
+  color: #fff;
+}
+.hm-suelo--teal {
+  background: var(--teal);
+  color: #fff;
+}
+.hm-suelo--naranja {
+  background: var(--orange);
+  color: var(--ink);
+}
+.hm-suelo--lima {
+  background: var(--lime);
+  color: var(--ink);
+}
+/* Sobre el naranja, el punto del antetítulo (naranja) desaparecería: va en tinta. */
+.hm-suelo--naranja .hm-eyebrow::before {
+  background: var(--ink);
+}
+/* Sobre suelos oscuros el <em> de un titular va en lima (3.38 sobre teal: sólo
+   titulares grandes; 5.67 sobre tinta). */
+.hm-suelo--tinta .hm-h2 em,
+.hm-suelo--teal .hm-h2 em,
+.hm-suelo--tinta .hm-display em,
+.hm-suelo--teal .hm-display em {
+  color: var(--lime);
+}
+
+/* Aire vertical de una sección pública. */
+.hm-seccion {
+  padding-block: clamp(5rem, 12vw, 11rem);
+}
+
+/* Titular de portada de una página interior (h1): menor que el de la home,
+   igual de grande que el encuadre. */
+.hm-display {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(2.6rem, calc(8.4vw - 6px), 8.75rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.hm-display em {
+  letter-spacing: -0.02em;
+  color: var(--teal);
+}
+
+/* Entradilla. */
+.hm-lead {
+  font-size: clamp(1.05rem, 0.95rem + 0.55vw, 1.4rem);
+  line-height: 1.5;
+  max-width: 40rem;
+  opacity: 0.88;
+}
+
+/* =====================================================================
+   BARRA PÚBLICA (src/components/commons/PublicNav.tsx)
+   56 px = var(--nav) en todos los anchos.
+   ===================================================================== */
+.hm-nav {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  height: var(--nav);
+  color: var(--ink);
+  font-family: var(--disp);
+}
+/* El cristal vive en un pseudo-elemento: un backdrop-filter en la barra haría
+   de ella el bloque contenedor de su hijo fixed (el cajón). */
+.hm-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--sand);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+}
+.hm-nav[data-scroll]::before {
+  background: rgb(232 231 212 / 0.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow: 0 1px 0 rgb(40 55 57 / 0.1), 0 10px 30px -18px rgb(40 55 57 / 0.35);
+}
+.hm-nav[data-abierto]::before {
+  background: var(--ink);
+  box-shadow: none;
+}
+/* Barra + cajón: con el cajón abierto es el diálogo (role="dialog"). Sin
+   posición ni z-index propios: no crea contexto de apilamiento, así la barra
+   (z 2) sigue encima del cajón (z 1). */
+.hm-nav__marco {
+  height: 100%;
+}
+.hm-nav__barra {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 2rem);
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-inline: var(--gut);
+}
+.hm-nav__logo {
+  display: flex;
+  align-items: center;
+  flex: none;
+  border-radius: 6px;
+  margin-right: auto;
+}
+.hm-nav__logo img {
+  width: 108px;
+  height: auto;
+  transition: filter 0.2s ease;
+}
+.hm-nav[data-abierto] .hm-nav__logo img {
+  filter: brightness(0) invert(1);
+}
+.hm-nav__enlaces {
+  align-items: center;
+  gap: clamp(0.25rem, 1vw, 1rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-nav__enlace {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 2.5rem;
+  padding-inline: 0.7rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+/* El punto (la persona) marca la página actual y aparece al pasar. */
+.hm-nav__enlace::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0.2rem;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--orange);
+  transform: scale(0);
+  transition: transform 0.3s var(--ease);
+}
+.hm-nav__enlace:hover {
+  color: var(--teal);
+}
+.hm-nav__enlace:hover::after,
+.hm-nav__enlace[aria-current='page']::after {
+  transform: scale(1);
+}
+.hm-nav__enlace[aria-current='page'] {
+  font-weight: 700;
+}
+.hm-nav__acciones {
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: clamp(0.25rem, 1.5vw, 1.25rem);
+}
+.hm-nav__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.5rem;
+  padding-inline: 1.1rem;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.3s var(--ease), background-color 0.2s ease, color 0.2s ease, box-shadow 0.3s ease,
+    border-color 0.2s ease;
+}
+.hm-nav__cta svg {
+  width: 1rem;
+  height: 1rem;
+  transition: transform 0.3s var(--ease);
+}
+.hm-nav__cta:hover {
+  transform: translateY(-1px);
+}
+.hm-nav__cta:hover svg {
+  transform: translateX(3px);
+}
+/* Naranja con texto tinta: 4.87:1. */
+.hm-nav__cta--naranja {
+  background: var(--orange);
+  color: var(--ink);
+}
+.hm-nav__cta--naranja:hover {
+  box-shadow: 0 10px 24px -12px rgb(244 134 2 / 0.8);
+}
+.hm-nav__cta--fantasma {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.hm-nav__cta--fantasma:hover {
+  background: var(--ink);
+  color: #fff;
+}
+/* Sin `display` aquí: lo ponen las clases (inline-flex lg:hidden). Si esta
+   hoja declarara display, pisaría a lg:hidden (va después de las utilidades). */
+.hm-nav__boton {
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-right: -0.5rem;
+  border-radius: 999px;
+  color: var(--ink);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.hm-nav__boton svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+.hm-nav__boton:hover {
+  background: rgb(40 55 57 / 0.08);
+}
+.hm-nav[data-abierto] .hm-nav__boton {
+  color: #fff;
+}
+.hm-nav[data-abierto] .hm-nav__boton:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+.hm-nav[data-abierto] :focus-visible {
+  outline-color: var(--lime);
+}
+.hm-nav-hueco {
+  height: var(--nav);
+}
+
+/* ---- cajón móvil a pantalla completa ---- */
+.hm-cajon {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2.5rem;
+  padding: calc(var(--nav) + clamp(1.5rem, 6svh, 3rem)) var(--gut) clamp(1.5rem, 5svh, 2.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--ink);
+  color: #fff;
+  isolation: isolate;
+}
+/* El cajón no existe desde 1024 px (esta hoja va después de lg:hidden). */
+@media (min-width: 1024px) {
+  .hm-cajon {
+    display: none;
+  }
+}
+.hm-cajon__arco {
+  position: absolute;
+  z-index: -1;
+  right: -30vw;
+  bottom: -2px;
+  width: 110vw;
+  aspect-ratio: 2 / 1;
+  border: 2px solid rgb(159 187 47 / 0.45);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  pointer-events: none;
+}
+.hm-cajon__arco--b {
+  right: -10vw;
+  width: 70vw;
+  border-color: rgb(244 134 2 / 0.55);
+}
+.hm-cajon__enlaces {
+  display: grid;
+  gap: clamp(0.2rem, 1.2svh, 0.6rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-cajon__enlace {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  font-weight: 800;
+  font-size: clamp(2.1rem, 9.5vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: #fff;
+  border-radius: 8px;
+  transition: color 0.2s ease;
+}
+.hm-cajon__enlace:hover,
+.hm-cajon__enlace[aria-current='page'] {
+  color: var(--lime);
+}
+.hm-cajon__n {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.4em;
+  letter-spacing: 0;
+  color: rgb(255 255 255 / 0.7);
+  min-width: 1.6em;
+}
+.hm-cajon__pie {
+  display: grid;
+  gap: 1.5rem;
+}
+.hm-cajon__ctas {
+  display: grid;
+  gap: 0.75rem;
+}
+.hm-cajon__ctas .hm-btn {
+  width: 100%;
+}
+.hm-cajon__ctas .hm-btn--ghost {
+  color: #fff;
+}
+.hm-cajon__ctas .hm-btn--ghost:hover {
+  background: #fff;
+  border-color: #fff;
+  color: var(--ink);
+}
+.hm-cajon__contacto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+  font-size: 0.95rem;
+}
+.hm-cajon__contacto a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  color: rgb(255 255 255 / 0.85);
+}
+.hm-cajon__contacto svg {
+  width: 1rem;
+  height: 1rem;
+}
+/* Entrada escalonada de los enlaces (micro-transición, no ligada al scroll). */
+@media (prefers-reduced-motion: no-preference) {
+  .hm-cajon {
+    animation: hm-cajon-entra 0.35s var(--ease) both;
+  }
+  .hm-cajon__enlaces li {
+    animation: hm-fade 0.6s var(--ease) both;
+    animation-delay: calc(0.08s + var(--i, 0) * 0.05s);
+  }
+}
+@keyframes hm-cajon-entra {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* =====================================================================
+   PIE PÚBLICO (src/components/commons/Footer.tsx)
+   Tinta, la palabra INAKAT enorme cortada por el borde y los dos arcos.
+   ===================================================================== */
+.hm-pie {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  background: var(--ink);
+  color: #fff;
+  /* La línea de horizonte: cuando la sección de encima también es tinta (el
+     cierre de la portada), sus arcos «crecen desde el suelo» y sin esta línea
+     quedaban cortados en el aire. Con ella, aterrizan. */
+  border-top: 1px solid rgb(255 255 255 / 0.14);
+  padding-top: clamp(4rem, 9vw, 7rem);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+}
+.hm-pie__arco {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: 0;
+  aspect-ratio: 2 / 1;
+  width: min(150vw, 2200px);
+  margin-left: calc(min(150vw, 2200px) / -2);
+  border: 2px solid rgb(159 187 47 / 0.3);
+  border-bottom: 0;
+  border-radius: 999vmax 999vmax 0 0;
+  pointer-events: none;
+}
+.hm-pie__arco--b {
+  width: min(96vw, 1400px);
+  margin-left: calc(min(96vw, 1400px) / -2);
+  border-color: rgb(244 134 2 / 0.4);
+}
+.hm-pie__rejilla {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  gap: clamp(2rem, 5vw, 4rem);
+}
+.hm-pie__marca img {
+  width: 132px;
+  height: auto;
+}
+.hm-pie__lema {
+  margin: 1.25rem 0 0;
+  max-width: 22rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.6rem);
+  line-height: 1.25;
+  color: rgb(255 255 255 / 0.92);
+}
+.hm-pie__titulo {
+  margin: 0 0 1rem;
+  font-family: var(--disp);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lime);
+}
+.hm-pie__lista {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hm-pie__lista a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2rem;
+  color: rgb(255 255 255 / 0.82);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+.hm-pie__lista a:hover {
+  color: #fff;
+  text-decoration-color: var(--lime);
+}
+.hm-pie__lista svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+.hm-pie__dato {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.68);
+}
+.hm-pie__redes {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+.hm-pie__redes a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 0.3);
+  color: #fff;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.hm-pie__redes a:hover {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--ink);
+}
+.hm-pie__redes svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+.hm-pie__base {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin-top: clamp(3rem, 7vw, 5rem);
+  padding-block: 1.25rem;
+  border-top: 1px solid rgb(255 255 255 / 0.14);
+  font-size: 0.875rem;
+  color: rgb(255 255 255 / 0.7);
+}
+.hm-pie__base p {
+  margin: 0;
+}
+/* La palabra enorme, cortada por el borde inferior. Decorativa (aria-hidden).
+   El corte es un margen negativo (el pie recorta con overflow: clip), NO un
+   transform: en reposo —sin JS, con movimiento reducido— la palabra no lleva
+   transform, y la sonda de sitio-capas no la da por «sin revelar» en cada
+   página pública. 0.19em = el 24 % de su caja (line-height 0.78). */
+.hm-pie__palabra {
+  display: block;
+  margin: clamp(0.5rem, 2vw, 1.5rem) 0 -0.19em;
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: clamp(6rem, 27vw, 27rem);
+  line-height: 0.78;
+  letter-spacing: -0.06em;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--teal);
+  user-select: none;
+  pointer-events: none;
+}
+.hm-pie :focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+@media (max-width: 900px) {
+  .hm-pie__rejilla {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hm-pie__marca {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .hm-pie__rejilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* =====================================================================
+   MOVIMIENTO LIGADO AL SCROLL (mejora progresiva)
+   ===================================================================== */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hm-progress {
+      animation: hm-grow linear both;
+      animation-timeline: scroll(root);
+    }
+
+    /* revelado genérico: sube y aparece al entrar en pantalla */
+    .hm-rv {
+      animation: hm-rv linear both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 75%;
+    }
+
+    /* máscara ligada al scroll: <span class="hm-mask"><span>renglón</span></span> */
+    .hm-mask {
+      display: block;
+      overflow: hidden;
+      padding-block: 0.12em;
+      margin-block: -0.12em;
+    }
+    .hm-mask > span {
+      display: block;
+      animation: hm-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 28%;
+    }
+
+    /* pie: la palabra sube desde el borde y los arcos crecen al llegar */
+    .hm-pie {
+      view-timeline-name: --hm-pie;
+    }
+    .hm-pie__palabra {
+      animation: hm-pie-palabra linear both;
+      animation-timeline: --hm-pie;
+      animation-range: entry 0% entry 100%;
+    }
+    .hm-pie__arco {
+      animation: hm-pie-arco linear both;
+      animation-timeline: --hm-pie;
+      animation-range: entry 0% entry 100%;
+    }
+  }
+}
+
+@keyframes hm-pie-palabra {
+  from {
+    transform: translateY(70%);
+  }
+}
+@keyframes hm-pie-arco {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes hm-grow {
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes hm-rv {
+  from {
+    opacity: 0;
+    transform: translateY(44px);
+  }
+}
+
+/* Movimiento reducido: la regla global de globals.css acorta duraciones; las
+   entradas se apagan aquí EXPLÍCITAMENTE para que el estado sea el final. */
+@media (prefers-reduced-motion: reduce) {
+  .hm--js .hm-line > span,
+  .hm--js .hm-entra {
+    animation: none !important;
+  }
+}
