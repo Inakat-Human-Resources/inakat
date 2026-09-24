@@ -2,23 +2,59 @@
 
 'use client';
 
+/**
+ * Candidatos interesados: postulaciones que llegaron directamente desde la
+ * bolsa de trabajo (/talents) y siguen pendientes. El admin decide con cada
+ * una: meterla al proceso, descartarla o archivarla (PUT
+ * /api/admin/direct-applications).
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md) con forma de BANDEJA: cada
+ * postulación es una ficha legible (quién, a qué vacante, con qué carta) y sus
+ * tres decisiones a mano (en el móvil, «Meter al proceso» a la vista y
+ * Descartar/Archivar en el «…» de la ficha). Es de las pocas listas que no son
+ * tabla: la carta de presentación no cabe en una celda y es lo que se lee para
+ * decidir.
+ *
+ * La lógica —la URL del CV que sólo se enlaza si es http(s) (ADM-017), la
+ * vacante sin dueño (ADM-018), la postulación que otra persona ya movió (409,
+ * ADM-039)— es la de siempre; sólo cambió la presentación.
+ *
+ * Paginación: la API devuelve de 200 en 200 con `pagination.total`. La
+ * primera página se pide igual que siempre (sin parámetros); el contador dice
+ * el total del servidor y, si hay más de una página, se ofrecen las demás
+ * (?page=N).
+ */
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
-  Inbox,
-  User,
-  Mail,
-  Phone,
+  AlertCircle,
+  AlertTriangle,
+  Archive,
+  ArrowRight,
   Briefcase,
   Calendar,
-  FileText,
   CheckCircle,
-  XCircle,
-  Archive,
-  AlertCircle,
-  ExternalLink
+  ExternalLink,
+  FileText,
+  Mail,
+  Phone,
+  UserCheck,
+  XCircle
 } from 'lucide-react';
 import { isSafeHttpUrl } from '@/lib/sanitize';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import EmptyState from '@/components/ui/EmptyState';
+import Button, { clasesBoton } from '@/components/ui/Button';
+import Avatar from '@/components/ui/Avatar';
+import MenuAcciones from '@/components/ui/MenuAcciones';
+import Toast from '@/components/ui/Toast';
+import Pagination, { type PaginacionApi } from '@/components/ui/Pagination';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
+import { fechaHora } from '@/lib/fechas';
 
 /**
  * `cvUrl` llega de POST /api/applications, que es público y no valida el
@@ -78,15 +114,21 @@ export default function DirectApplicationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  // Paginación del servidor (buildPaginatedResponse): página pedida y bloque `pagination`.
+  const [pagina, setPagina] = useState(1);
+  const [paginacion, setPaginacion] = useState<PaginacionApi | null>(null);
 
   useEffect(() => {
     fetchApplications();
   }, []);
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (paginaPedida: number = pagina) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/direct-applications');
+      // La primera página, con la llamada de siempre; las demás, con ?page=N.
+      const response = await fetch(
+        paginaPedida > 1 ? `/api/admin/direct-applications?page=${paginaPedida}` : '/api/admin/direct-applications'
+      );
 
       if (response.status === 401) {
         router.push('/login?redirect=/admin/direct-applications');
@@ -102,6 +144,7 @@ export default function DirectApplicationsPage() {
 
       if (result.success) {
         setApplications(result.data);
+        setPaginacion(result.pagination ?? null);
       } else {
         setError(result.error || 'Error al cargar aplicaciones');
       }
@@ -139,8 +182,9 @@ export default function DirectApplicationsPage() {
       const result = await response.json();
 
       if (result.success) {
-        // Remover la aplicación de la lista
+        // Remover la aplicación de la lista (y del total del servidor)
         setApplications((prev) => prev.filter((app) => app.id !== applicationId));
+        setPaginacion((prev) => (prev ? { ...prev, total: Math.max(0, prev.total - 1) } : prev));
         // Mostrar warning si la vacante no tiene reclutador asignado
         setNotification({
           type: result.needsAssignment ? 'error' : 'success',
@@ -164,243 +208,295 @@ export default function DirectApplicationsPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Fecha con hora del panel (src/lib/fechas): «23 sep 2026, 18:22».
+  const formatDate = (dateString: string) => fechaHora(dateString);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-button-orange mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando aplicaciones...</p>
-        </div>
-      </div>
-    );
+  // ---------------------------------------------------------------------------
+  // Presentación
+  // ---------------------------------------------------------------------------
+  const cabecera = (
+    <PageHeader
+      antetitulo="Reclutamiento"
+      titulo="Candidatos interesados"
+      remate="por revisar"
+      descripcion="Personas que se postularon directamente desde la bolsa de trabajo y esperan a que alguien las revise."
+    />
+  );
+
+  // Esqueleto sólo en la primera carga: al recargar tras un 409 la bandeja
+  // sigue a la vista (y el aviso con ella).
+  if (loading && applications.length === 0) {
+    return <SkeletonPagina conCifras={false} />;
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-custom-beige">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/admin')}
-            className="px-6 py-2 bg-button-orange text-white rounded-lg hover:bg-opacity-90"
-          >
-            Volver al Panel
-          </button>
+      <>
+        {cabecera}
+        <div role="alert" className="rounded-xl border border-danger/30 bg-danger-tint px-5 py-5">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-none text-danger" aria-hidden="true" />
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-semibold text-danger-dark">No se pudo abrir la bandeja</h2>
+              <p className="mt-1 text-sm text-danger-dark">{error}</p>
+              <Button variante="contorno" tamano="sm" className="mt-4" onClick={() => router.push('/admin')}>
+                Volver al panel
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
+  // El total del servidor (todas las pendientes); sin él, las que hay a la vista.
+  const total = Math.max(paginacion?.total ?? 0, applications.length);
+  const irAPagina = (nueva: number) => {
+    setPagina(nueva);
+    fetchApplications(nueva);
+  };
+
   return (
-    <div className="min-h-screen bg-custom-beige py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <div className="flex items-center gap-2 md:gap-3 mb-2">
-            <Inbox className="w-6 h-6 md:w-8 md:h-8 text-button-orange" />
-            <h1 className="text-2xl md:text-3xl font-bold text-title-dark">
-              Aplicaciones Directas
-            </h1>
-          </div>
-          <p className="text-gray-600 text-sm md:text-base">
-            Candidatos que aplicaron directamente desde /talents y están
-            pendientes de revisión
-          </p>
-        </div>
+    <>
+      {cabecera}
 
-        {/* Notificación */}
-        {notification.type && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
-              notification.type === 'success'
-                ? 'bg-green-100 text-green-800 border border-green-300'
-                : 'bg-red-100 text-red-800 border border-red-300'
-            }`}
-          >
-            <span>{notification.message}</span>
-            <button
-              onClick={() => setNotification({ type: null, message: '' })}
-              className="ml-4 hover:opacity-70 text-xl"
-            >
-              ×
-            </button>
-          </div>
-        )}
+      {/* Resultado de cada decisión: aviso flotante arriba. Un error (o una
+          vacante sin reclutador) se queda hasta cerrarlo; un acierto se va solo. */}
+      <Toast
+        tono={notification.type === 'success' ? 'exito' : 'error'}
+        mensaje={notification.type ? notification.message : null}
+        alCerrar={() => setNotification({ type: null, message: '' })}
+        duracion={notification.type === 'success' ? 6000 : 0}
+      />
 
-        {/* Contador */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm p-4 inline-block">
-          <span className="text-2xl font-bold text-button-orange">
-            {applications.length}
+      <Card
+        titulo={
+          <span className="inline-flex items-center gap-2">
+            Pendientes de revisar
+            <span className="rounded-full bg-orange-tint px-2 py-0.5 font-display text-xs font-semibold tabular-nums text-orange-dark">
+              {total}
+            </span>
           </span>
-          <span className="text-gray-600 ml-2">
-            aplicaciones pendientes de revisar
-          </span>
-        </div>
-
-        {/* Lista de Aplicaciones */}
+        }
+        descripcion={
+          total === 0
+            ? 'Nada en la bandeja.'
+            : `${total} ${total === 1 ? 'aplicación pendiente' : 'aplicaciones pendientes'} de revisar. Mete al proceso, descarta o archiva cada una.`
+        }
+        sinRelleno
+      >
         {applications.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <Inbox className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
-              No hay aplicaciones pendientes
-            </h3>
-            <p className="text-gray-500">
-              Todas las aplicaciones directas han sido procesadas
-            </p>
-          </div>
+          <EmptyState
+            frase="Bandeja limpia."
+            titulo="No hay aplicaciones pendientes"
+            descripcion="Todas las aplicaciones directas han sido procesadas."
+          />
         ) : (
-          <div className="space-y-4">
-            {applications.map((app) => (
-              <div
-                key={app.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
-              >
-                <div className="p-4 md:p-6">
-                  {/* Encabezado de la aplicación */}
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-                    <div>
-                      {/* Info del candidato */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {app.candidateName}
-                        </h3>
-                      </div>
-                      <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Mail className="w-4 h-4" />
-                          <a
-                            href={`mailto:${app.candidateEmail}`}
-                            className="text-blue-600 hover:underline"
+          <ul className="divide-y divide-line">
+            {applications.map((app) => {
+              const cv = app.cvUrl ? ensureUrl(app.cvUrl) : undefined;
+              const ocupada = processingId === app.id;
+              const idTitulo = `postulacion-${app.id}`;
+              return (
+                <li key={app.id}>
+                  <article
+                    aria-labelledby={idTitulo}
+                    aria-busy={ocupada || undefined}
+                    className={cn('px-5 py-5 transition-opacity duration-150', ocupada && 'opacity-60')}
+                  >
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+                      {/* Quién, a qué y con qué carta */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-3">
+                          <Avatar nombre={app.candidateName} email={app.candidateEmail} />
+                          <div className="min-w-0 flex-1">
+                            <h3 id={idTitulo} className="font-display text-base font-semibold leading-snug text-ink">
+                              {app.candidateName}
+                            </h3>
+                            <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-muted">
+                              <a
+                                href={`mailto:${app.candidateEmail}`}
+                                className="inline-flex min-w-0 items-center gap-1 rounded text-teal hover:text-teal-dark hover:underline"
+                              >
+                                <Mail size={14} className="flex-none" aria-hidden="true" />
+                                <span className="truncate">{app.candidateEmail}</span>
+                              </a>
+                              {app.candidatePhone && (
+                                <a
+                                  href={`tel:${app.candidatePhone}`}
+                                  className="inline-flex items-center gap-1 rounded text-teal hover:text-teal-dark hover:underline"
+                                >
+                                  <Phone size={14} aria-hidden="true" />
+                                  {app.candidatePhone}
+                                </a>
+                              )}
+                              <span className="inline-flex items-center gap-1 tabular-nums">
+                                <Calendar size={14} aria-hidden="true" />
+                                <span className="sr-only">Recibida el </span>
+                                {formatDate(app.createdAt)}
+                              </span>
+                            </p>
+                          </div>
+                          {/* Bajo lg, las dos decisiones que no avanzan van en el
+                              «…» de la ficha: así «Ver CV» y «Meter al proceso»
+                              caben en una fila y la ficha no ocupa una pantalla.
+                              Desde lg están a la vista en la columna de la derecha. */}
+                          <MenuAcciones
+                            etiqueta={`Más decisiones sobre ${app.candidateName}`}
+                            className="-mr-1.5 -mt-1 flex-none lg:hidden"
+                            opciones={[
+                              {
+                                id: 'descartar',
+                                etiqueta: 'Descartar',
+                                icono: XCircle,
+                                peligro: true,
+                                // Lo mismo que el botón deshabilitado mientras se procesa.
+                                alElegir: () => {
+                                  if (!ocupada) handleStatusChange(app.id, 'discarded');
+                                }
+                              },
+                              {
+                                id: 'archivar',
+                                etiqueta: 'Archivar',
+                                icono: Archive,
+                                alElegir: () => {
+                                  if (!ocupada) handleStatusChange(app.id, 'archived');
+                                }
+                              }
+                            ]}
+                          />
+                        </div>
+
+                        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-line bg-paper/60 px-3.5 py-3">
+                            <dt className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                              <Briefcase size={13} aria-hidden="true" />
+                              Se postuló a
+                            </dt>
+                            <dd className="mt-1 min-w-0">
+                              <p className="font-semibold leading-snug text-ink">{app.job.title}</p>
+                              <p className="text-[13px] text-ink-muted">
+                                {nombreEmpresa(app)} · {app.job.location}
+                              </p>
+                            </dd>
+                          </div>
+
+                          {/* Indicador de asignación de reclutador */}
+                          <div
+                            className={cn(
+                              'rounded-lg border px-3.5 py-3',
+                              !app.job.assignment ? 'border-orange/40 bg-orange-tint/60' : 'border-line bg-paper/60'
+                            )}
                           >
-                            {app.candidateEmail}
-                          </a>
-                        </span>
-                        {app.candidatePhone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-4 h-4" />
-                            <a
-                              href={`tel:${app.candidatePhone}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {app.candidatePhone}
-                            </a>
-                          </span>
+                            <dt className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                              <UserCheck size={13} aria-hidden="true" />
+                              Reclutador
+                            </dt>
+                            <dd className="mt-1 text-sm">
+                              {!app.job.assignment ? (
+                                <span className="flex flex-col items-start gap-1">
+                                  <span className="inline-flex items-start gap-1.5 font-medium text-orange-dark">
+                                    <AlertTriangle size={15} className="mt-0.5 flex-none" aria-hidden="true" />
+                                    Esta vacante no tiene reclutador asignado.
+                                  </span>
+                                  <Link
+                                    href="/admin/assign-candidates"
+                                    className="inline-flex items-center gap-1 rounded font-semibold text-teal hover:text-teal-dark hover:underline"
+                                  >
+                                    Asignar ahora
+                                    <ArrowRight size={14} aria-hidden="true" />
+                                  </Link>
+                                </span>
+                              ) : app.job.assignment.recruiter ? (
+                                <span className="font-medium text-ink">
+                                  {app.job.assignment.recruiter.nombre} {app.job.assignment.recruiter.apellidoPaterno}
+                                </span>
+                              ) : (
+                                <span className="text-ink-muted">Sin reclutador en el equipo</span>
+                              )}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {/* Carta de presentación: la voz del candidato */}
+                        {app.coverLetter && (
+                          <figure className="mt-4">
+                            <figcaption className="text-xs font-medium text-ink-muted">Carta de presentación</figcaption>
+                            <blockquote className="mt-1.5 border-l-2 border-teal/40 pl-3.5 text-sm leading-relaxed text-ink">
+                              {app.coverLetter.length > 300
+                                ? `${app.coverLetter.substring(0, 300)}...`
+                                : app.coverLetter}
+                            </blockquote>
+                          </figure>
                         )}
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {formatDate(app.createdAt)}
-                        </span>
+                      </div>
+
+                      {/* Decisiones: la de avanzar primero, la que no se deshace al
+                          final. Bajo lg: «Ver CV» y «Meter al proceso» en una
+                          fila (Descartar y Archivar, en el «…» de arriba); «Ver
+                          CV» a su ancho y el primario con el resto, para que a
+                          360 px quepa sin cortarse. Desde lg, las cuatro en columna. */}
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 sm:max-w-md lg:flex lg:w-52 lg:max-w-none lg:flex-none lg:flex-col">
+                        {cv && (
+                          <a
+                            href={cv}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(clasesBoton({ variante: 'contorno', tamano: 'sm' }), 'lg:justify-start')}
+                          >
+                            <FileText aria-hidden="true" />
+                            Ver CV
+                            <span className="sr-only"> de {app.candidateName} (se abre en otra pestaña)</span>
+                            <ExternalLink className="ml-auto text-ink-muted" aria-hidden="true" />
+                          </a>
+                        )}
+                        <Button
+                          variante="secundario"
+                          tamano="sm"
+                          icono={CheckCircle}
+                          onClick={() => handleStatusChange(app.id, 'reviewing')}
+                          disabled={ocupada}
+                          // Sin CV, el primario ocupa la fila entera.
+                          className={cn('min-w-0 lg:justify-start', !cv && 'col-span-2')}
+                        >
+                          Meter al proceso
+                          <span className="sr-only"> a {app.candidateName}</span>
+                        </Button>
+                        <Button
+                          variante="contorno"
+                          tamano="sm"
+                          icono={XCircle}
+                          onClick={() => handleStatusChange(app.id, 'discarded')}
+                          disabled={ocupada}
+                          className="hidden text-danger hover:border-danger hover:bg-danger-tint lg:inline-flex lg:justify-start"
+                        >
+                          Descartar
+                          <span className="sr-only"> a {app.candidateName}</span>
+                        </Button>
+                        <Button
+                          variante="fantasma"
+                          tamano="sm"
+                          icono={Archive}
+                          onClick={() => handleStatusChange(app.id, 'archived')}
+                          disabled={ocupada}
+                          className="hidden lg:inline-flex lg:justify-start"
+                        >
+                          Archivar
+                          <span className="sr-only"> a {app.candidateName}</span>
+                        </Button>
                       </div>
                     </div>
-
-                    {/* CV Link */}
-                    {app.cvUrl && ensureUrl(app.cvUrl) && (
-                      <a
-                        href={ensureUrl(app.cvUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Ver CV
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Info de la vacante */}
-                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Briefcase className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-500">Aplicó a:</span>
-                    </div>
-                    <p className="font-semibold text-gray-900">
-                      {app.job.title}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {nombreEmpresa(app)}{' '}
-                      • {app.job.location}
-                    </p>
-                  </div>
-
-                  {/* Indicador de asignación de reclutador */}
-                  {!app.job.assignment ? (
-                    <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-4 flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-                      <span className="text-sm text-yellow-800">
-                        ⚠️ Esta vacante no tiene reclutador asignado.{' '}
-                        <a href="/admin/assign-candidates" className="underline font-semibold hover:text-yellow-900">
-                          Asignar ahora →
-                        </a>
-                      </span>
-                    </div>
-                  ) : app.job.assignment.recruiter ? (
-                    <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      <span>Reclutador asignado: <span className="font-medium text-gray-700">{app.job.assignment.recruiter.nombre} {app.job.assignment.recruiter.apellidoPaterno}</span></span>
-                    </div>
-                  ) : null}
-
-                  {/* Carta de presentación */}
-                  {app.coverLetter && (
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-1">
-                        Carta de presentación:
-                      </p>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {app.coverLetter.length > 300
-                          ? `${app.coverLetter.substring(0, 300)}...`
-                          : app.coverLetter}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Botones de acción */}
-                  <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 pt-4 border-t border-gray-200">
-                    <button
-                      onClick={() => handleStatusChange(app.id, 'reviewing')}
-                      disabled={processingId === app.id}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Meter al proceso
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(app.id, 'discarded')}
-                      disabled={processingId === app.id}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Descartar
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(app.id, 'archived')}
-                      disabled={processingId === app.id}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                    >
-                      <Archive className="w-4 h-4" />
-                      Archivar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
-    </div>
+        {/* Con una sola página no se pinta. */}
+        {paginacion && (
+          <Pagination pagination={paginacion} alCambiar={irAPagina} etiqueta="aplicaciones pendientes" />
+        )}
+      </Card>
+    </>
   );
 }

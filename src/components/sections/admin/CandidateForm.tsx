@@ -2,26 +2,54 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+/**
+ * Alta («inyectar») y edición de un candidato del banco, desde el panel de
+ * administración.
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md): Modal accesible + pestañas (Tabs)
+ * con el MISMO estado de siempre (`activeTab`), los mismos campos, las mismas
+ * validaciones de handleSubmit y el mismo cuerpo hacia la misma API. Pestañas
+ * y no pasos: el admin salta directo a «Documentos» o guarda sólo los datos
+ * personales, y el botón de guardar sirve desde cualquier pestaña (como antes).
+ *
+ * Presentación nueva, sin tocar la lógica:
+ * - el error de handleSubmit se sigue pintando arriba (role="alert") y además
+ *   marca el campo al que se refiere y le lleva el foco;
+ * - el enlace de un documento es siempre editable (antes, al escribir la
+ *   primera letra el campo se sustituía por «Enlace no válido» y sólo se podía
+ *   pegar la URL de una vez);
+ * - la foto rota muestra el icono en vez del de imagen rota del navegador.
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  X,
   Plus,
-  Trash2,
   User,
+  UserPlus,
+  UserPen,
   GraduationCap,
   Briefcase,
   Link as LinkIcon,
+  Linkedin,
   Save,
-  Loader2,
-  ExternalLink,
+  Search,
   FileText,
-  Upload,
-  Eye,
-  EyeOff,
   KeyRound,
-  CheckCircle
+  CheckCircle,
+  AlertCircle,
+  ExternalLink,
+  X
 } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import FormField, { Input, Select, Textarea, Checkbox } from '@/components/ui/FormField';
+import Button, { ButtonLink } from '@/components/ui/Button';
+import CampoContrasena from '@/components/ui/CampoContrasena';
+import SelectorArchivo from '@/components/ui/SelectorArchivo';
+import TarjetaRepetible from '@/components/ui/TarjetaRepetible';
+import EmptyState from '@/components/ui/EmptyState';
+import { Badge } from '@/components/ui/Badge';
+import { cn } from '@/lib/utils';
 
 interface Experience {
   id?: number;
@@ -72,6 +100,9 @@ const ESTATUS_EDUCACION_POR_DEFECTO = 'Terminado';
 /** Id del <form>: el botón de guardar vive fuera de él, en el pie del modal. */
 const FORM_ID = 'candidate-form';
 
+/** Prefijo de ids de pestañas y paneles. */
+const ID_PESTANAS = 'form-candidato';
+
 /**
  * ¿Es una URL http(s) absoluta? Misma regla que isSafeHttpUrl
  * (src/lib/sanitize.ts). Estas URLs acaban como `href` que abren reclutadores,
@@ -88,6 +119,27 @@ const esUrlHttp = (valor: string): boolean => {
 
 /** Formato mínimo de correo (el navegador no lo valida: ver FORM_ID). */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Sólo presentación: ¿lo escrito todavía puede ser el principio de
+ * «https://» o «http://»? Así el aviso de enlace no válido no salta mientras
+ * se teclea el esquema.
+ */
+const empiezaUnEsquema = (valor: string) => {
+  const v = valor.trim().toLowerCase();
+  return 'https://'.startsWith(v) || 'http://'.startsWith(v);
+};
+
+/** Título de un bloque del formulario (h3: el h2 es el título del modal). */
+function TituloBloque({ icono: Icono, children, id }: { icono: typeof User; children: React.ReactNode; id: string }) {
+  return (
+    <h3 id={id} className="mb-4 flex items-center gap-2 font-display text-sm font-semibold text-ink">
+      <Icono size={16} className="text-teal" aria-hidden="true" />
+      {children}
+    </h3>
+  );
+}
+
 
 const CandidateForm = ({
   isOpen,
@@ -146,6 +198,12 @@ const CandidateForm = ({
   const [resetSuccess, setResetSuccess] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
 
+  // Sólo presentación: la URL de foto que no se pudo pintar (se guarda la URL,
+  // no un booleano, para reintentar si llega otra).
+  const [fotoFallida, setFotoFallida] = useState<string | null>(null);
+  const nombreRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
   // Opciones.
   // ADM-024: los perfiles salen del catálogo de especialidades (/admin/specialties).
   // Antes era una lista fija de 7 nombres: una especialidad nueva ("Marketing")
@@ -181,7 +239,7 @@ const CandidateForm = ({
 
   const seniorities = ['Practicante', 'Jr', 'Middle', 'Sr', 'Director'];
   const sources = [
-    { value: 'manual', label: 'Ingreso Manual' },
+    { value: 'manual', label: 'Ingreso manual' },
     { value: 'linkedin', label: 'LinkedIn' },
     { value: 'occ', label: 'OCC' },
     { value: 'referido', label: 'Referido' }
@@ -613,1022 +671,867 @@ const CandidateForm = ({
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Presentación
+  // ---------------------------------------------------------------------------
+
+  // ¿A qué campo se refiere el error de handleSubmit? (sólo para marcarlo; el
+  // mensaje completo se sigue pintando arriba)
+  const errorNombre = error === 'Nombre y apellido paterno son obligatorios.';
+  const errorEmail = error === 'Escribe un email válido.';
+  const errorContrasena = error === 'La contraseña debe tener al menos 8 caracteres';
+  const errorEnlace = (etiqueta: string) => error.startsWith(`${etiqueta}:`);
+  const errorDocumento = (doc: Document) =>
+    !!doc.name && error === `El documento "${doc.name}" no tiene un enlace http(s) válido.`;
+
+  // Con un error nuevo, el foco va al primer campo marcado (si lo hay): el
+  // lector anuncia el mensaje y la persona puede corregir sin buscarlo. Sólo
+  // cuando CAMBIA el error: cambiar de pestaña no debe robar el foco.
+  useEffect(() => {
+    if (!error) return;
+    const t = window.setTimeout(() => {
+      formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [error]);
+
+  const cerrar = () => {
+    resetForm();
+    onClose();
+  };
+
+  const nombreEdicion = candidateToEdit
+    ? [candidateToEdit.nombre, candidateToEdit.apellidoPaterno, candidateToEdit.apellidoMaterno].filter(Boolean).join(' ')
+    : '';
+
+  const tieneCuenta = Boolean(candidateToEdit?.userId || resetSuccess);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b bg-gray-50">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {candidateToEdit
-                ? 'Editar Candidato'
-                : 'Inyectar Nuevo Candidato'}
-            </h2>
-            <p className="text-gray-600 text-sm mt-1">
-              {candidateToEdit
-                ? 'Modifica los datos del candidato'
-                : 'Agrega un candidato manualmente desde LinkedIn, OCC, etc.'}
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              resetForm();
-              onClose();
-            }}
-            aria-label="Cerrar"
-            className="text-gray-400 hover:text-gray-600 p-2"
+    <Modal
+      abierto={isOpen}
+      alCerrar={cerrar}
+      tamano="lg"
+      // Un formulario a medias no se pierde por pulsar fuera (antes tampoco).
+      cerrarAlPulsarFondo={false}
+      focoInicial={nombreRef}
+      iconoTitulo={
+        candidateToEdit ? (
+          <UserPen size={20} className="flex-none text-teal" aria-hidden="true" />
+        ) : (
+          <UserPlus size={20} className="flex-none text-teal" aria-hidden="true" />
+        )
+      }
+      titulo={candidateToEdit ? 'Editar candidato' : 'Inyectar nuevo candidato'}
+      subtitulo={
+        candidateToEdit ? (
+          <span className="font-medium text-ink">{nombreEdicion}</span>
+        ) : undefined
+      }
+      descripcion={
+        candidateToEdit
+          ? 'Modifica los datos del candidato.'
+          : 'Agrega un candidato manualmente desde LinkedIn, OCC, etc.'
+      }
+      claseCuerpo="pt-0"
+      pie={
+        <>
+          <Button variante="contorno" onClick={cerrar}>
+            Cancelar
+          </Button>
+          {/* Botón de envío real del <form> (ADM-032): Enter y clic pasan por
+              onSubmit y por la validación de handleSubmit. */}
+          <Button
+            type="submit"
+            form={FORM_ID}
+            icono={Save}
+            cargando={isSubmitting}
+            textoCargando="Guardando…"
           >
-            <X size={24} />
-          </button>
-        </div>
+            {candidateToEdit ? 'Actualizar' : 'Guardar candidato'}
+          </Button>
+        </>
+      }
+    >
+      {/* Pestañas fijas arriba del cuerpo mientras se baja por el formulario */}
+      <div className="sticky top-0 z-10 -mx-5 bg-white px-5 sm:-mx-6 sm:px-6">
+        <Tabs
+          idBase={ID_PESTANAS}
+          etiqueta="Secciones del candidato"
+          activa={activeTab}
+          alCambiar={setActiveTab}
+          pestanas={[
+            { id: 'personal', etiqueta: 'Datos personales' },
+            { id: 'education', etiqueta: 'Educación', contador: educations.length > 0 ? educations.length : undefined },
+            { id: 'experience', etiqueta: 'Experiencia', contador: experiences.length > 0 ? experiences.length : undefined },
+            { id: 'links', etiqueta: 'Enlaces' },
+            { id: 'documents', etiqueta: 'Documentos', contador: documents.length > 0 ? documents.length : undefined }
+          ]}
+        />
+      </div>
 
-        {/* Tabs */}
-        <div className="flex border-b bg-gray-50">
-          <button
-            onClick={() => setActiveTab('personal')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium ${
-              activeTab === 'personal'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
+      <form ref={formRef} id={FORM_ID} onSubmit={handleSubmit} noValidate>
+        {error && (
+          <div
+            role="alert"
+            className="mt-5 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm text-danger-dark"
           >
-            <User size={18} />
-            Personal
-          </button>
-          <button
-            onClick={() => setActiveTab('education')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium ${
-              activeTab === 'education'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <GraduationCap size={18} />
-            Educación
-            {educations.length > 0 && (
-              <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full">
-                {educations.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('experience')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium ${
-              activeTab === 'experience'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Briefcase size={18} />
-            Experiencia
-            {experiences.length > 0 && (
-              <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full">
-                {experiences.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('links')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium ${
-              activeTab === 'links'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <LinkIcon size={18} />
-            Links
-          </button>
-          <button
-            onClick={() => setActiveTab('documents')}
-            className={`flex items-center gap-2 px-6 py-3 font-medium ${
-              activeTab === 'documents'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <FileText size={18} />
-            Documentos
-            {documents.length > 0 && (
-              <span className="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded-full">
-                {documents.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Form Content */}
-        <form id={FORM_ID} onSubmit={handleSubmit} noValidate className="flex-1 overflow-y-auto p-6">
-          {error && (
-            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              <p>{error}</p>
-              {existingCandidateId && (
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <Link
-                    href={`/admin/candidates?search=${encodeURIComponent(email)}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                    onClick={onClose}
-                  >
-                    <ExternalLink size={14} />
-                    Buscar en Banco de Candidatos
-                  </Link>
-                  <Link
-                    href="/admin/assign-candidates"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-                    onClick={onClose}
-                  >
-                    <ExternalLink size={14} />
-                    Ir a Asignar Candidatos
-                  </Link>
-                </div>
-              )}
+            <div className="flex items-start gap-2">
+              <AlertCircle size={18} className="mt-px flex-none" aria-hidden="true" />
+              <p className="font-medium">{error}</p>
             </div>
-          )}
+            {existingCandidateId && (
+              <div className="mt-3 flex flex-wrap gap-2 pl-7">
+                <ButtonLink
+                  href={`/admin/candidates?search=${encodeURIComponent(email)}`}
+                  variante="secundario"
+                  tamano="sm"
+                  icono={Search}
+                  onClick={onClose}
+                >
+                  Buscar en el banco de candidatos
+                </ButtonLink>
+                <ButtonLink
+                  href="/admin/assign-candidates"
+                  variante="contorno"
+                  tamano="sm"
+                  icono={ExternalLink}
+                  onClick={onClose}
+                >
+                  Ir a Asignar candidatos
+                </ButtonLink>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Tab: Personal */}
-          {activeTab === 'personal' && (
-            <div className="space-y-4">
+        {/* Pestaña: datos personales */}
+        <PanelPestana idBase={ID_PESTANAS} id="personal" activa={activeTab}>
+          <div className="space-y-8">
+            <section aria-labelledby="cf-identidad" className="[overflow:visible]">
+              <TituloBloque icono={User} id="cf-identidad">
+                Identidad y contacto
+              </TituloBloque>
+
               {/* FEAT-2: Foto de perfil */}
-              <div className="flex items-center gap-4 mb-4 pb-4 border-b">
-                <div className="relative">
-                  <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
-                    {fotoUrl ? (
-                      <img src={fotoUrl} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-8 h-8 text-gray-400" />
-                    )}
-                  </div>
-                  <label className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-700 shadow-lg">
-                    {fotoUploading ? (
-                      <Loader2 className="w-4 h-4 text-white animate-spin" />
-                    ) : (
-                      <Upload className="w-4 h-4 text-white" />
-                    )}
-                    <input
-                      type="file"
+              <div className="mb-5 flex items-center gap-4 rounded-xl border border-line bg-paper/60 p-4">
+                <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-full bg-mist ring-1 ring-line">
+                  {fotoUrl && fotoFallida !== fotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fotoUrl}
+                      alt="Foto de perfil del candidato"
+                      className="h-full w-full object-cover"
+                      onError={() => setFotoFallida(fotoUrl)}
+                    />
+                  ) : (
+                    <User className="h-7 w-7 text-ink-muted" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">Foto de perfil</p>
+                  <p id="cf-foto-ayuda" className="text-[13px] text-ink-muted">
+                    JPG, PNG o WebP (máx. 2 MB)
+                    {fotoUrl && fotoFallida === fotoUrl && ' · No se pudo mostrar la vista previa.'}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {/* El <input type="file"> va dentro, oculto a la vista pero
+                        alcanzable con Tab (SelectorArchivo). */}
+                    <SelectorArchivo
                       accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
+                      aria-describedby="cf-foto-ayuda"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFotoUpload(file);
                       }}
-                      disabled={fotoUploading}
-                    />
-                  </label>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Foto de perfil</p>
-                  <p className="text-xs text-gray-500">JPG, PNG o WebP (máx 2MB)</p>
-                  {fotoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setFotoUrl('')}
-                      className="text-xs text-red-500 hover:text-red-700 mt-1"
+                      cargando={fotoUploading}
+                      textoCargando="Subiendo…"
                     >
-                      Eliminar foto
-                    </button>
-                  )}
+                      {fotoUrl ? 'Cambiar foto' : 'Subir foto'}
+                    </SelectorArchivo>
+                    {fotoUrl && (
+                      <Button
+                        variante="fantasma"
+                        tamano="sm"
+                        icono={X}
+                        className="text-danger hover:bg-danger-tint"
+                        onClick={() => setFotoUrl('')}
+                      >
+                        Eliminar foto
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Nombre *
-                  </label>
-                  <input
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <FormField
+                  etiqueta="Nombre"
+                  requerido
+                  id="cf-nombre"
+                  error={errorNombre && !nombre.trim() ? 'Escribe el nombre.' : undefined}
+                >
+                  <Input
+                    ref={nombreRef}
                     type="text"
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                    required
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Apellido Paterno *
-                  </label>
-                  <input
+                </FormField>
+                <FormField
+                  etiqueta="Apellido paterno"
+                  requerido
+                  id="cf-apellido-paterno"
+                  error={errorNombre && !apellidoPaterno.trim() ? 'Escribe el apellido paterno.' : undefined}
+                >
+                  <Input
                     type="text"
                     value={apellidoPaterno}
                     onChange={(e) => setApellidoPaterno(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                    required
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Apellido Materno
-                  </label>
-                  <input
+                </FormField>
+                <FormField etiqueta="Apellido materno" opcional id="cf-apellido-materno">
+                  <Input
                     type="text"
                     value={apellidoMaterno}
                     onChange={(e) => setApellidoMaterno(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Email *
-                  </label>
-                  <input
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  etiqueta="Email"
+                  requerido
+                  id="cf-email"
+                  error={errorEmail ? 'Revisa el formato: nombre@dominio.com' : undefined}
+                >
+                  <Input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                    required
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Teléfono
-                  </label>
-                  <input
+                </FormField>
+                <FormField etiqueta="Teléfono" opcional id="cf-telefono">
+                  <Input
                     type="tel"
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value)}
                     placeholder="81 1234 5678"
-                    className="w-full p-3 border rounded-lg"
                   />
-                </div>
-              </div>
-
-              {/* Cuenta de Acceso */}
-              <div className="border-t border-b border-gray-200 py-4 my-2">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                  <KeyRound size={16} />
-                  Cuenta de Acceso
-                </h3>
-
-                {!candidateToEdit ? (
-                  /* Nuevo candidato: campo de contraseña opcional */
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">
-                      Contraseña
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Mínimo 8 caracteres"
-                        className="w-full p-3 pr-10 border rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Opcional. Si se proporciona, el candidato podrá iniciar sesión en INAKAT con su email y esta contraseña.
-                    </p>
-                  </div>
-                ) : (
-                  /* Candidato existente: mostrar estado de cuenta */
-                  <div>
-                    {candidateToEdit.userId || resetSuccess ? (
-                      /* Tiene cuenta */
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-green-700 bg-green-50 px-3 py-2 rounded-lg">
-                          <CheckCircle size={16} />
-                          <span className="text-sm font-medium">Tiene cuenta de acceso</span>
-                        </div>
-                        {!showResetPassword ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowResetPassword(true)}
-                            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                          >
-                            <KeyRound size={14} />
-                            Resetear Contraseña
-                          </button>
-                        ) : (
-                          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">Nueva contraseña</label>
-                            <div className="relative">
-                              <input
-                                type={showResetPasswordText ? 'text' : 'password'}
-                                value={resetPassword}
-                                onChange={(e) => setResetPassword(e.target.value)}
-                                placeholder="Mínimo 8 caracteres"
-                                className="w-full p-2 pr-10 border rounded-lg text-sm"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowResetPasswordText(!showResetPasswordText)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                              >
-                                {showResetPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
-                              </button>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={handleResetPassword}
-                                disabled={resettingPassword || resetPassword.length < 8}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {resettingPassword ? (
-                                  <><Loader2 size={14} className="animate-spin" /> Guardando...</>
-                                ) : (
-                                  'Guardar'
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setShowResetPassword(false); setResetPassword(''); setShowResetPasswordText(false); }}
-                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* No tiene cuenta */
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
-                          <User size={16} />
-                          <span className="text-sm">Sin cuenta de acceso</span>
-                        </div>
-                        {!showCreateAccount ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowCreateAccount(true)}
-                            className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                          >
-                            <Plus size={14} />
-                            Crear cuenta de acceso
-                          </button>
-                        ) : (
-                          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">Contraseña para la cuenta</label>
-                            <div className="relative">
-                              <input
-                                type={showResetPasswordText ? 'text' : 'password'}
-                                value={resetPassword}
-                                onChange={(e) => setResetPassword(e.target.value)}
-                                placeholder="Mínimo 8 caracteres"
-                                className="w-full p-2 pr-10 border rounded-lg text-sm"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowResetPasswordText(!showResetPasswordText)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                              >
-                                {showResetPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
-                              </button>
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              Se creará una cuenta con el email del candidato y esta contraseña.
-                            </p>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={handleResetPassword}
-                                disabled={resettingPassword || resetPassword.length < 8}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {resettingPassword ? (
-                                  <><Loader2 size={14} className="animate-spin" /> Creando...</>
-                                ) : (
-                                  'Crear cuenta'
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setShowCreateAccount(false); setResetPassword(''); setShowResetPasswordText(false); }}
-                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Sexo
-                  </label>
-                  <select
-                    value={sexo}
-                    onChange={(e) => setSexo(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                  >
+                </FormField>
+                <FormField etiqueta="Sexo" opcional id="cf-sexo">
+                  <Select value={sexo} onChange={(e) => setSexo(e.target.value)}>
                     <option value="">Seleccionar</option>
                     <option value="M">Masculino</option>
                     <option value="F">Femenino</option>
                     <option value="Otro">Otro</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Fecha de Nacimiento
-                  </label>
-                  <input
+                  </Select>
+                </FormField>
+                <FormField etiqueta="Fecha de nacimiento" opcional id="cf-fecha-nacimiento">
+                  <Input
                     type="date"
                     value={fechaNacimiento}
                     onChange={(e) => setFechaNacimiento(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
                   />
-                </div>
+                </FormField>
               </div>
+            </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Perfil Profesional
-                  </label>
-                  <select
-                    value={profile}
-                    onChange={(e) => setProfile(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                  >
+            <section aria-labelledby="cf-profesional" className="border-t border-line pt-6 [overflow:visible]">
+              <TituloBloque icono={Briefcase} id="cf-profesional">
+                Perfil profesional
+              </TituloBloque>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <FormField etiqueta="Perfil profesional" id="cf-perfil">
+                  <Select value={profile} onChange={(e) => setProfile(e.target.value)}>
                     <option value="">Seleccionar</option>
                     {profiles.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
                     ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Nivel de Experiencia
-                  </label>
-                  <select
-                    value={seniority}
-                    onChange={(e) => setSeniority(e.target.value)}
-                    className="w-full p-3 border rounded-lg"
-                  >
+                  </Select>
+                </FormField>
+                <FormField etiqueta="Nivel de experiencia" id="cf-nivel">
+                  <Select value={seniority} onChange={(e) => setSeniority(e.target.value)}>
                     <option value="">Seleccionar</option>
                     {seniorities.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
                     ))}
-                  </select>
-                </div>
+                  </Select>
+                </FormField>
+                <FormField etiqueta="Fuente del candidato" id="cf-fuente">
+                  <Select value={source} onChange={(e) => setSource(e.target.value)}>
+                    {sources.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
               </div>
+            </section>
 
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Fuente del Candidato
-                </label>
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
+            {/* Cuenta de acceso */}
+            <section aria-labelledby="cf-cuenta" className="border-t border-line pt-6 [overflow:visible]">
+              <TituloBloque icono={KeyRound} id="cf-cuenta">
+                Cuenta de acceso
+              </TituloBloque>
+
+              {!candidateToEdit ? (
+                /* Nuevo candidato: campo de contraseña opcional */
+                <FormField
+                  etiqueta="Contraseña"
+                  opcional
+                  id="cf-password"
+                  className="sm:max-w-sm"
+                  error={errorContrasena && password ? 'Mínimo 8 caracteres.' : undefined}
+                  ayuda="Si la escribes, el candidato podrá iniciar sesión en INAKAT con su email y esta contraseña."
                 >
-                  {sources.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Carta de Presentación
-                </label>
-                <textarea
-                  value={cartaPresentacion}
-                  onChange={(e) => {
-                    if (e.target.value.length <= 1000) setCartaPresentacion(e.target.value);
-                  }}
-                  rows={4}
-                  placeholder="Breve introducción profesional del candidato..."
-                  className="w-full p-3 border rounded-lg resize-none"
-                />
-                <div className="flex justify-between items-center mt-1">
-                  <p className="text-xs text-gray-500">Visible para empresas que revisen el perfil.</p>
-                  <span className={`text-xs ${cartaPresentacion.length >= 1000 ? 'text-red-500' : 'text-gray-400'}`}>
-                    {cartaPresentacion.length}/1000
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Notas Internas
-                </label>
-                <textarea
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  rows={3}
-                  placeholder="Observaciones sobre el candidato..."
-                  className="w-full p-3 border rounded-lg resize-none"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Tab: Educación - Cards dinámicas */}
-          {activeTab === 'education' && (
-            <div className="space-y-4">
-              {educations.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <GraduationCap className="mx-auto text-gray-400 mb-2" size={40} />
-                  <p className="text-gray-500">No hay educación agregada</p>
-                  <button
-                    type="button"
-                    onClick={addEducation}
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 mx-auto"
-                  >
-                    <Plus size={18} />
-                    Agregar Educación
-                  </button>
-                </div>
+                  <CampoContrasena
+                    visible={showPassword}
+                    alAlternar={() => setShowPassword(!showPassword)}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Mínimo 8 caracteres"
+                    autoComplete="new-password"
+                  />
+                </FormField>
               ) : (
-                <>
-                  {educations.map((edu, index) => (
-                    <div key={edu.id} className="border rounded-lg p-4 bg-gray-50 relative">
-                      <button
-                        type="button"
-                        onClick={() => removeEducation(index)}
-                        className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
-                        title="Eliminar"
+                /* Candidato existente: mostrar estado de cuenta */
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {tieneCuenta ? (
+                      <Badge tono="exito" icono={CheckCircle}>
+                        Tiene cuenta de acceso
+                      </Badge>
+                    ) : (
+                      <Badge tono="neutro" icono={User}>
+                        Sin cuenta de acceso
+                      </Badge>
+                    )}
+                    {tieneCuenta && !showResetPassword && (
+                      <Button variante="fantasma" tamano="sm" icono={KeyRound} onClick={() => setShowResetPassword(true)}>
+                        Resetear contraseña
+                      </Button>
+                    )}
+                    {!tieneCuenta && !showCreateAccount && (
+                      <Button variante="fantasma" tamano="sm" icono={Plus} onClick={() => setShowCreateAccount(true)}>
+                        Crear cuenta de acceso
+                      </Button>
+                    )}
+                    {/* Región viva siempre presente: anuncia el éxito al llegar. */}
+                    <p role="status" className="text-[13px] font-medium text-lime-dark">
+                      {resetSuccess ? 'Listo: la contraseña de acceso quedó guardada.' : ''}
+                    </p>
+                  </div>
+
+                  {((tieneCuenta && showResetPassword) || (!tieneCuenta && showCreateAccount)) && (
+                    <div className="space-y-3 rounded-xl border border-line bg-paper p-4 sm:max-w-md">
+                      <FormField
+                        etiqueta={tieneCuenta ? 'Nueva contraseña' : 'Contraseña para la cuenta'}
+                        id="cf-reset-password"
+                        error={errorContrasena ? 'Mínimo 8 caracteres.' : undefined}
+                        ayuda={
+                          tieneCuenta
+                            ? 'Mínimo 8 caracteres.'
+                            : 'Se creará una cuenta con el email del candidato y esta contraseña.'
+                        }
                       >
-                        <Trash2 size={18} />
-                      </button>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Nivel de Estudios</label>
-                          <select
-                            value={edu.nivel}
-                            onChange={(e) => updateEducation(index, 'nivel', e.target.value)}
-                            className="w-full p-3 border rounded-lg"
-                          >
-                            <option value="">Seleccionar</option>
-                            <option value="Preparatoria">Preparatoria</option>
-                            <option value="Técnico">Técnico</option>
-                            <option value="Licenciatura">Licenciatura</option>
-                            <option value="Posgrado">Posgrado</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Institución</label>
-                          <input
-                            type="text"
-                            value={edu.institucion}
-                            onChange={(e) => updateEducation(index, 'institucion', e.target.value)}
-                            placeholder="Ej: UANL, Tec de Monterrey..."
-                            className="w-full p-3 border rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Carrera</label>
-                          <input
-                            type="text"
-                            value={edu.carrera}
-                            onChange={(e) => updateEducation(index, 'carrera', e.target.value)}
-                            placeholder="Ej: Ingeniería en Sistemas..."
-                            className="w-full p-3 border rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Estatus</label>
-                          <select
-                            value={edu.estatus}
-                            onChange={(e) => updateEducation(index, 'estatus', e.target.value)}
-                            className="w-full p-3 border rounded-lg"
-                          >
-                            {/* Un valor viejo (Completa/En curso/Trunca) se
-                                conserva como opción hasta que el admin lo cambie. */}
-                            {edu.estatus && !ESTATUS_EDUCACION.includes(edu.estatus) && (
-                              <option value={edu.estatus}>{edu.estatus}</option>
-                            )}
-                            {ESTATUS_EDUCACION.map((estatus) => (
-                              <option key={estatus} value={estatus}>{estatus}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Año Inicio</label>
-                          <input
-                            type="number"
-                            value={edu.añoInicio || ''}
-                            onChange={(e) => updateEducation(index, 'añoInicio', e.target.value ? parseInt(e.target.value) : null)}
-                            placeholder="Ej: 2018"
-                            className="w-full p-3 border rounded-lg"
-                            min="1970" max="2030"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold mb-1">Año Fin</label>
-                          <input
-                            type="number"
-                            value={edu.añoFin || ''}
-                            onChange={(e) => updateEducation(index, 'añoFin', e.target.value ? parseInt(e.target.value) : null)}
-                            placeholder="Ej: 2022"
-                            className="w-full p-3 border rounded-lg"
-                            min="1970" max="2030"
-                          />
-                        </div>
+                        <CampoContrasena
+                          visible={showResetPasswordText}
+                          alAlternar={() => setShowResetPasswordText(!showResetPasswordText)}
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          placeholder="Mínimo 8 caracteres"
+                          autoComplete="new-password"
+                        />
+                      </FormField>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variante="secundario"
+                          tamano="sm"
+                          onClick={handleResetPassword}
+                          disabled={resetPassword.length < 8}
+                          cargando={resettingPassword}
+                          textoCargando={tieneCuenta ? 'Guardando…' : 'Creando…'}
+                        >
+                          {tieneCuenta ? 'Guardar' : 'Crear cuenta'}
+                        </Button>
+                        <Button
+                          variante="fantasma"
+                          tamano="sm"
+                          onClick={() => {
+                            if (tieneCuenta) {
+                              setShowResetPassword(false);
+                            } else {
+                              setShowCreateAccount(false);
+                            }
+                            setResetPassword('');
+                            setShowResetPasswordText(false);
+                          }}
+                        >
+                          Cancelar
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addEducation}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-blue-400 hover:text-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Plus size={18} />
-                    Agregar otra educación
-                  </button>
-                </>
+                  )}
+                </div>
               )}
+            </section>
+
+            <section aria-labelledby="cf-presentacion" className="border-t border-line pt-6 [overflow:visible]">
+              <TituloBloque icono={FileText} id="cf-presentacion">
+                Presentación y notas
+              </TituloBloque>
+              <div className="space-y-4">
+                <FormField
+                  etiqueta="Carta de presentación"
+                  opcional
+                  id="cf-carta"
+                  ayuda={
+                    <span className="flex items-start justify-between gap-3">
+                      <span>Visible para empresas que revisen el perfil.</span>
+                      <span className={cn('flex-none tabular-nums', cartaPresentacion.length >= 1000 && 'font-medium text-danger')}>
+                        {cartaPresentacion.length}/1000
+                      </span>
+                    </span>
+                  }
+                >
+                  <Textarea
+                    value={cartaPresentacion}
+                    onChange={(e) => {
+                      if (e.target.value.length <= 1000) setCartaPresentacion(e.target.value);
+                    }}
+                    rows={4}
+                    placeholder="Breve introducción profesional del candidato…"
+                    className="resize-y"
+                  />
+                </FormField>
+                <FormField etiqueta="Notas internas" opcional id="cf-notas">
+                  <Textarea
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    rows={3}
+                    placeholder="Observaciones sobre el candidato…"
+                    className="resize-y"
+                  />
+                </FormField>
+              </div>
+            </section>
+          </div>
+        </PanelPestana>
+
+        {/* Pestaña: educación (tarjetas dinámicas) */}
+        <PanelPestana idBase={ID_PESTANAS} id="education" activa={activeTab}>
+          {educations.length === 0 ? (
+            <EmptyState
+              compacto
+              icono={GraduationCap}
+              titulo="No hay educación agregada"
+              descripcion="Agrega los estudios del candidato, del más reciente al más antiguo."
+              accion={
+                <Button variante="contorno" tamano="sm" icono={Plus} onClick={addEducation}>
+                  Agregar educación
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-[13px] text-ink-muted">
+                El primer estudio de la lista es el que se usa en el filtro por universidad del banco.
+              </p>
+              <ol className="space-y-4">
+                {educations.map((edu, index) => (
+                  <TarjetaRepetible
+                    key={edu.id}
+                    titulo={edu.carrera || `Estudio ${index + 1}`}
+                    detalle={[edu.nivel, edu.institucion].filter(Boolean).join(' · ') || undefined}
+                    etiquetaQuitar={`Eliminar estudio ${index + 1}`}
+                    alQuitar={() => removeEducation(index)}
+                  >
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FormField etiqueta="Nivel de estudios" id={`cf-edu-${edu.id}-nivel`}>
+                        <Select
+                          value={edu.nivel}
+                          onChange={(e) => updateEducation(index, 'nivel', e.target.value)}
+                        >
+                          <option value="">Seleccionar</option>
+                          {nivelesEstudio.map((nivel) => (
+                            <option key={nivel} value={nivel}>
+                              {nivel}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                      <FormField etiqueta="Institución" id={`cf-edu-${edu.id}-institucion`}>
+                        <Input
+                          type="text"
+                          value={edu.institucion}
+                          onChange={(e) => updateEducation(index, 'institucion', e.target.value)}
+                          placeholder="Ej: UANL, Tec de Monterrey…"
+                        />
+                      </FormField>
+                      <FormField etiqueta="Carrera" id={`cf-edu-${edu.id}-carrera`}>
+                        <Input
+                          type="text"
+                          value={edu.carrera}
+                          onChange={(e) => updateEducation(index, 'carrera', e.target.value)}
+                          placeholder="Ej: Ingeniería en Sistemas…"
+                        />
+                      </FormField>
+                      <FormField etiqueta="Estatus" id={`cf-edu-${edu.id}-estatus`}>
+                        <Select
+                          value={edu.estatus}
+                          onChange={(e) => updateEducation(index, 'estatus', e.target.value)}
+                        >
+                          {/* Un valor viejo (Completa/En curso/Trunca) se
+                              conserva como opción hasta que el admin lo cambie. */}
+                          {edu.estatus && !ESTATUS_EDUCACION.includes(edu.estatus) && (
+                            <option value={edu.estatus}>{edu.estatus}</option>
+                          )}
+                          {ESTATUS_EDUCACION.map((estatus) => (
+                            <option key={estatus} value={estatus}>{estatus}</option>
+                          ))}
+                        </Select>
+                      </FormField>
+                      <FormField etiqueta="Año de inicio" opcional id={`cf-edu-${edu.id}-inicio`}>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={edu.añoInicio || ''}
+                          onChange={(e) => updateEducation(index, 'añoInicio', e.target.value ? parseInt(e.target.value) : null)}
+                          placeholder="Ej: 2018"
+                          className="tabular-nums"
+                          min="1970" max="2030"
+                        />
+                      </FormField>
+                      <FormField etiqueta="Año de fin" opcional id={`cf-edu-${edu.id}-fin`}>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={edu.añoFin || ''}
+                          onChange={(e) => updateEducation(index, 'añoFin', e.target.value ? parseInt(e.target.value) : null)}
+                          placeholder="Ej: 2022"
+                          className="tabular-nums"
+                          min="1970" max="2030"
+                        />
+                      </FormField>
+                    </div>
+                  </TarjetaRepetible>
+                ))}
+              </ol>
+              <Button variante="contorno" anchoCompleto icono={Plus} className="border-dashed" onClick={addEducation}>
+                Agregar otra educación
+              </Button>
             </div>
           )}
+        </PanelPestana>
 
-          {/* Tab: Experiencia */}
-          {activeTab === 'experience' && (
+        {/* Pestaña: experiencia */}
+        <PanelPestana idBase={ID_PESTANAS} id="experience" activa={activeTab}>
+          {experiences.length === 0 ? (
+            <EmptyState
+              compacto
+              icono={Briefcase}
+              titulo="No hay experiencias agregadas"
+              descripcion="Los años de experiencia del candidato se calculan con estas fechas."
+              accion={
+                <Button variante="contorno" tamano="sm" icono={Plus} onClick={addExperience}>
+                  Agregar experiencia
+                </Button>
+              }
+            />
+          ) : (
             <div className="space-y-4">
-              {experiences.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <Briefcase className="mx-auto text-gray-400 mb-2" size={40} />
-                  <p className="text-gray-500">No hay experiencias agregadas</p>
-                  <button
-                    type="button"
-                    onClick={addExperience}
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 mx-auto"
+              <p className="text-[13px] text-ink-muted">
+                Una experiencia sin empresa, puesto o fecha de inicio no se guarda.
+              </p>
+              <ol className="space-y-4">
+                {experiences.map((exp, index) => (
+                  <TarjetaRepetible
+                    key={index}
+                    titulo={`Experiencia ${index + 1}`}
+                    detalle={[exp.puesto, exp.empresa].filter(Boolean).join(' · ') || undefined}
+                    etiquetaQuitar={`Eliminar experiencia ${index + 1}`}
+                    alQuitar={() => removeExperience(index)}
                   >
-                    <Plus size={18} />
-                    Agregar Experiencia
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {experiences.map((exp, index) => (
-                    <div
-                      key={index}
-                      className="border rounded-lg p-4 bg-gray-50"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-semibold text-gray-700">
-                          Experiencia {index + 1}
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => removeExperience(index)}
-                          className="text-red-500 hover:text-red-700 p-1"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FormField etiqueta="Empresa" requerido id={`cf-exp-${index}-empresa`}>
+                        <Input
+                          type="text"
+                          value={exp.empresa}
+                          onChange={(e) =>
+                            updateExperience(index, 'empresa', e.target.value)
+                          }
+                        />
+                      </FormField>
+                      <FormField etiqueta="Puesto" requerido id={`cf-exp-${index}-puesto`}>
+                        <Input
+                          type="text"
+                          value={exp.puesto}
+                          onChange={(e) =>
+                            updateExperience(index, 'puesto', e.target.value)
+                          }
+                        />
+                      </FormField>
+                    </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Empresa *
-                          </label>
-                          <input
-                            type="text"
-                            value={exp.empresa}
-                            onChange={(e) =>
-                              updateExperience(index, 'empresa', e.target.value)
-                            }
-                            className="w-full p-2 border rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Puesto *
-                          </label>
-                          <input
-                            type="text"
-                            value={exp.puesto}
-                            onChange={(e) =>
-                              updateExperience(index, 'puesto', e.target.value)
-                            }
-                            className="w-full p-2 border rounded-lg"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Ubicación
-                          </label>
-                          <input
-                            type="text"
-                            value={exp.ubicacion}
-                            onChange={(e) =>
-                              updateExperience(
-                                index,
-                                'ubicacion',
-                                e.target.value
-                              )
-                            }
-                            placeholder="Ciudad, País"
-                            className="w-full p-2 border rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Fecha Inicio *
-                          </label>
-                          <input
-                            type="date"
-                            value={exp.fechaInicio}
-                            onChange={(e) =>
-                              updateExperience(
-                                index,
-                                'fechaInicio',
-                                e.target.value
-                              )
-                            }
-                            className="w-full p-2 border rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Fecha Fin
-                          </label>
-                          <input
-                            type="date"
-                            value={exp.fechaFin}
-                            onChange={(e) =>
-                              updateExperience(
-                                index,
-                                'fechaFin',
-                                e.target.value
-                              )
-                            }
-                            disabled={exp.esActual}
-                            className="w-full p-2 border rounded-lg disabled:bg-gray-200"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-3">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={exp.esActual}
-                            onChange={(e) =>
-                              updateExperience(
-                                index,
-                                'esActual',
-                                e.target.checked
-                              )
-                            }
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm">Trabajo actual</span>
-                        </label>
-                      </div>
-
-                      <div className="mt-3">
-                        <label className="block text-sm font-medium mb-1">
-                          Descripción
-                        </label>
-                        <textarea
-                          value={exp.descripcion}
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <FormField etiqueta="Ubicación" opcional id={`cf-exp-${index}-ubicacion`}>
+                        <Input
+                          type="text"
+                          value={exp.ubicacion}
                           onChange={(e) =>
                             updateExperience(
                               index,
-                              'descripcion',
+                              'ubicacion',
                               e.target.value
                             )
                           }
-                          rows={2}
-                          placeholder="Responsabilidades y logros..."
-                          className="w-full p-2 border rounded-lg resize-none"
+                          placeholder="Ciudad, País"
                         />
-                      </div>
+                      </FormField>
+                      <FormField etiqueta="Fecha de inicio" requerido id={`cf-exp-${index}-inicio`}>
+                        <Input
+                          type="date"
+                          value={exp.fechaInicio}
+                          onChange={(e) =>
+                            updateExperience(
+                              index,
+                              'fechaInicio',
+                              e.target.value
+                            )
+                          }
+                        />
+                      </FormField>
+                      <FormField
+                        etiqueta="Fecha de fin"
+                        id={`cf-exp-${index}-fin`}
+                        ayuda={exp.esActual ? 'Trabajo actual: sin fecha de fin.' : undefined}
+                      >
+                        <Input
+                          type="date"
+                          value={exp.fechaFin}
+                          onChange={(e) =>
+                            updateExperience(
+                              index,
+                              'fechaFin',
+                              e.target.value
+                            )
+                          }
+                          disabled={exp.esActual}
+                        />
+                      </FormField>
                     </div>
-                  ))}
 
-                  <button
-                    type="button"
-                    onClick={addExperience}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-blue-400 hover:text-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Plus size={18} />
-                    Agregar Otra Experiencia
-                  </button>
-                </>
-              )}
+                    <Checkbox
+                      className="mt-4"
+                      id={`cf-exp-${index}-actual`}
+                      etiqueta="Trabajo actual"
+                      checked={exp.esActual}
+                      onChange={(e) =>
+                        updateExperience(
+                          index,
+                          'esActual',
+                          e.target.checked
+                        )
+                      }
+                    />
+
+                    <FormField etiqueta="Descripción" opcional id={`cf-exp-${index}-descripcion`} className="mt-4">
+                      <Textarea
+                        value={exp.descripcion}
+                        onChange={(e) =>
+                          updateExperience(
+                            index,
+                            'descripcion',
+                            e.target.value
+                          )
+                        }
+                        rows={3}
+                        placeholder="Responsabilidades y logros…"
+                        className="resize-y"
+                      />
+                    </FormField>
+                  </TarjetaRepetible>
+                ))}
+              </ol>
+
+              <Button variante="contorno" anchoCompleto icono={Plus} className="border-dashed" onClick={addExperience}>
+                Agregar otra experiencia
+              </Button>
             </div>
           )}
+        </PanelPestana>
 
-          {/* Tab: Links */}
-          {activeTab === 'links' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  URL del CV
-                </label>
-                <input
-                  type="url"
-                  value={cvUrl}
-                  onChange={(e) => setCvUrl(e.target.value)}
-                  placeholder="https://drive.google.com/..."
-                  className="w-full p-3 border rounded-lg"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Link a Google Drive, Dropbox, etc.
-                </p>
-              </div>
+        {/* Pestaña: enlaces */}
+        <PanelPestana idBase={ID_PESTANAS} id="links" activa={activeTab}>
+          <div className="space-y-4 sm:max-w-xl">
+            <FormField
+              etiqueta="URL del CV"
+              opcional
+              id="cf-cv"
+              ayuda="Enlace a Google Drive, Dropbox, etc."
+              error={errorEnlace('URL del CV') ? 'El enlace debe empezar por https:// (o http://).' : undefined}
+            >
+              <Input
+                type="url"
+                value={cvUrl}
+                onChange={(e) => setCvUrl(e.target.value)}
+                placeholder="https://drive.google.com/..."
+                prefijo={<FileText />}
+              />
+            </FormField>
 
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  LinkedIn
-                </label>
-                <input
-                  type="url"
-                  value={linkedinUrl}
-                  onChange={(e) => setLinkedinUrl(e.target.value)}
-                  placeholder="https://linkedin.com/in/..."
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
+            <FormField
+              etiqueta="LinkedIn"
+              opcional
+              id="cf-linkedin"
+              error={errorEnlace('LinkedIn') ? 'El enlace debe empezar por https:// (o http://).' : undefined}
+            >
+              <Input
+                type="url"
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                placeholder="https://linkedin.com/in/..."
+                prefijo={<Linkedin />}
+              />
+            </FormField>
 
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Portafolio
-                </label>
-                <input
-                  type="url"
-                  value={portafolioUrl}
-                  onChange={(e) => setPortafolioUrl(e.target.value)}
-                  placeholder="https://behance.net/..."
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
-            </div>
-          )}
+            <FormField
+              etiqueta="Portafolio"
+              opcional
+              id="cf-portafolio"
+              error={errorEnlace('Portafolio') ? 'El enlace debe empezar por https:// (o http://).' : undefined}
+            >
+              <Input
+                type="url"
+                value={portafolioUrl}
+                onChange={(e) => setPortafolioUrl(e.target.value)}
+                placeholder="https://behance.net/..."
+                prefijo={<LinkIcon />}
+              />
+            </FormField>
+          </div>
+        </PanelPestana>
 
-          {/* Tab: Documentos */}
-          {activeTab === 'documents' && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Agrega documentos adicionales del candidato (títulos, certificaciones, etc.)
-              </p>
+        {/* Pestaña: documentos */}
+        <PanelPestana idBase={ID_PESTANAS} id="documents" activa={activeTab}>
+          <div className="space-y-4">
+            <p className="text-sm text-ink-muted">
+              Agrega documentos adicionales del candidato (títulos, certificaciones, etc.)
+            </p>
 
-              {documents.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <FileText className="mx-auto text-gray-400 mb-2" size={40} />
-                  <p className="text-gray-500">No hay documentos agregados</p>
-                  <button
-                    type="button"
-                    onClick={addDocument}
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 mx-auto"
-                  >
-                    <Plus size={18} />
-                    Agregar Documento
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {documents.map((doc, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-3 p-4 border rounded-lg bg-gray-50"
-                    >
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={doc.name}
-                          onChange={(e) => updateDocument(index, 'name', e.target.value)}
-                          placeholder="Nombre del documento (ej: Título universitario)"
-                          className="w-full p-2 border rounded-lg mb-2"
-                        />
-                        {doc.fileUrl ? (
-                          <div className="flex items-center gap-2">
-                            {esUrlHttp(doc.fileUrl) ? (
+            {documents.length === 0 ? (
+              <EmptyState
+                compacto
+                icono={FileText}
+                titulo="No hay documentos agregados"
+                accion={
+                  <Button variante="contorno" tamano="sm" icono={Plus} onClick={addDocument}>
+                    Agregar documento
+                  </Button>
+                }
+              />
+            ) : (
+              <>
+                <ol className="space-y-4">
+                  {documents.map((doc, index) => {
+                    const enlace = doc.fileUrl.trim();
+                    const valido = enlace !== '' && esUrlHttp(enlace);
+                    const invalido = enlace !== '' && !valido && !empiezaUnEsquema(enlace);
+                    const subiendo = uploadingDoc === index;
+                    return (
+                      <TarjetaRepetible
+                        key={index}
+                        titulo={doc.name || `Documento ${index + 1}`}
+                        detalle={doc.fileType ? doc.fileType.toUpperCase() : undefined}
+                        etiquetaQuitar={`Quitar documento ${index + 1}`}
+                        alQuitar={() => removeDocument(index)}
+                      >
+                        <div className="grid grid-cols-1 gap-4">
+                          <FormField etiqueta="Nombre del documento" id={`cf-doc-${index}-nombre`}>
+                            <Input
+                              type="text"
+                              value={doc.name}
+                              onChange={(e) => updateDocument(index, 'name', e.target.value)}
+                              placeholder="Ej: Título universitario"
+                            />
+                          </FormField>
+
+                          <FormField
+                            etiqueta="Archivo"
+                            id={`cf-doc-${index}-archivo`}
+                            ayuda="Sube un PDF, Word o imagen, o pega un enlace que empiece por https://."
+                            error={
+                              errorDocumento(doc) || invalido
+                                ? `Enlace no válido: ${doc.fileUrl}`
+                                : undefined
+                            }
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <div className="min-w-0 flex-1">
+                                <Input
+                                  type="url"
+                                  value={doc.fileUrl}
+                                  onChange={(e) => updateDocument(index, 'fileUrl', e.target.value)}
+                                  placeholder="URL del documento"
+                                  prefijo={<LinkIcon />}
+                                />
+                              </div>
+                              <SelectorArchivo
+                                className="h-10 flex-none"
+                                onChange={(e) => handleDocumentUpload(index, e.target.files?.[0])}
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                cargando={subiendo}
+                                textoCargando="Subiendo…"
+                              >
+                                {doc.fileUrl ? 'Subir otro' : 'Subir archivo'}
+                              </SelectorArchivo>
+                            </div>
+                          </FormField>
+
+                          {valido && (
+                            <div className="flex flex-wrap items-center gap-3">
                               <a
                                 href={doc.fileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 text-sm hover:underline flex items-center gap-1"
+                                className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-teal hover:text-teal-dark hover:underline"
                               >
-                                <FileText size={14} />
+                                <FileText size={14} aria-hidden="true" />
                                 Ver archivo
+                                <span className="sr-only"> (se abre en otra pestaña)</span>
                               </a>
-                            ) : (
-                              <span className="text-red-600 text-sm flex items-center gap-1 break-all">
-                                <FileText size={14} />
-                                Enlace no válido: {doc.fileUrl}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => updateDocument(index, 'fileUrl', '')}
-                              className="text-xs text-gray-500 hover:text-red-600"
-                            >
-                              Cambiar
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <label className="cursor-pointer px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 flex items-center gap-1">
-                              {uploadingDoc === index ? (
-                                <>
-                                  <Loader2 size={14} className="animate-spin" />
-                                  Subiendo...
-                                </>
-                              ) : (
-                                <>
-                                  <Upload size={14} />
-                                  Subir archivo
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                onChange={(e) => handleDocumentUpload(index, e.target.files?.[0])}
-                                className="hidden"
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                disabled={uploadingDoc === index}
-                              />
-                            </label>
-                            <span className="text-xs text-gray-500">o</span>
-                            <input
-                              type="url"
-                              value={doc.fileUrl}
-                              onChange={(e) => updateDocument(index, 'fileUrl', e.target.value)}
-                              placeholder="URL del documento"
-                              className="flex-1 p-2 border rounded-lg text-sm"
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeDocument(index)}
-                        className="text-red-500 hover:text-red-700 p-2"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  ))}
+                              <button
+                                type="button"
+                                onClick={() => updateDocument(index, 'fileUrl', '')}
+                                className="rounded text-[13px] text-ink-muted hover:text-danger hover:underline"
+                              >
+                                Quitar archivo
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </TarjetaRepetible>
+                    );
+                  })}
+                </ol>
 
-                  <button
-                    type="button"
-                    onClick={addDocument}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg hover:border-blue-400 hover:text-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Plus size={18} />
-                    Agregar Otro Documento
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </form>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-4 p-6 border-t bg-gray-50">
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              onClose();
-            }}
-            className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-          >
-            Cancelar
-          </button>
-          {/* Botón de envío real del <form> (ADM-032): Enter y clic pasan por
-              onSubmit y por la validación de handleSubmit. */}
-          <button
-            type="submit"
-            form={FORM_ID}
-            disabled={isSubmitting}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold flex items-center gap-2"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="animate-spin" size={18} />
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save size={18} />
-                {candidateToEdit ? 'Actualizar' : 'Guardar Candidato'}
+                <Button variante="contorno" anchoCompleto icono={Plus} className="border-dashed" onClick={addDocument}>
+                  Agregar otro documento
+                </Button>
               </>
             )}
-          </button>
-        </div>
-      </div>
-    </div>
+          </div>
+        </PanelPestana>
+      </form>
+    </Modal>
   );
 };
 

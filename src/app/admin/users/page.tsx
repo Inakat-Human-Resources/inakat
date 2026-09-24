@@ -2,24 +2,52 @@
 
 'use client';
 
+/**
+ * Usuarios del equipo interno: administradores, reclutadores y especialistas.
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md): PageHeader → cifras → tabla paginada
+ * en el servidor → modal de alta/edición → confirmación de desactivar. La
+ * lógica es la de siempre (mismas llamadas, cuerpos, guardas y avisos); sólo
+ * cambió la presentación.
+ *
+ * El único cambio de forma en el flujo: el confirm() del navegador de
+ * «desactivar» pasó a un Modal de confirmación con el MISMO texto, y al
+ * confirmar se hace exactamente la misma llamada (DELETE o PUT isActive).
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
-  Search,
   RefreshCw,
   Plus,
-  Edit,
-  Trash2,
+  Pencil,
+  UserX,
   Users,
   Shield,
   Briefcase,
   GraduationCap,
-  X,
-  Eye,
-  EyeOff,
   Check,
-  AlertCircle
+  Search
 } from 'lucide-react';
-import Paginacion, { PAGINACION_VACIA, type PaginacionApi } from '../_components/Paginacion';
+import PageHeader from '@/components/ui/PageHeader';
+import StatCard from '@/components/ui/StatCard';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import FilterToolbar, { FiltroSelect } from '@/components/ui/FilterToolbar';
+import { Badge, RolBadge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import Avatar from '@/components/ui/Avatar';
+import Switch from '@/components/ui/Switch';
+import { AvisoError } from '@/components/ui/Aviso';
+import CampoContrasena from '@/components/ui/CampoContrasena';
+import FormField, { Input, Select } from '@/components/ui/FormField';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { PAGINACION_VACIA, type PaginacionApi } from '@/components/ui/Pagination';
+import { cn } from '@/lib/utils';
+import { fechaCorta } from '@/lib/fechas';
 
 interface User {
   id: number;
@@ -58,16 +86,51 @@ const INITIAL_FORM: FormData = {
   specialty: ''
 };
 
-const ROLES = [
-  { value: 'admin', label: 'Administrador', icon: Shield, color: 'red' },
-  { value: 'recruiter', label: 'Reclutador', icon: Briefcase, color: 'blue' },
-  { value: 'specialist', label: 'Especialista', icon: GraduationCap, color: 'green' }
+// Los roles que se pueden dar de alta aquí. Su insignia (icono Y texto) es la
+// del panel entero: RolBadge / INSIGNIA_ROL en components/ui/Badge.
+const ROLES: Array<{ value: string; label: string }> = [
+  { value: 'admin', label: 'Administrador' },
+  { value: 'recruiter', label: 'Reclutador' },
+  { value: 'specialist', label: 'Especialista' }
 ];
 
 // Mínimo de contraseña del servidor (PASSWORD_MIN_LENGTH en src/lib/validations.ts).
 // ADM-050: el input pedía 6 y la API ya exige 8, así que el navegador dejaba
 // enviar contraseñas que el servidor rechazaba con un 400 genérico.
 const PASSWORD_MIN_LENGTH = 8;
+
+/** id del formulario del modal: el botón de guardar vive en el pie del Modal. */
+const ID_FORM = 'form-usuario';
+
+/** Rótulo de cada grupo del formulario (leyenda del fieldset). */
+const CLASE_GRUPO =
+  'font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted';
+
+/** Cifra con separador de miles (1,284). */
+const cifra = (n: number) => n.toLocaleString('es-MX');
+
+/** «Ana Ruiz Soto»: nombre y apellidos que haya. */
+const nombreCompleto = (u: Pick<User, 'nombre' | 'apellidoPaterno' | 'apellidoMaterno'>) =>
+  [u.nombre, u.apellidoPaterno, u.apellidoMaterno].filter(Boolean).join(' ');
+
+/** Guion de celda vacía con su lectura para el lector de pantalla. */
+function Vacio({ lectura }: { lectura: string }) {
+  return (
+    <span className="text-ink-muted">
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">{lectura}</span>
+    </span>
+  );
+}
+
+/** Lo que el Modal de confirmación va a hacer si se acepta. */
+interface Confirmacion {
+  /** eliminar = DELETE (botón de desactivar) · alternar = PUT isActive (interruptor). */
+  tipo: 'eliminar' | 'alternar';
+  user: User;
+  /** El mismo texto que antes llevaba el confirm(). */
+  aviso: string;
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -110,6 +173,19 @@ export default function AdminUsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // --- Estado sólo de presentación ------------------------------------------
+  // Confirmación de desactivar (antes, confirm() del navegador).
+  const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
+  // El esqueleto de página sólo en la PRIMERA carga: al buscar o paginar se
+  // queda la página (y el foco en el buscador) y sólo la tabla muestra filas
+  // esqueleto.
+  const [cargaInicial, setCargaInicial] = useState(true);
+  useEffect(() => {
+    if (!isLoading) setCargaInicial(false);
+  }, [isLoading]);
+  // Las cifras llegan en su propia tanda: hasta entonces, esqueleto (no «0»).
+  const [cifrasListas, setCifrasListas] = useState(false);
+
   /**
    * Conteos reales: una petición por tarjeta pidiendo una sola fila y leyendo
    * `pagination.total`.
@@ -136,6 +212,8 @@ export default function AdminUsersPage() {
       setStats({ total, admins, recruiters, specialists, active });
     } catch (err) {
       console.error('Error cargando conteos de usuarios:', err);
+    } finally {
+      setCifrasListas(true);
     }
   };
 
@@ -316,8 +394,12 @@ export default function AdminUsersPage() {
       ? `¿Desactivar a ${user.nombre}? Tiene ${asignaciones} vacante(s) asignada(s) que quedarán sin responsable.`
       : `¿Estás seguro de desactivar a ${user.nombre}?`;
 
-    if (!confirm(aviso)) return;
+    // Antes: if (!confirm(aviso)) return; — ahora el mismo aviso en un Modal
+    // y, al aceptar, la MISMA llamada (desactivarUsuario).
+    setConfirmacion({ tipo: 'eliminar', user, aviso });
+  };
 
+  const desactivarUsuario = async (user: User) => {
     try {
       const response = await fetch(`/api/admin/users?id=${user.id}`, {
         method: 'DELETE'
@@ -355,9 +437,16 @@ export default function AdminUsersPage() {
       const aviso = asignaciones > 0
         ? `¿Desactivar a ${user.nombre}? Perderá el acceso al sistema y tiene ${asignaciones} vacante(s) asignada(s) que quedarán sin responsable.`
         : `¿Desactivar a ${user.nombre}? Perderá el acceso al sistema.`;
-      if (!confirm(aviso)) return;
+      // Antes: if (!confirm(aviso)) return; — ahora un Modal con el mismo aviso.
+      setConfirmacion({ tipo: 'alternar', user, aviso });
+      return;
     }
 
+    // Activar no pide confirmación (como siempre).
+    await alternarActivo(user);
+  };
+
+  const alternarActivo = async (user: User) => {
     try {
       const response = await fetch('/api/admin/users', {
         method: 'PUT',
@@ -385,473 +474,510 @@ export default function AdminUsersPage() {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    const roleConfig = ROLES.find(r => r.value === role);
-    if (!roleConfig) return null;
-
-    const colorClasses: Record<string, string> = {
-      red: 'bg-red-100 text-red-800',
-      blue: 'bg-blue-100 text-blue-800',
-      green: 'bg-green-100 text-green-800'
-    };
-
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colorClasses[roleConfig.color]}`}>
-        {roleConfig.label}
-      </span>
-    );
+  /** El usuario aceptó el Modal: la misma llamada que seguía al confirm(). */
+  const confirmarDesactivacion = () => {
+    if (!confirmacion) return;
+    const { tipo, user } = confirmacion;
+    setConfirmacion(null);
+    if (tipo === 'eliminar') {
+      desactivarUsuario(user);
+    } else {
+      alternarActivo(user);
+    }
   };
 
+  /** La insignia de rol del panel (la misma que /admin/vendors). */
+  const insigniaRol = (role: string) => <RolBadge rol={role} />;
+
+  // ---------------------------------------------------------------------------
+  // Columnas de la tabla
+  // ---------------------------------------------------------------------------
+  const idNombre = (user: User) => `usuario-${user.id}-nombre`;
+
+  /** Vacantes asignadas según el rol (la misma regla de siempre); null si no aplica. */
+  const asignacionesDe = (user: User): number | null => {
+    if (user.role === 'recruiter' && user._count) return user._count.recruiterAssignments;
+    if (user.role === 'specialist' && user._count) return user._count.specialistAssignments;
+    return null;
+  };
+
+  const columnas: Columna<User>[] = [
+    {
+      id: 'usuario',
+      encabezado: 'Usuario',
+      enTarjeta: 'titulo',
+      className: 'min-w-[12rem]',
+      celda: (user) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar
+            nombre={nombreCompleto(user)}
+            email={user.email}
+            tamano="sm"
+            className={cn(!user.isActive && 'bg-mist text-ink-muted')}
+          />
+          <div className="min-w-0">
+            <p
+              id={idNombre(user)}
+              className={cn('font-semibold leading-snug', user.isActive ? 'text-ink' : 'text-ink-muted')}
+            >
+              {nombreCompleto(user)}
+              {esUsuarioActual(user) && <span className="ml-1.5 font-normal text-ink-muted">(tú)</span>}
+            </p>
+            <p className="break-all text-[13px] leading-snug text-ink-muted">{user.email}</p>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'role',
+      encabezado: 'Rol',
+      celda: (user) => {
+        const asignaciones = asignacionesDe(user);
+        return (
+          <div className="flex flex-col items-start gap-1">
+            {insigniaRol(user.role)}
+            {/* Si las columnas Especialidad o Asignaciones se esconden (tabla
+                estrecha), su dato sube aquí: data-solo-bajo sólo se ve
+                mientras su columna está escondida. */}
+            {user.specialty && (
+              <span data-solo-bajo="xl" className="inline-flex">
+                <Badge tono="neutro" sinPunto tamano="sm">
+                  {user.specialty}
+                </Badge>
+              </span>
+            )}
+            {asignaciones !== null && (
+              <span data-solo-bajo="md" className="text-xs tabular-nums text-ink-muted">
+                {asignaciones} {asignaciones === 1 ? 'asignación' : 'asignaciones'}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      id: 'specialty',
+      encabezado: 'Especialidad',
+      ocultarBajo: 'xl',
+      celda: (user) =>
+        user.specialty ? (
+          <span className="text-ink">{user.specialty}</span>
+        ) : (
+          <Vacio lectura="Sin especialidad" />
+        )
+    },
+    {
+      id: 'asignaciones',
+      encabezado: 'Asignaciones',
+      numerica: true,
+      ocultarBajo: 'md',
+      celda: (user) => {
+        const asignaciones = asignacionesDe(user);
+        if (asignaciones !== null) {
+          return <span className="font-display font-semibold">{asignaciones}</span>;
+        }
+        if (user.role === 'admin') return <Vacio lectura="No aplica" />;
+        return null;
+      }
+    },
+    {
+      id: 'lastLogin',
+      encabezado: 'Último acceso',
+      ocultarBajo: 'md',
+      celda: (user) =>
+        user.lastLogin ? (
+          <span className="whitespace-nowrap tabular-nums text-ink">{fechaCorta(user.lastLogin)}</span>
+        ) : (
+          <span className="whitespace-nowrap text-ink-muted">Nunca</span>
+        )
+    },
+    {
+      id: 'estado',
+      encabezado: 'Estado',
+      className: 'whitespace-nowrap',
+      celda: (user) =>
+        // ADM-009/051: sobre la propia fila no se ofrece desactivar; quedarse
+        // sin admin activo deja el panel inaccesible para todos.
+        esUsuarioActual(user) && user.isActive ? (
+          <Badge tono="exito" title="Es tu cuenta: no puedes desactivarte">
+            Activo (tú)
+          </Badge>
+        ) : (
+          // Interruptor de acceso (el «pill» de antes): el estado lo dicen
+          // aria-checked y el texto; a quién pertenece, el nombre de la fila.
+          <Switch
+            activo={user.isActive}
+            alCambiar={() => handleToggleActive(user)}
+            describidoPor={idNombre(user)}
+            tono="lima-oscuro"
+            className="-ml-1"
+          />
+        )
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      // En tarjeta, las acciones van en su propia fila, al final y a lo ancho.
+      // Arriba a la derecha ('acciones') la celda mide 1 px (w-px) y el lápiz
+      // se desbordaba hacia la izquierda, encima de los nombres largos
+      // («Luisa Fernanda Hinojosa Tamez»). Con justify-start arrancan en el
+      // borde de la celda; en la tabla da igual (la columna mide lo que sus
+      // acciones) y el lápiz queda en la misma vertical en todas las filas.
+      enTarjeta: 'completa',
+      className: 'w-px whitespace-nowrap',
+      celda: (user) => (
+        <div className="flex items-center justify-start gap-1">
+          <IconButton
+            etiqueta={`Editar a ${nombreCompleto(user)}`}
+            title="Editar"
+            icono={Pencil}
+            tamano="sm"
+            onClick={() => openEditModal(user)}
+          />
+          {!esUsuarioActual(user) && (
+            <IconButton
+              etiqueta={`Desactivar a ${nombreCompleto(user)}`}
+              title="Desactivar"
+              icono={UserX}
+              variante="peligro"
+              tamano="sm"
+              onClick={() => handleDelete(user)}
+            />
+          )}
+        </div>
+      )
+    }
+  ];
+
+  const hayFiltros = Boolean(searchTerm || roleFilter || activeFilter);
+  const inactivos = Math.max(0, stats.total - stats.active);
+
+  if (isLoading && cargaInicial) {
+    return <SkeletonPagina />;
+  }
+
+  // El error va donde se ve: dentro del modal si está abierto (antes quedaba
+  // detrás del fondo oscuro), y arriba de la página si no.
+  const avisoError = (dentroDelModal: boolean) =>
+    error && (
+      <AvisoError
+        mensaje={error}
+        className={dentroDelModal ? 'mb-5' : undefined}
+        // Sin filas, el error es de carga: se ofrece volver a pedir la lista.
+        alReintentar={!dentroDelModal && users.length === 0 ? fetchUsers : undefined}
+        alCerrar={() => setError(null)}
+      />
+    );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto py-8 px-4">
-        {/* Header - Responsive */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
-          <div>
-            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
-              Gestión de Usuarios
-            </h1>
-            <p className="text-gray-600 text-sm md:text-base">
-              Administra reclutadores y especialistas
-            </p>
-          </div>
-          <button
-            onClick={openNewModal}
-            className="w-full sm:w-auto px-4 md:px-6 py-2 md:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-semibold text-sm md:text-base"
+    <>
+      <PageHeader
+        antetitulo="Sistema"
+        titulo="Usuarios"
+        remate="del equipo"
+        descripcion="Administradores, reclutadores y especialistas con acceso al panel."
+        acciones={
+          <>
+            <Button variante="contorno" icono={RefreshCw} onClick={fetchUsers} cargando={isLoading}>
+              Actualizar
+            </Button>
+            <Button icono={Plus} onClick={openNewModal}>
+              Nuevo usuario
+            </Button>
+          </>
+        }
+      />
+
+      {!isModalOpen && avisoError(false)}
+
+      {/* Cifras reales (pagination.total de la API, ADM-025) */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:mb-8 xl:grid-cols-4">
+        <StatCard
+          etiqueta="Total de usuarios"
+          valor={cifra(stats.total)}
+          detalle={cifrasListas ? `${cifra(stats.active)} activos · ${cifra(inactivos)} inactivos` : undefined}
+          icono={Users}
+          tono="ink"
+          cargando={!cifrasListas}
+        />
+        <StatCard
+          etiqueta="Administradores"
+          valor={cifra(stats.admins)}
+          icono={Shield}
+          tono="orange"
+          cargando={!cifrasListas}
+        />
+        <StatCard
+          etiqueta="Reclutadores"
+          valor={cifra(stats.recruiters)}
+          icono={Briefcase}
+          tono="teal"
+          cargando={!cifrasListas}
+        />
+        <StatCard
+          etiqueta="Especialistas"
+          valor={cifra(stats.specialists)}
+          icono={GraduationCap}
+          tono="lime"
+          cargando={!cifrasListas}
+        />
+      </div>
+
+      <Card sinRelleno>
+        {/* Intro en el buscador busca (como siempre); los filtros se aplican
+            con «Buscar», igual que antes. */}
+        <div
+          className="border-b border-line px-5 py-4"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') handleSearch();
+          }}
+        >
+          <FilterToolbar
+            busqueda={{
+              valor: searchTerm,
+              alCambiar: setSearchTerm,
+              etiqueta: 'Buscar usuarios',
+              placeholder: 'Nombre o correo'
+            }}
+            resumen={
+              !isLoading && users.length > 0
+                ? `Mostrando ${users.length} de ${pagination.total} usuario${pagination.total !== 1 ? 's' : ''}`
+                : undefined
+            }
           >
-            <Plus size={18} />
-            Nuevo Usuario
-          </button>
-        </div>
-
-        {/* Mensajes */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-2">
-            <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto">
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center gap-2">
-            <Check size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-gray-500">
-            <div className="flex items-center gap-3">
-              <Users className="text-gray-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-            <div className="flex items-center gap-3">
-              <Shield className="text-red-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Admins</p>
-                <p className="text-2xl font-bold text-red-600">{stats.admins}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-            <div className="flex items-center gap-3">
-              <Briefcase className="text-blue-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Reclutadores</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.recruiters}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-            <div className="flex items-center gap-3">
-              <GraduationCap className="text-green-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Especialistas</p>
-                <p className="text-2xl font-bold text-green-600">{stats.specialists}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-emerald-500">
-            <div className="flex items-center gap-3">
-              <Check className="text-emerald-500" size={24} />
-              <div>
-                <p className="text-sm text-gray-600">Activos</p>
-                <p className="text-2xl font-bold text-emerald-600">{stats.active}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filtros */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Buscar por nombre o email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
-            >
+            <FiltroSelect etiqueta="Rol" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
               <option value="">Todos los roles</option>
               {ROLES.map(role => (
                 <option key={role.value} value={role.value}>{role.label}</option>
               ))}
-            </select>
-
-            <select
-              value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
-            >
+            </FiltroSelect>
+            <FiltroSelect etiqueta="Estado" value={activeFilter} onChange={(e) => setActiveFilter(e.target.value)}>
               <option value="">Todos</option>
               <option value="true">Activos</option>
               <option value="false">Inactivos</option>
-            </select>
-
-            <button
-              onClick={handleSearch}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Search size={20} />
+            </FiltroSelect>
+            <Button variante="secundario" tamano="sm" icono={Search} onClick={handleSearch} className="h-9">
               Buscar
-            </button>
-
-            <button
-              onClick={fetchUsers}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              <RefreshCw className={isLoading ? 'animate-spin' : ''} size={20} />
-            </button>
-          </div>
+            </Button>
+          </FilterToolbar>
         </div>
 
-        {/* Tabla */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Usuario</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Rol</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Especialidad</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Asignaciones</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
-                      <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
-                      Cargando usuarios...
-                    </td>
-                  </tr>
-                ) : users.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
-                      <Users className="mx-auto mb-2 text-gray-400" size={40} />
-                      No hay usuarios registrados
-                    </td>
-                  </tr>
-                ) : (
-                  users.map(user => (
-                    <tr key={user.id} className={`hover:bg-gray-50 ${!user.isActive ? 'opacity-60' : ''}`}>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {user.nombre} {user.apellidoPaterno}
-                          </p>
-                          {user.apellidoMaterno && (
-                            <p className="text-sm text-gray-500">{user.apellidoMaterno}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-gray-600">{user.email}</p>
-                        {user.lastLogin && (
-                          <p className="text-xs text-gray-400">
-                            Último acceso: {new Date(user.lastLogin).toLocaleDateString('es-MX')}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {getRoleBadge(user.role)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {user.specialty ? (
-                          <span className="text-sm text-gray-700">{user.specialty}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {user.role === 'recruiter' && user._count && (
-                          <span className="text-sm font-medium">{user._count.recruiterAssignments}</span>
-                        )}
-                        {user.role === 'specialist' && user._count && (
-                          <span className="text-sm font-medium">{user._count.specialistAssignments}</span>
-                        )}
-                        {user.role === 'admin' && <span className="text-gray-400">-</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {/* ADM-009/051: sobre la propia fila no se ofrece
-                            desactivar; quedarse sin admin activo deja el panel
-                            inaccesible para todos. */}
-                        {esUsuarioActual(user) && user.isActive ? (
-                          <span
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                            title="Es tu cuenta: no puedes desactivarte"
-                          >
-                            Activo (tú)
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleToggleActive(user)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              user.isActive
-                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                            }`}
-                          >
-                            {user.isActive ? 'Activo' : 'Inactivo'}
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
-                          <button
-                            onClick={() => openEditModal(user)}
-                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                            title="Editar"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          {!esUsuarioActual(user) && (
-                            <button
-                              onClick={() => handleDelete(user)}
-                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Desactivar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          etiqueta="Usuarios del equipo"
+          columnas={columnas}
+          filas={users}
+          claveFila={(user) => user.id}
+          cargando={isLoading}
+          alActivarFila={openEditModal}
+          paginacion={pagination}
+          alCambiarPagina={setPage}
+          etiquetaTotal="usuarios"
+          vacio={
+            // Un error de carga no es una lista vacía: lo explica el aviso de arriba.
+            error ? (
+              <p className="px-5 py-10 text-center text-sm text-ink-muted">
+                La lista no se pudo cargar. Revisa el aviso de arriba.
+              </p>
+            ) : (
+              <EmptyState
+                frase="Nadie por aquí, todavía."
+                titulo={hayFiltros ? 'No hay usuarios con estos filtros' : 'No hay usuarios registrados'}
+                descripcion={
+                  hayFiltros
+                    ? 'Cambia la búsqueda o los filtros y pulsa «Buscar».'
+                    : 'Da de alta a tu primer reclutador o especialista.'
+                }
+                accion={
+                  hayFiltros ? undefined : (
+                    <Button variante="contorno" tamano="sm" icono={Plus} onClick={openNewModal}>
+                      Nuevo usuario
+                    </Button>
+                  )
+                }
+              />
+            )
+          }
+        />
+      </Card>
 
-        {/* Paginación (ADM-025) */}
-        {!isLoading && (
-          <div className="bg-white rounded-lg shadow mt-4">
-            <Paginacion
-              pagination={pagination}
-              onChange={setPage}
-              etiqueta="usuarios"
-            />
-          </div>
-        )}
+      {/* Alta / edición */}
+      <Modal
+        abierto={isModalOpen}
+        alCerrar={closeModal}
+        titulo={editingUser ? 'Editar usuario' : 'Nuevo usuario'}
+        descripcion={
+          editingUser
+            ? `Datos, rol y contraseña de ${editingUser.email}.`
+            : 'Da de alta a un administrador, reclutador o especialista.'
+        }
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={closeModal}>
+              Cancelar
+            </Button>
+            <Button type="submit" form={ID_FORM} icono={Check} cargando={isSubmitting} textoCargando="Guardando…">
+              {editingUser ? 'Guardar cambios' : 'Crear usuario'}
+            </Button>
+          </>
+        }
+      >
+        <form id={ID_FORM} onSubmit={handleSubmit}>
+          {avisoError(true)}
 
-        {/* Results count */}
-        {!isLoading && users.length > 0 && (
-          <div className="mt-4 text-center text-sm text-gray-600">
-            Mostrando {users.length} de {pagination.total} usuario{pagination.total !== 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
-
-      {/* Modal de crear/editar */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold">
-                {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
+          <fieldset className="space-y-4">
+            <legend className={CLASE_GRUPO}>Persona</legend>
+            <FormField etiqueta="Nombre" requerido>
+              <Input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                autoComplete="off"
+              />
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField etiqueta="Apellido paterno" opcional>
+                <Input
+                  type="text"
+                  value={formData.apellidoPaterno}
+                  onChange={(e) => setFormData({ ...formData, apellidoPaterno: e.target.value })}
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField etiqueta="Apellido materno" opcional>
+                <Input
+                  type="text"
+                  value={formData.apellidoMaterno}
+                  onChange={(e) => setFormData({ ...formData, apellidoMaterno: e.target.value })}
+                  autoComplete="off"
+                />
+              </FormField>
             </div>
+          </fieldset>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Email *</label>
-                <input
+          {/* El separador va en un envoltorio: un borde en el propio fieldset
+              lo cortaría la leyenda. */}
+          <div className="mt-6 border-t border-line pt-5">
+            <fieldset className="space-y-4">
+              <legend className={CLASE_GRUPO}>Acceso</legend>
+              <FormField etiqueta="Correo electrónico" requerido ayuda="Con este correo inicia sesión.">
+                <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
+                  autoComplete="off"
                 />
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Contraseña {editingUser ? '(dejar vacío para mantener)' : '*'}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
-                    required={!editingUser}
-                    minLength={PASSWORD_MIN_LENGTH}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Mínimo {PASSWORD_MIN_LENGTH} caracteres.
-                </p>
-              </div>
-
-              {/* Nombre */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Nombre *</label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
+              </FormField>
+              <FormField
+                etiqueta="Contraseña"
+                requerido={!editingUser}
+                ayuda={
+                  editingUser
+                    ? `Déjala vacía para mantener la actual. Mínimo ${PASSWORD_MIN_LENGTH} caracteres.`
+                    : `Mínimo ${PASSWORD_MIN_LENGTH} caracteres.`
+                }
+              >
+                <CampoContrasena
+                  visible={showPassword}
+                  alAlternar={() => setShowPassword(!showPassword)}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  autoComplete="new-password"
                 />
-              </div>
+              </FormField>
+            </fieldset>
+          </div>
 
-              {/* Apellidos */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Apellido Paterno</label>
-                  <input
-                    type="text"
-                    value={formData.apellidoPaterno}
-                    onChange={(e) => setFormData({ ...formData, apellidoPaterno: e.target.value })}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Apellido Materno</label>
-                  <input
-                    type="text"
-                    value={formData.apellidoMaterno}
-                    onChange={(e) => setFormData({ ...formData, apellidoMaterno: e.target.value })}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Rol */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Rol *</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  required
-                  // ADM-009/051: un admin no puede degradarse a sí mismo; se
-                  // quedaría fuera del panel en la siguiente petición.
-                  disabled={editingUser ? esUsuarioActual(editingUser) : false}
+          <div className="mt-6 border-t border-line pt-5">
+            <fieldset className="space-y-4">
+              <legend className={CLASE_GRUPO}>Rol en el equipo</legend>
+              <div className={cn('grid gap-4', formData.role === 'specialist' && 'sm:grid-cols-2')}>
+                <FormField
+                  etiqueta="Rol"
+                  requerido
+                  ayuda={
+                    editingUser && esUsuarioActual(editingUser)
+                      ? 'Es tu propia cuenta: otro administrador debe cambiarte el rol.'
+                      : undefined
+                  }
                 >
-                  {ROLES.map(role => (
-                    <option key={role.value} value={role.value}>{role.label}</option>
-                  ))}
-                </select>
-                {editingUser && esUsuarioActual(editingUser) && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Es tu propia cuenta: otro administrador debe cambiarte el rol.
-                  </p>
+                  <Select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    // ADM-009/051: un admin no puede degradarse a sí mismo; se
+                    // quedaría fuera del panel en la siguiente petición.
+                    disabled={editingUser ? esUsuarioActual(editingUser) : false}
+                  >
+                    {ROLES.map(role => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </Select>
+                </FormField>
+
+                {/* Especialidad (solo para specialists) */}
+                {formData.role === 'specialist' && (
+                  <FormField etiqueta="Especialidad" requerido>
+                    <Select
+                      value={formData.specialty}
+                      onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                    >
+                      <option value="">Selecciona una especialidad</option>
+                      {/* ADM-024: catálogo real. Si el especialista tiene una
+                          especialidad que ya no está en el catálogo (renombrada o
+                          desactivada) se añade como opción para no cambiársela
+                          sin querer al guardar. */}
+                      {(specialties.includes(formData.specialty) || !formData.specialty
+                        ? specialties
+                        : [formData.specialty, ...specialties]
+                      ).map(spec => (
+                        <option key={spec} value={spec}>{spec}</option>
+                      ))}
+                    </Select>
+                  </FormField>
                 )}
               </div>
-
-              {/* Especialidad (solo para specialists) */}
-              {formData.role === 'specialist' && (
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Especialidad *</label>
-                  <select
-                    value={formData.specialty}
-                    onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Seleccionar especialidad</option>
-                    {/* ADM-024: catálogo real. Si el especialista tiene una
-                        especialidad que ya no está en el catálogo (renombrada o
-                        desactivada) se añade como opción para no cambiársela
-                        sin querer al guardar. */}
-                    {(specialties.includes(formData.specialty) || !formData.specialty
-                      ? specialties
-                      : [formData.specialty, ...specialties]
-                    ).map(spec => (
-                      <option key={spec} value={spec}>{spec}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Botones */}
-              <div className="flex gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="animate-spin" size={20} />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Check size={20} />
-                      {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+            </fieldset>
           </div>
-        </div>
-      )}
-    </div>
+        </form>
+      </Modal>
+
+      {/* Confirmación de desactivar (antes, confirm() del navegador) */}
+      <Modal
+        abierto={confirmacion !== null}
+        alCerrar={() => setConfirmacion(null)}
+        tamano="sm"
+        iconoTitulo={<UserX size={20} className="text-danger" aria-hidden="true" />}
+        titulo="Desactivar usuario"
+        descripcion={confirmacion?.aviso}
+        pie={
+          <>
+            <Button variante="contorno" onClick={() => setConfirmacion(null)}>
+              Cancelar
+            </Button>
+            <Button variante="peligro" icono={UserX} onClick={confirmarDesactivacion}>
+              Desactivar
+            </Button>
+          </>
+        }
+      >
+        {confirmacion && (
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3">
+            <Avatar nombre={nombreCompleto(confirmacion.user)} email={confirmacion.user.email} tamano="sm" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink">{nombreCompleto(confirmacion.user)}</p>
+              <p className="truncate text-[13px] text-ink-muted">{confirmacion.user.email}</p>
+            </div>
+            <span className="ml-auto flex-none">{insigniaRol(confirmacion.user.role)}</span>
+          </div>
+        )}
+      </Modal>
+
+      {/* Éxito: el temporizador sigue siendo el de mostrarExito (3 s, u 8 s si
+          quedaron vacantes sin responsable). */}
+      <Toast tono="exito" mensaje={success} alCerrar={() => setSuccess(null)} duracion={0} />
+    </>
   );
 }

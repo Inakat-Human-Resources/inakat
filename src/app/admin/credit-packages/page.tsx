@@ -2,19 +2,30 @@
 
 'use client';
 
+/**
+ * Paquetes de créditos que las empresas pueden comprar.
+ *
+ * Registro de aplicación (docs/DISENO.md §5). La lógica es la de siempre:
+ * mismas llamadas a /api/admin/credit-packages, mismos cuerpos y mismos
+ * mensajes. Los `confirm()` del navegador pasaron a un Modal
+ * (useConfirmacion) que responde lo mismo en el mismo punto del flujo.
+ */
+
 import React, { useState, useEffect } from 'react';
-import {
-  RefreshCw,
-  Plus,
-  Edit,
-  Trash2,
-  Coins,
-  X,
-  Check,
-  AlertCircle,
-  Package,
-  Tag
-} from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, Info } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import FormField, { Input, Select } from '@/components/ui/FormField';
+import { AvisoError } from '@/components/ui/Aviso';
+import Switch from '@/components/ui/Switch';
+import { useConfirmacion } from '@/components/ui/useConfirmacion';
 
 interface CreditPackage {
   id: number;
@@ -45,10 +56,27 @@ const INITIAL_FORM: FormData = {
 };
 
 const BADGE_OPTIONS = [
-  { value: '', label: 'Sin badge' },
+  { value: '', label: 'Sin etiqueta' },
   { value: 'MÁS POPULAR', label: 'MÁS POPULAR' },
   { value: 'PROMOCIÓN', label: 'PROMOCIÓN' }
 ];
+
+/** Referencia comercial (OCC) que el admin consulta al fijar precios. */
+const REFERENCIA_OCC = [
+  '1 crédito = $4,000 MXN ($4,000/crédito)',
+  '10 créditos = $35,000 MXN ($3,500/crédito) - MÁS POPULAR',
+  '15 créditos = $50,000 MXN ($3,333/crédito)',
+  '20 créditos = $65,000 MXN ($3,250/crédito) - PROMOCIÓN'
+];
+
+/** La etiqueta destacada del paquete, como se verá en la compra. */
+function EtiquetaPaquete({ badge }: { badge: string }) {
+  return (
+    <Badge tono={badge === 'MÁS POPULAR' ? 'destacado' : 'marca'} sinPunto tamano="sm">
+      {badge}
+    </Badge>
+  );
+}
 
 export default function AdminCreditPackagesPage() {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -64,6 +92,9 @@ export default function AdminCreditPackagesPage() {
   // ADM-067: el error de guardado va DENTRO del modal. El banner de la página
   // queda debajo del overlay y el admin reintentaba sin saber qué pasaba.
   const [modalError, setModalError] = useState<string | null>(null);
+
+  // Las preguntas de desactivar, con el Modal del sistema (responden true/false).
+  const { confirmar, dialogo } = useConfirmacion();
 
   useEffect(() => {
     fetchPackages();
@@ -152,7 +183,14 @@ export default function AdminCreditPackagesPage() {
   };
 
   const handleDelete = async (pkg: CreditPackage) => {
-    if (!confirm(`¿Desactivar el paquete "${pkg.name}"?`)) return;
+    if (
+      !(await confirmar({
+        titulo: `¿Desactivar el paquete "${pkg.name}"?`,
+        textoConfirmar: 'Desactivar',
+        variante: 'peligro'
+      }))
+    )
+      return;
 
     try {
       const response = await fetch(`/api/admin/credit-packages/${pkg.id}`, {
@@ -177,7 +215,15 @@ export default function AdminCreditPackagesPage() {
     // ADM-061: el pill desactivaba con un clic, sin aviso, mientras la papelera
     // (que hace lo mismo) sí pedía confirmación. Un paquete inactivo deja de
     // poder comprarse.
-    if (pkg.isActive && !confirm(`¿Desactivar el paquete "${pkg.name}"? Las empresas dejarán de poder comprarlo.`)) {
+    if (
+      pkg.isActive &&
+      !(await confirmar({
+        titulo: `¿Desactivar el paquete "${pkg.name}"?`,
+        descripcion: 'Las empresas dejarán de poder comprarlo.',
+        textoConfirmar: 'Desactivar',
+        variante: 'peligro'
+      }))
+    ) {
       return;
     }
 
@@ -205,11 +251,14 @@ export default function AdminCreditPackagesPage() {
   // ADM-062: el formulario admite centavos (step 0.01) y el cargo se hace por
   // el importe exacto. Redondear a pesos enteros aquí escondía la diferencia:
   // un paquete de $34,999.50 se veía como $35,000.
+  // Siempre con dos decimales: con un mínimo de 0 salían «$18,999.5» o
+  // «$3,799.9», que en una tabla de dinero parecen un error, y las cifras de
+  // la columna no alineaban los centavos.
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);
   };
@@ -219,318 +268,291 @@ export default function AdminCreditPackagesPage() {
     ? (formData.price / formData.credits).toFixed(2)
     : '0';
 
+  // ---------------------------------------------------------------------------
+  // Presentación
+  // ---------------------------------------------------------------------------
+  const activos = packages.filter(p => p.isActive).length;
+
+  const columnas: Columna<CreditPackage>[] = [
+    {
+      id: 'sortOrder',
+      encabezado: 'Orden',
+      alinear: 'centro',
+      // Las filas ya vienen en este orden: con la tabla estrecha, la columna sobra.
+      ocultarBajo: 'md',
+      className: 'w-px whitespace-nowrap',
+      celda: (pkg) => <span className="font-display tabular-nums text-ink-muted">{pkg.sortOrder}</span>,
+    },
+    {
+      id: 'name',
+      encabezado: 'Nombre',
+      enTarjeta: 'titulo',
+      className: 'min-w-[8rem]',
+      celda: (pkg) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{pkg.name}</p>
+          {/* Con la tabla estrecha la columna Etiqueta se esconde: su dato sube aquí. */}
+          {pkg.badge && (
+            <span data-solo-bajo="lg" className="mt-1 inline-flex">
+              <EtiquetaPaquete badge={pkg.badge} />
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'credits',
+      encabezado: 'Créditos',
+      numerica: true,
+      className: 'whitespace-nowrap',
+      celda: (pkg) => <span className="font-display text-[15px] font-semibold text-ink">{pkg.credits}</span>,
+    },
+    {
+      id: 'price',
+      encabezado: 'Precio',
+      numerica: true,
+      className: 'whitespace-nowrap',
+      celda: (pkg) => (
+        <div>
+          <span className="font-semibold text-ink">{formatCurrency(pkg.price)}</span>
+          {/* Precio por crédito: sube aquí cuando su columna se esconde. */}
+          <p data-solo-bajo="md" className="text-xs text-ink-muted">
+            {formatCurrency(pkg.pricePerCredit)} por crédito
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'pricePerCredit',
+      encabezado: 'Precio/crédito',
+      numerica: true,
+      ocultarBajo: 'md',
+      className: 'whitespace-nowrap',
+      celda: (pkg) => <span className="text-ink-muted">{formatCurrency(pkg.pricePerCredit)}</span>,
+    },
+    {
+      id: 'badge',
+      encabezado: 'Etiqueta',
+      ocultarBajo: 'lg',
+      className: 'whitespace-nowrap',
+      celda: (pkg) =>
+        pkg.badge ? (
+          <EtiquetaPaquete badge={pkg.badge} />
+        ) : (
+          <span className="text-ink-muted" aria-label="Sin etiqueta">
+            —
+          </span>
+        ),
+    },
+    {
+      id: 'isActive',
+      encabezado: 'Estado',
+      className: 'w-px whitespace-nowrap',
+      celda: (pkg) => (
+        <Switch activo={pkg.isActive} alCambiar={() => handleToggleActive(pkg)} objeto={pkg.name} />
+      ),
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (pkg) => (
+        <div className="flex items-center justify-end gap-1">
+          <IconButton etiqueta={`Editar ${pkg.name}`} title="Editar" icono={Pencil} tamano="sm" onClick={() => openEditModal(pkg)} />
+          {pkg.isActive && (
+            <IconButton
+              etiqueta={`Desactivar ${pkg.name}`}
+              title="Desactivar"
+              icono={Trash2}
+              tamano="sm"
+              variante="peligro"
+              onClick={() => handleDelete(pkg)}
+            />
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto py-8 px-4">
-        {/* Header - Responsive */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
-          <div>
-            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
-              Paquetes de Créditos
-            </h1>
-            <p className="text-gray-600 text-sm md:text-base">
-              Configura paquetes disponibles para compra
+    <>
+      <PageHeader
+        antetitulo="Empresas y comercial"
+        titulo="Paquetes de créditos"
+        remate="a la venta"
+        descripcion="Configura paquetes disponibles para compra"
+        acciones={
+          <Button icono={Plus} onClick={openNewModal}>
+            Nuevo paquete
+          </Button>
+        }
+      />
+
+      {error && (
+        <AvisoError
+          mensaje={error}
+          alCerrar={() => setError(null)}
+          alReintentar={packages.length === 0 ? fetchPackages : undefined}
+        />
+      )}
+
+      <Toast tono="exito" mensaje={success} alCerrar={() => setSuccess(null)} duracion={0} />
+
+      {/* Info de referencia */}
+      <section
+        aria-labelledby="referencia-occ"
+        className="mb-6 rounded-xl border border-teal/20 bg-teal-tint/70 px-5 py-4"
+      >
+        <h2 id="referencia-occ" className="flex items-center gap-2 font-display text-sm font-semibold text-teal-dark">
+          <Info className="h-4 w-4 flex-none" aria-hidden="true" />
+          Referencia de precios (OCC)
+        </h2>
+        <ul className="mt-2.5 grid gap-x-6 gap-y-1.5 text-[13px] text-teal-dark sm:grid-cols-2">
+          {REFERENCIA_OCC.map((linea) => (
+            <li key={linea} className="flex items-start gap-2 tabular-nums">
+              <span className="mt-[7px] h-1 w-1 flex-none rounded-full bg-teal" aria-hidden="true" />
+              {linea}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <Card
+        titulo="Paquetes"
+        descripcion={
+          !isLoading && packages.length > 0
+            ? `${packages.length} paquete${packages.length !== 1 ? 's' : ''} configurado${packages.length !== 1 ? 's' : ''} · ${activos} activo${activos !== 1 ? 's' : ''}`
+            : 'En su orden de aparición. Pulsa una fila para editarla.'
+        }
+        sinRelleno
+      >
+        <DataTable
+          etiqueta="Paquetes de créditos"
+          columnas={columnas}
+          filas={packages}
+          claveFila={(pkg) => pkg.id}
+          cargando={isLoading}
+          filasEsqueleto={4}
+          alActivarFila={openEditModal}
+          etiquetaTotal="paquetes"
+          vacio={
+            error ? (
+              <p className="px-5 py-10 text-center text-sm text-ink-muted">
+                No se pudieron cargar los paquetes. Pulsa «Reintentar» en el aviso de arriba.
+              </p>
+            ) : (
+              <EmptyState
+                frase="Todavía nada por aquí."
+                titulo="No hay paquetes configurados"
+                descripcion="Crea el primer paquete de créditos"
+                accion={
+                  <Button variante="contorno" tamano="sm" icono={Plus} onClick={openNewModal}>
+                    Crear el primero
+                  </Button>
+                }
+              />
+            )
+          }
+        />
+      </Card>
+
+      {/* Crear / editar */}
+      <Modal
+        abierto={isModalOpen}
+        alCerrar={closeModal}
+        tamano="md"
+        titulo={editingPackage ? 'Editar paquete' : 'Nuevo paquete'}
+        subtitulo={editingPackage ? editingPackage.name : undefined}
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={closeModal}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="form-paquete" icono={Check} cargando={isSubmitting} textoCargando="Guardando…">
+              {editingPackage ? 'Guardar cambios' : 'Crear paquete'}
+            </Button>
+          </>
+        }
+      >
+        <form id="form-paquete" onSubmit={handleSubmit} className="space-y-5">
+          {modalError && <AvisoError mensaje={modalError} className="mb-0" />}
+
+          <FormField etiqueta="Nombre del paquete" requerido>
+            <Input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="ej. Pack 10"
+              autoComplete="off"
+            />
+          </FormField>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <FormField etiqueta="Créditos" requerido>
+              <Input
+                type="number"
+                value={formData.credits}
+                onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })}
+                min="1"
+                inputMode="numeric"
+                className="tabular-nums"
+              />
+            </FormField>
+            <FormField etiqueta="Precio (MXN)" requerido>
+              <Input
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                min="1"
+                step="0.01"
+                inputMode="decimal"
+                prefijo={<span className="text-sm">$</span>}
+                className="tabular-nums"
+              />
+            </FormField>
+          </div>
+
+          {/* Precio por crédito calculado */}
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-line bg-paper px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-ink">Precio por crédito</p>
+              <p className="text-xs text-ink-muted">Se calcula automáticamente</p>
+            </div>
+            <p className="font-display text-xl font-semibold tabular-nums text-ink">
+              {formatCurrency(parseFloat(calculatedPricePerCredit))}
             </p>
           </div>
-          <button
-            onClick={openNewModal}
-            className="w-full sm:w-auto px-4 md:px-6 py-2 md:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-semibold text-sm md:text-base"
+
+          <FormField
+            etiqueta="Etiqueta destacada"
+            opcional
+            ayuda="Se mostrará como etiqueta destacada en la página de compra"
           >
-            <Plus size={18} />
-            Nuevo Paquete
-          </button>
-        </div>
+            <Select value={formData.badge} onChange={(e) => setFormData({ ...formData, badge: e.target.value })}>
+              {BADGE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
+          </FormField>
 
-        {/* Mensajes */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-2">
-            <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto">
-              <X size={16} />
-            </button>
-          </div>
-        )}
+          <FormField etiqueta="Orden de aparición" ayuda="Los paquetes se ordenan de menor a mayor">
+            <Input
+              type="number"
+              value={formData.sortOrder}
+              onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+              min="0"
+              inputMode="numeric"
+              className="sm:max-w-[10rem]"
+            />
+          </FormField>
+        </form>
+      </Modal>
 
-        {success && (
-          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center gap-2">
-            <Check size={20} />
-            {success}
-          </div>
-        )}
-
-        {/* Info de referencia */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-            <Tag size={18} />
-            Referencia de precios (OCC)
-          </h3>
-          <ul className="text-sm text-blue-700 space-y-1">
-            <li>1 crédito = $4,000 MXN ($4,000/crédito)</li>
-            <li>10 créditos = $35,000 MXN ($3,500/crédito) - MÁS POPULAR</li>
-            <li>15 créditos = $50,000 MXN ($3,333/crédito)</li>
-            <li>20 créditos = $65,000 MXN ($3,250/crédito) - PROMOCIÓN</li>
-          </ul>
-        </div>
-
-        {/* Tabla */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Orden</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Nombre</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Créditos</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Precio</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Precio/Crédito</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Badge</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
-                      <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
-                      Cargando paquetes...
-                    </td>
-                  </tr>
-                ) : packages.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
-                      <Package className="mx-auto mb-2 text-gray-400" size={40} />
-                      No hay paquetes configurados
-                      <br />
-                      <span className="text-sm">Crea el primer paquete de créditos</span>
-                    </td>
-                  </tr>
-                ) : (
-                  packages.map(pkg => (
-                    <tr key={pkg.id} className={`hover:bg-gray-50 ${!pkg.isActive ? 'opacity-50' : ''}`}>
-                      <td className="px-4 py-3 text-center text-gray-500">
-                        {pkg.sortOrder}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium text-gray-900">{pkg.name}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center gap-1 font-bold text-blue-600">
-                          <Coins size={16} />
-                          {pkg.credits}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-gray-900">
-                          {formatCurrency(pkg.price)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-gray-600">
-                          {formatCurrency(pkg.pricePerCredit)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {pkg.badge ? (
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            pkg.badge === 'MÁS POPULAR'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-orange-100 text-orange-800'
-                          }`}>
-                            {pkg.badge}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleToggleActive(pkg)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            pkg.isActive
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
-                        >
-                          {pkg.isActive ? 'Activo' : 'Inactivo'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
-                          <button
-                            onClick={() => openEditModal(pkg)}
-                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                            title="Editar"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          {pkg.isActive && (
-                            <button
-                              onClick={() => handleDelete(pkg)}
-                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Desactivar"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Contador */}
-        {!isLoading && packages.length > 0 && (
-          <div className="mt-4 text-center text-sm text-gray-600">
-            {packages.length} paquete{packages.length !== 1 ? 's' : ''} configurado{packages.length !== 1 ? 's' : ''}
-            {' • '}
-            {packages.filter(p => p.isActive).length} activo{packages.filter(p => p.isActive).length !== 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
-
-      {/* Modal de crear/editar */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold">
-                {editingPackage ? 'Editar Paquete' : 'Nuevo Paquete'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {modalError && (
-                <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2">
-                  <AlertCircle size={16} className="flex-shrink-0" />
-                  {modalError}
-                </div>
-              )}
-
-              {/* Nombre */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Nombre del Paquete *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="ej. Pack 10"
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Créditos y Precio */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Créditos *</label>
-                  <input
-                    type="number"
-                    value={formData.credits}
-                    onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })}
-                    min="1"
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Precio (MXN) *</label>
-                  <input
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                    min="1"
-                    step="0.01"
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Precio por crédito calculado */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Precio por crédito:</span>
-                  <span className="text-xl font-bold text-green-600">
-                    {formatCurrency(parseFloat(calculatedPricePerCredit))}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Se calcula automáticamente
-                </p>
-              </div>
-
-              {/* Badge */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Badge (opcional)</label>
-                <select
-                  value={formData.badge}
-                  onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {BADGE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Se mostrará como etiqueta destacada en la página de compra
-                </p>
-              </div>
-
-              {/* Orden */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">Orden de aparición</label>
-                <input
-                  type="number"
-                  value={formData.sortOrder}
-                  onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-                  min="0"
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Los paquetes se ordenan de menor a mayor
-                </p>
-              </div>
-
-              {/* Botones */}
-              <div className="flex gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="animate-spin" size={20} />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Check size={20} />
-                      {editingPackage ? 'Guardar Cambios' : 'Crear Paquete'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+      {dialogo}
+    </>
   );
 }

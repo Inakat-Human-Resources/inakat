@@ -1,30 +1,51 @@
+// RUTA: src/app/admin/requests/page.tsx
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw } from 'lucide-react';
-import CompanyRequestTable from '@/components/sections/admin/CompanyRequestTable';
-import RequestDetailModal from '@/components/sections/admin/RequestDetailModal';
-import RejectModal from '@/components/sections/admin/RejectModal';
+/**
+ * Solicitudes de alta de empresas: la cola que revisa el administrador.
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md): PageHeader → pestañas por estado
+ * con su cuenta → buscador → tabla → modales (detalle con edición, rechazo y
+ * confirmación de aprobar). La lógica es la de siempre: mismas llamadas
+ * (GET /api/company-requests, PATCH y PUT /api/company-requests/[id]), mismos
+ * cuerpos, mismos filtros en el cliente.
+ *
+ * Cambios de forma, no de fondo:
+ * - Las pestañas son el mismo filtro de estado de antes (statusFilter) con la
+ *   cuenta de cada estado, que antes salía en cuatro tarjetas.
+ * - El confirm() del navegador de «aprobar» pasó a un Modal; al aceptar se
+ *   hace exactamente el mismo PATCH.
+ * - El detalle y el rechazo son los mismos modales rehechos con el sistema
+ *   (./_components), con la misma lógica que los de
+ *   src/components/sections/admin/.
+ * - La lista, que ya se descargaba entera, se pagina en el cliente (20 por
+ *   página).
+ */
 
-interface CompanyRequest {
-  id: number;
-  nombre: string;
-  apellidoPaterno: string;
-  apellidoMaterno: string;
-  nombreEmpresa: string;
-  correoEmpresa: string;
-  sitioWeb: string | null;
-  razonSocial: string;
-  rfc: string;
-  direccionEmpresa: string;
-  identificacionUrl: string | null;
-  documentosConstitucionUrl: string | null;
-  status: string;
-  rejectionReason: string | null;
-  createdAt: string;
-  updatedAt: string;
-  approvedAt: string | null;
-}
+import React, { useState, useEffect } from 'react';
+import { Check, CheckCircle2, Eye, RefreshCw, XCircle } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import { AvisoError } from '@/components/ui/Aviso';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import FilterToolbar from '@/components/ui/FilterToolbar';
+import StatusBadge from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { paginacionLocal } from '@/components/ui/Pagination';
+import DetalleSolicitud from './_components/DetalleSolicitud';
+import RechazarSolicitud from './_components/RechazarSolicitud';
+import { type CompanyRequest, nombreRepresentante } from './_components/tipos';
+import { fechaCorta } from '@/lib/fechas';
+
+/** Filas por página de la tabla (la lista llega entera: se pagina aquí). */
+const SOLICITUDES_POR_PAGINA = 20;
 
 export default function AdminRequestsPage() {
   const [requests, setRequests] = useState<CompanyRequest[]>([]);
@@ -47,6 +68,23 @@ export default function AdminRequestsPage() {
   // Filtros
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // --- Estado sólo de presentación ------------------------------------------
+  // Confirmación de aprobar (antes, confirm() del navegador).
+  const [idPorAprobar, setIdPorAprobar] = useState<number | null>(null);
+  const [aprobando, setAprobando] = useState(false);
+  // Página de la tabla; vuelve a la 1 al cambiar de filtro.
+  const [pagina, setPagina] = useState(1);
+  useEffect(() => {
+    setPagina(1);
+  }, [statusFilter, searchQuery]);
+  // Esqueleto de página sólo en la primera carga: al refrescar (también tras
+  // aprobar o rechazar) se quedan la página y los modales abiertos, y sólo la
+  // tabla muestra filas esqueleto.
+  const [cargaInicial, setCargaInicial] = useState(true);
+  useEffect(() => {
+    if (!isLoading) setCargaInicial(false);
+  }, [isLoading]);
 
   // Fetch requests from API
   useEffect(() => {
@@ -109,11 +147,14 @@ export default function AdminRequestsPage() {
     }
   };
 
-  const handleApprove = async (id: number) => {
-    if (!confirm('¿Estás seguro que deseas aprobar esta solicitud?')) {
-      return;
-    }
+  const handleApprove = (id: number) => {
+    // Antes: if (!confirm('¿Estás seguro que deseas aprobar esta solicitud?')) return;
+    // Ahora la confirmación es un Modal y, al aceptar, aprobarSolicitud(id)
+    // hace la MISMA llamada.
+    setIdPorAprobar(id);
+  };
 
+  const aprobarSolicitud = async (id: number) => {
     try {
       const response = await fetch(`/api/company-requests/${id}`, {
         method: 'PATCH',
@@ -134,6 +175,18 @@ export default function AdminRequestsPage() {
     } catch (error) {
       console.error('Error approving request:', error);
       setNotification({ type: 'error', message: 'Error al aprobar solicitud' });
+    }
+  };
+
+  /** El admin aceptó el Modal: el PATCH de siempre, con el botón en «Aprobando…». */
+  const confirmarAprobacion = async () => {
+    if (idPorAprobar === null) return;
+    setAprobando(true);
+    try {
+      await aprobarSolicitud(idPorAprobar);
+    } finally {
+      setAprobando(false);
+      setIdPorAprobar(null);
     }
   };
 
@@ -182,148 +235,225 @@ export default function AdminRequestsPage() {
     rejected: requests.filter((r) => r.status === 'rejected').length
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto py-8 px-4">
-        {/* HEADER - Responsive */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
-            Solicitudes de Empresas
-          </h1>
-          <p className="text-gray-600 text-sm md:text-base">
-            Gestiona las solicitudes de registro
+  // ---------------------------------------------------------------------------
+  // Columnas de la tabla
+  // ---------------------------------------------------------------------------
+  const columnas: Columna<CompanyRequest>[] = [
+    {
+      id: 'empresa',
+      encabezado: 'Empresa',
+      enTarjeta: 'titulo',
+      className: 'min-w-[12rem]',
+      celda: (req) => (
+        <div className="min-w-0">
+          <p className="font-semibold leading-snug text-ink">{req.nombreEmpresa}</p>
+          <p className="text-[13px] leading-snug text-ink-muted">
+            {req.razonSocial}
+            <span aria-hidden="true"> · </span>
+            <span className="sr-only">, RFC </span>
+            <span className="font-mono tracking-wide">{req.rfc}</span>
           </p>
         </div>
-
-        {/* Notificación */}
-        {notification.type && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
-              notification.type === 'success'
-                ? 'bg-green-100 text-green-800 border border-green-300'
-                : 'bg-red-100 text-red-800 border border-red-300'
-            }`}
-          >
-            <span>{notification.message}</span>
-            <button
-              onClick={() => setNotification({ type: null, message: '' })}
-              className="ml-4 hover:opacity-70 text-xl"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* ESTADÍSTICAS - Responsive */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-            <p className="text-sm text-gray-600 mb-1">Total</p>
-            <p className="text-3xl font-bold text-gray-800">{stats.total}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
-            <p className="text-sm text-gray-600 mb-1">Pendientes</p>
-            <p className="text-3xl font-bold text-yellow-600">
-              {stats.pending}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-            <p className="text-sm text-gray-600 mb-1">Aprobadas</p>
-            <p className="text-3xl font-bold text-green-600">
-              {stats.approved}
-            </p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-            <p className="text-sm text-gray-600 mb-1">Rechazadas</p>
-            <p className="text-3xl font-bold text-red-600">{stats.rejected}</p>
-          </div>
+      )
+    },
+    {
+      id: 'contacto',
+      encabezado: 'Contacto',
+      ocultarBajo: 'md',
+      className: 'min-w-[11rem]',
+      celda: (req) => (
+        <div className="min-w-0">
+          <p className="leading-snug text-ink">{nombreRepresentante(req)}</p>
+          <p className="break-all text-[13px] leading-snug text-ink-muted">{req.correoEmpresa}</p>
         </div>
-
-        {/* FILTROS Y BÚSQUEDA */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Búsqueda */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Buscar por empresa, RFC, correo o nombre..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Filtro por estado */}
-            <div className="flex items-center gap-2">
-              <Filter className="text-gray-400 w-5 h-5" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="pending">Pendientes</option>
-                <option value="approved">Aprobadas</option>
-                <option value="rejected">Rechazadas</option>
-              </select>
-            </div>
-
-            {/* Botón refrescar */}
-            <button
-              onClick={fetchRequests}
-              disabled={isLoading}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`}
-              />
-              Refrescar
-            </button>
-          </div>
-        </div>
-
-        {/* ERROR MESSAGE */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
-            <p className="font-semibold">Error</p>
-            <p>{error}</p>
-          </div>
-        )}
-
-        {/* TABLA */}
-        <div className="bg-white rounded-lg shadow">
-          <CompanyRequestTable
-            data={filteredRequests}
-            onEdit={handleViewDetails}
-            onApprove={handleApprove}
-            onReject={handleRejectClick}
-            isLoading={isLoading}
+      )
+    },
+    {
+      id: 'recibida',
+      encabezado: 'Recibida',
+      ocultarBajo: 'xl',
+      celda: (req) => (
+        <span className="whitespace-nowrap tabular-nums text-ink-muted">{fechaCorta(req.createdAt)}</span>
+      )
+    },
+    {
+      id: 'estado',
+      encabezado: 'Estado',
+      className: 'whitespace-nowrap',
+      celda: (req) => <StatusBadge estado={req.status} contexto="solicitud" />
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      // En tarjeta, las acciones van en su propia fila, al final y a lo ancho.
+      // Arriba a la derecha ('acciones') la celda mide 1 px (w-px) y el ojo, la
+      // X y «Aprobar» se desbordaban hacia la izquierda, encima del nombre y la
+      // razón social. Con justify-start arrancan en el borde de la celda y
+      // crecen hacia la derecha; en la tabla da igual (la columna mide lo que
+      // sus acciones), y el ojo queda en la misma vertical en todas las filas.
+      enTarjeta: 'completa',
+      className: 'w-px whitespace-nowrap',
+      celda: (req) => (
+        <div className="flex items-center justify-start gap-1">
+          <IconButton
+            etiqueta={`Ver solicitud de ${req.nombreEmpresa}`}
+            title={req.status === 'pending' ? 'Ver y editar' : 'Ver'}
+            icono={Eye}
+            tamano="sm"
+            onClick={() => handleViewDetails(req.id)}
           />
+          {req.status === 'pending' && (
+            <>
+              <IconButton
+                etiqueta={`Rechazar solicitud de ${req.nombreEmpresa}`}
+                title="Rechazar"
+                icono={XCircle}
+                variante="peligro"
+                tamano="sm"
+                onClick={() => handleRejectClick(req.id)}
+              />
+              <Button
+                variante="secundario"
+                tamano="sm"
+                icono={Check}
+                onClick={() => handleApprove(req.id)}
+                aria-label={`Aprobar solicitud de ${req.nombreEmpresa}`}
+              >
+                Aprobar
+              </Button>
+            </>
+          )}
         </div>
+      )
+    }
+  ];
 
-        {/* INFO DE RESULTADOS */}
-        {!isLoading && filteredRequests.length === 0 && !error && (
-          <div className="text-center py-10 bg-white rounded-lg shadow mt-6">
-            <p className="text-gray-600">
-              {searchQuery || statusFilter !== 'all'
-                ? 'No se encontraron solicitudes que coincidan con los filtros'
-                : 'No hay solicitudes registradas'}
-            </p>
-          </div>
-        )}
+  if (isLoading && cargaInicial) {
+    return <SkeletonPagina conCifras={false} />;
+  }
 
-        {!isLoading && filteredRequests.length > 0 && (
-          <div className="mt-4 text-center text-sm text-gray-600">
-            Mostrando {filteredRequests.length} de {requests.length} solicitudes
-          </div>
-        )}
-      </div>
+  const filtrosActivos = (searchQuery.trim() ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0);
+  const limpiarFiltros = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+  };
+
+  // Página actual acotada: tras aprobar o rechazar la lista puede encoger.
+  const totalPaginas = Math.max(1, Math.ceil(filteredRequests.length / SOLICITUDES_POR_PAGINA));
+  const paginacion = paginacionLocal(filteredRequests.length, Math.min(pagina, totalPaginas), SOLICITUDES_POR_PAGINA);
+  const filasPagina = filteredRequests.slice(
+    (paginacion.page - 1) * SOLICITUDES_POR_PAGINA,
+    paginacion.page * SOLICITUDES_POR_PAGINA
+  );
+
+  const solicitudPorAprobar = idPorAprobar !== null ? requests.find((r) => r.id === idPorAprobar) ?? null : null;
+
+  // Vacío: la pestaña de pendientes sin búsqueda tiene su propio mensaje.
+  const vacioPendientes = statusFilter === 'pending' && !searchQuery.trim();
+
+  return (
+    <>
+      <PageHeader
+        antetitulo="Empresas y comercial"
+        titulo="Solicitudes"
+        remate="de empresas"
+        descripcion={
+          stats.pending > 0
+            ? `${stats.pending} ${stats.pending === 1 ? 'solicitud espera' : 'solicitudes esperan'} tu revisión.`
+            : 'Registros de empresas que piden entrar a INAKAT.'
+        }
+        acciones={
+          <Button variante="contorno" icono={RefreshCw} onClick={fetchRequests} cargando={isLoading}>
+            Actualizar
+          </Button>
+        }
+      />
+
+      {error && <AvisoError mensaje={error} alReintentar={fetchRequests} />}
+
+      {/* Sin datos por un error, no hay lista que enseñar: el aviso de arriba
+          lo explica (un error no es una bandeja vacía). */}
+      {!(error && requests.length === 0) && (
+        <Card sinRelleno>
+          <Tabs
+            idBase="solicitudes"
+            etiqueta="Solicitudes por estado"
+            activa={statusFilter}
+            alCambiar={setStatusFilter}
+            className="px-3 sm:px-4"
+            pestanas={[
+              { id: 'all', etiqueta: 'Todas', contador: stats.total },
+              { id: 'pending', etiqueta: 'Pendientes', contador: stats.pending },
+              { id: 'approved', etiqueta: 'Aprobadas', contador: stats.approved },
+              { id: 'rejected', etiqueta: 'Rechazadas', contador: stats.rejected }
+            ]}
+          />
+          <PanelPestana
+            idBase="solicitudes"
+            id={statusFilter}
+            activa={statusFilter}
+            className="pt-0 focus-visible:outline-offset-[-2px]"
+          >
+            <div className="border-b border-line px-5 py-4">
+              <FilterToolbar
+                busqueda={{
+                  valor: searchQuery,
+                  alCambiar: setSearchQuery,
+                  etiqueta: 'Buscar solicitudes',
+                  placeholder: 'Empresa, RFC, correo o nombre'
+                }}
+                activos={filtrosActivos}
+                alLimpiar={limpiarFiltros}
+                resumen={`${filteredRequests.length} de ${requests.length} solicitudes`}
+              />
+            </div>
+
+            <DataTable
+              etiqueta="Solicitudes de alta de empresas"
+              columnas={columnas}
+              filas={filasPagina}
+              claveFila={(req) => req.id}
+              cargando={isLoading}
+              alActivarFila={(req) => handleViewDetails(req.id)}
+              paginacion={paginacion}
+              alCambiarPagina={setPagina}
+              etiquetaTotal="solicitudes"
+              vacio={
+                vacioPendientes ? (
+                  <EmptyState
+                    frase="Todo al día."
+                    titulo="No hay solicitudes pendientes"
+                    descripcion="Cuando una empresa se registre, su solicitud aparecerá aquí para que la revises."
+                  />
+                ) : (
+                  <EmptyState
+                    frase="Nada por aquí, todavía."
+                    titulo={
+                      searchQuery || statusFilter !== 'all'
+                        ? 'No se encontraron solicitudes que coincidan con los filtros'
+                        : 'No hay solicitudes registradas'
+                    }
+                    accion={
+                      filtrosActivos > 0 ? (
+                        <Button variante="contorno" tamano="sm" onClick={limpiarFiltros}>
+                          Limpiar filtros
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )
+              }
+            />
+          </PanelPestana>
+        </Card>
+      )}
 
       {/* MODAL DE DETALLES */}
       {selectedRequest && (
-        <RequestDetailModal
+        <DetalleSolicitud
+          key={selectedRequest.id}
           request={selectedRequest}
           onClose={() => setSelectedRequest(null)}
           onApprove={handleApprove}
@@ -336,7 +466,7 @@ export default function AdminRequestsPage() {
 
       {/* MODAL DE RECHAZO */}
       {rejectModalOpen && requestToReject && (
-        <RejectModal
+        <RechazarSolicitud
           requestId={requestToReject.id}
           companyName={requestToReject.nombreEmpresa}
           onConfirm={handleRejectConfirm}
@@ -346,6 +476,47 @@ export default function AdminRequestsPage() {
           }}
         />
       )}
-    </div>
+
+      {/* CONFIRMACIÓN DE APROBAR (antes, confirm() del navegador). Se abre
+          también encima del detalle: va después en el documento y queda arriba. */}
+      <Modal
+        abierto={idPorAprobar !== null}
+        alCerrar={() => {
+          if (!aprobando) setIdPorAprobar(null);
+        }}
+        tamano="sm"
+        iconoTitulo={<CheckCircle2 size={20} className="text-lime-dark" aria-hidden="true" />}
+        titulo="Aprobar solicitud"
+        descripcion="La empresa podrá publicar vacantes; se le avisa por correo y con una notificación."
+        pie={
+          <>
+            <Button variante="contorno" onClick={() => setIdPorAprobar(null)} disabled={aprobando}>
+              Cancelar
+            </Button>
+            <Button icono={Check} onClick={confirmarAprobacion} cargando={aprobando} textoCargando="Aprobando…">
+              Aprobar solicitud
+            </Button>
+          </>
+        }
+      >
+        {solicitudPorAprobar && (
+          <div className="rounded-xl border border-line bg-paper px-4 py-3">
+            <p className="font-semibold text-ink">{solicitudPorAprobar.nombreEmpresa}</p>
+            <p className="text-[13px] text-ink-muted">
+              {solicitudPorAprobar.razonSocial} · <span className="font-mono">{solicitudPorAprobar.rfc}</span>
+            </p>
+            <p className="break-all text-[13px] text-ink-muted">{solicitudPorAprobar.correoEmpresa}</p>
+          </div>
+        )}
+      </Modal>
+
+      {/* Resultado de aprobar / rechazar */}
+      <Toast
+        tono={notification.type === 'error' ? 'error' : 'exito'}
+        mensaje={notification.type ? notification.message : null}
+        alCerrar={() => setNotification({ type: null, message: '' })}
+        duracion={notification.type === 'error' ? 0 : 6000}
+      />
+    </>
   );
 }

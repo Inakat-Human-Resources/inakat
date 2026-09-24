@@ -2,25 +2,49 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+/**
+ * Entrevistas: el admin agenda (y reprograma o cancela) las entrevistas que
+ * piden las empresas (GET /api/admin/interviews, PATCH /api/admin/interviews/[id]).
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md): PageHeader → tarjeta con pestañas
+ * (Pendientes, Agendadas, Pasadas, Canceladas) y sus cifras → DataTable → Modal
+ * de agenda. La lógica —todas las tandas antes de pintar (ADM-002/043), qué
+ * viaja al cancelar (ADM-007), cómo se decide el éxito (ADM-008), horarios
+ * vencidos (ADM-064), ligas sólo http(s) (ADM-065), cancelar una ya agendada
+ * con confirmación (ADM-066)— es la de siempre; sólo cambió la presentación.
+ */
+
+import { useState, useEffect, useRef } from 'react';
 import {
-  Calendar,
-  Clock,
-  Video,
-  MapPin,
-  Users,
-  ChevronLeft,
-  Loader2,
-  X,
-  Save,
   AlertCircle,
-  CheckCircle,
-  XCircle,
-  Building,
   Briefcase,
-  MessageSquare
+  Building,
+  Calendar,
+  CalendarDays,
+  CheckCircle,
+  Eye,
+  MapPin,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Video,
+  X
 } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import StatusBadge, { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Modal from '@/components/ui/Modal';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import FormField, { Input, Textarea } from '@/components/ui/FormField';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
+import { fechaCorta, fechaHora } from '@/lib/fechas';
 
 // Tope de tandas que se piden al servidor (100 filas cada una). Es una red de
 // seguridad: sin él una base con muchas solicitudes dispararía peticiones sin
@@ -67,6 +91,25 @@ interface InterviewRequest {
     } | null;
   };
 }
+
+/** Pestañas (mismas cuatro de siempre, con el vocabulario de la pantalla). */
+const PESTANAS: Array<{ key: TabType; label: string; frase: string }> = [
+  { key: 'pending', label: 'Pendientes', frase: 'Nada esperando fecha.' },
+  { key: 'confirmed', label: 'Agendadas', frase: 'La agenda está libre.' },
+  { key: 'expired', label: 'Pasadas', frase: 'Todavía no hay historia.' },
+  { key: 'cancelled', label: 'Canceladas', frase: 'Ninguna se cayó.' }
+];
+
+/** Cuántos horarios propuso la empresa (sólo para pintarlo; si el JSON no se lee, 0). */
+const horariosPropuestos = (json: string | null): number => {
+  if (!json) return 0;
+  try {
+    const lista = JSON.parse(json);
+    return Array.isArray(lista) ? lista.length : 0;
+  } catch {
+    return 0;
+  }
+};
 
 export default function AdminInterviewsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('pending');
@@ -344,396 +387,290 @@ export default function AdminInterviewsPage() {
     }
   };
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const formatDateTime = (iso: string) =>
-    new Date(iso).toLocaleString('es-MX', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
+  // Formateador único (src/lib/fechas): «23 sep 2026» y «23 sep 2026, 18:22».
+  const formatDate = (iso: string) => fechaCorta(iso);
+  const formatDateTime = (iso: string) => fechaHora(iso);
 
   const getCompanyName = (interview: InterviewRequest) =>
     interview.requestedBy?.companyRequest?.nombreEmpresa ||
     interview.application.job.company;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 pt-24 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
+  // ---------------------------------------------------------------------------
+  // Presentación (nada de lo que sigue pide datos ni cambia qué se envía)
+  // ---------------------------------------------------------------------------
+
+  // Un error del modal se lleva a la vista: el botón está en el pie y el aviso
+  // arriba del cuerpo, que puede estar desplazado.
+  const errorModalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (modalError) errorModalRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [modalError]);
+
+  // Esqueleto de página sólo en la primera carga; al recargar tras guardar,
+  // la tabla muestra sus filas esqueleto y la cabecera se queda.
+  if (loading && interviews.length === 0) {
+    return <SkeletonPagina conCifras={false} />;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 pt-24 pb-12">
-      <div className="container mx-auto px-4 max-w-6xl">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/admin" className="text-gray-400 hover:text-gray-600">
-            <ChevronLeft className="w-6 h-6" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestión de Entrevistas</h1>
-            <p className="text-gray-500 text-sm">Coordina y agenda entrevistas entre empresas y candidatos</p>
-          </div>
+  const pestanaActual = PESTANAS.find((p) => p.key === activeTab) ?? PESTANAS[0];
+  const editable =
+    selectedInterview?.status === 'pending' || selectedInterview?.status === 'confirmed';
+
+  /** Acción de la fila según la pestaña (misma que antes: abre el modal). */
+  const accionFila = (interview: InterviewRequest) => {
+    const quien = <span className="sr-only"> la entrevista de {interview.application.candidateName}</span>;
+    if (activeTab === 'pending') {
+      return (
+        <Button variante="secundario" tamano="sm" icono={Calendar} onClick={() => openScheduleModal(interview)}>
+          Agendar{quien}
+        </Button>
+      );
+    }
+    if (activeTab === 'confirmed') {
+      return (
+        <Button variante="contorno" tamano="sm" icono={Pencil} onClick={() => openScheduleModal(interview)}>
+          Editar{quien}
+        </Button>
+      );
+    }
+    return (
+      <Button variante="fantasma" tamano="sm" icono={Eye} onClick={() => openScheduleModal(interview)}>
+        Ver detalle{quien}
+      </Button>
+    );
+  };
+
+  const modalidad = (interview: InterviewRequest) => (
+    <Badge
+      tono={interview.type === 'videocall' ? 'info' : 'marca'}
+      icono={interview.type === 'videocall' ? Video : MapPin}
+      tamano="sm"
+    >
+      {interview.type === 'videocall' ? 'Videollamada' : 'Presencial'}
+    </Badge>
+  );
+
+  // Anchos medidos: con la barra lateral la tabla tiene ~1126 px a 1440,
+  // ~966 a 1280 y ~710 a 1024. Empresa se esconde bajo 1100 y Modalidad bajo
+  // 800; su dato sube a la celda del candidato (data-solo-bajo).
+  const columnas: Columna<InterviewRequest>[] = [
+    {
+      id: 'candidato',
+      encabezado: 'Candidato',
+      enTarjeta: 'titulo',
+      className: 'min-w-[12rem]',
+      celda: (interview) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{interview.application.candidateName}</p>
+          <p className="mt-0.5 flex items-start gap-1 text-[13px] text-ink-muted">
+            <Briefcase size={13} className="mt-[3px] flex-none" aria-hidden="true" />
+            <span>{interview.application.job.title}</span>
+          </p>
+          <p data-solo-bajo="xl" className="flex items-start gap-1 text-[13px] text-ink-muted">
+            <Building size={13} className="mt-[3px] flex-none" aria-hidden="true" />
+            <span>{getCompanyName(interview)}</span>
+          </p>
+          <span data-solo-bajo="md" className="mt-1 flex flex-wrap items-center gap-1.5">
+            {modalidad(interview)}
+            <span className="text-xs tabular-nums text-ink-muted">{interview.duration} min</span>
+          </span>
+          {interview.topic && (
+            <p className="mt-1 line-clamp-1 text-xs text-ink-muted">Tema: {interview.topic}</p>
+          )}
         </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            {error}
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b bg-white rounded-t-lg overflow-x-auto">
-          {([
-            { key: 'pending' as TabType, label: 'Pendientes', icon: Clock, color: 'text-amber-600' },
-            { key: 'confirmed' as TabType, label: 'Agendadas', icon: CheckCircle, color: 'text-green-600' },
-            { key: 'expired' as TabType, label: 'Pasadas', icon: Calendar, color: 'text-gray-500' },
-            { key: 'cancelled' as TabType, label: 'Canceladas', icon: XCircle, color: 'text-red-500' },
-          ]).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.key
-                  ? `${tab.color} border-current bg-gray-50`
-                  : 'text-gray-500 border-transparent hover:text-gray-700'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-              {tabCounts[tab.key] > 0 && (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  activeTab === tab.key ? 'bg-current/10' : 'bg-gray-100'
-                }`}>
-                  {tabCounts[tab.key]}
-                </span>
-              )}
-            </button>
-          ))}
+      )
+    },
+    {
+      id: 'empresa',
+      encabezado: 'Empresa',
+      ocultarBajo: 'xl',
+      celda: (interview) => <span className="font-medium text-ink">{getCompanyName(interview)}</span>
+    },
+    {
+      id: 'modalidad',
+      encabezado: 'Modalidad',
+      ocultarBajo: 'md',
+      className: 'whitespace-nowrap',
+      celda: (interview) => (
+        <div className="flex flex-col items-start gap-1">
+          {modalidad(interview)}
+          <span className="text-xs tabular-nums text-ink-muted">{interview.duration} min</span>
         </div>
-
-        {/* Content */}
-        {filteredInterviews.length === 0 ? (
-          <div className="bg-white rounded-lg p-12 text-center">
-            <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No hay entrevistas en esta categoría.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredInterviews.map(interview => (
-              <div key={interview.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  {/* Left: Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">{interview.application.candidateName}</span>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                        interview.type === 'videocall'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-orange-100 text-orange-700'
-                      }`}>
-                        {interview.type === 'videocall' ? 'Videollamada' : 'Presencial'}
-                      </span>
-                      <span className="text-xs text-gray-400">{interview.duration} min</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <Building className="w-3.5 h-3.5" />
-                        {getCompanyName(interview)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Briefcase className="w-3.5 h-3.5" />
-                        {interview.application.job.title}
-                      </span>
-                    </div>
-
-                    {/* Scheduled time */}
-                    {interview.scheduledStart && (
-                      <div className="flex items-center gap-1 mt-1 text-sm font-medium text-green-700">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {formatDateTime(interview.scheduledStart)}
-                        {interview.location && (
-                          <span className="ml-2 flex items-center gap-1 text-gray-500 font-normal">
-                            <MapPin className="w-3.5 h-3.5" /> {interview.location}
-                          </span>
-                        )}
-                        {/* ADM-065: las filas guardadas antes de validar la liga
-                            pueden traer cualquier cosa; si no es http(s) se
-                            enseña como texto, nunca como enlace. */}
-                        {interview.meetingUrl && esEnlaceHttp(interview.meetingUrl) && (
-                          <a
-                            href={interview.meetingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-2 flex items-center gap-1 text-blue-600 font-normal hover:underline"
-                          >
-                            <Video className="w-3.5 h-3.5" /> Liga VC
-                          </a>
-                        )}
-                        {interview.meetingUrl && !esEnlaceHttp(interview.meetingUrl) && (
-                          <span className="ml-2 text-gray-500 font-normal break-all">
-                            {interview.meetingUrl}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {interview.topic && (
-                      <p className="text-xs text-gray-500 mt-1">Tema: {interview.topic}</p>
-                    )}
-
-                    <p className="text-xs text-gray-400 mt-1">Solicitado: {formatDate(interview.createdAt)}</p>
-                  </div>
-
-                  {/* Right: Actions */}
-                  <div className="flex gap-2 flex-shrink-0">
-                    {activeTab === 'pending' && (
-                      <button
-                        onClick={() => openScheduleModal(interview)}
-                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        Agendar
-                      </button>
-                    )}
-                    {activeTab === 'confirmed' && (
-                      <button
-                        onClick={() => openScheduleModal(interview)}
-                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
-                      >
-                        Editar
-                      </button>
-                    )}
-                    {(activeTab === 'expired' || activeTab === 'cancelled') && (
-                      <button
-                        onClick={() => openScheduleModal(interview)}
-                        className="px-3 py-2 border border-gray-300 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Ver detalle
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Schedule / Edit Modal */}
-      {modalOpen && selectedInterview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-start rounded-t-xl">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">
-                  {selectedInterview.status === 'pending' ? 'Agendar Entrevista' : 'Detalle de Entrevista'}
-                </h2>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {selectedInterview.application.candidateName} — {getCompanyName(selectedInterview)}
+      )
+    },
+    {
+      id: 'fecha',
+      encabezado: 'Fecha',
+      className: 'min-w-[10.5rem]',
+      celda: (interview) => {
+        const propuestos = horariosPropuestos(interview.availableSlots);
+        return (
+          <div className="min-w-0 text-sm">
+            {interview.scheduledStart ? (
+              <>
+                <p className="flex items-center gap-1 whitespace-nowrap font-medium tabular-nums text-ink">
+                  <CalendarDays size={14} className="flex-none text-teal" aria-hidden="true" />
+                  {formatDateTime(interview.scheduledStart)}
                 </p>
-                <p className="text-xs text-gray-400">
-                  Vacante: {selectedInterview.application.job.title}
-                </p>
-              </div>
-              <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-5">
-              {modalError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {modalError}
-                </div>
-              )}
-
-              {/* Proposed slots */}
-              {selectedInterview.availableSlots && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Horarios propuestos por la empresa
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {(() => {
-                      try {
-                        const slots = JSON.parse(selectedInterview.availableSlots);
-                        return slots.map((slot: { date: string; time: string }, i: number) => {
-                          // ADM-064: un horario vencido no se puede elegir.
-                          const vencido = fechaDeSlot(slot) < new Date();
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              disabled={vencido}
-                              title={vencido ? 'Este horario ya pasó' : undefined}
-                              onClick={() => selectSlot(slot)}
-                              className={`px-3 py-1.5 text-xs border rounded-lg transition-colors ${
-                                vencido
-                                  ? 'border-gray-200 text-gray-400 line-through cursor-not-allowed'
-                                  : 'border-gray-300 hover:bg-green-50 hover:border-green-400'
-                              }`}
-                            >
-                              {new Date(slot.date + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} — {slot.time}
-                              {vencido && ' (vencido)'}
-                            </button>
-                          );
-                        });
-                      } catch {
-                        return <span className="text-xs text-gray-400">Sin horarios</span>;
-                      }
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* Topic */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Tema de la entrevista</label>
-                <input
-                  type="text"
-                  value={formTopic}
-                  onChange={(e) => setFormTopic(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="Ej: Entrevista técnica para..."
-                />
-              </div>
-
-              {/* Date/time */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha y hora inicio *</label>
-                  <input
-                    type="datetime-local"
-                    value={formScheduledStart}
-                    onChange={(e) => handleStartChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha y hora fin *</label>
-                  <input
-                    type="datetime-local"
-                    value={formScheduledEnd}
-                    onChange={(e) => setFormScheduledEnd(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
-                </div>
-              </div>
-
-              {/* Location or Meeting URL */}
-              {selectedInterview.type === 'presential' ? (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    <MapPin className="w-4 h-4 inline mr-1" />Lugar
-                  </label>
-                  <input
-                    type="text"
-                    value={formLocation}
-                    onChange={(e) => setFormLocation(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="Dirección del lugar de entrevista"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    <Video className="w-4 h-4 inline mr-1" />Liga de videoconferencia
-                  </label>
-                  <input
-                    type="url"
-                    value={formMeetingUrl}
-                    onChange={(e) => setFormMeetingUrl(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="https://meet.google.com/... o https://zoom.us/..."
-                  />
-                </div>
-              )}
-
-              {/* Participants */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Users className="w-4 h-4 inline mr-1" />Participantes
-                </label>
-                {formParticipants.length > 0 && (
-                  <div className="space-y-1 mb-2">
-                    {formParticipants.map((p, i) => (
-                      <div key={i} className="flex items-center justify-between bg-gray-50 px-3 py-1.5 rounded text-sm">
-                        <span>{p.nombre} ({p.email})</span>
-                        <button type="button" onClick={() => removeParticipant(i)} className="text-red-400 hover:text-red-600">
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                {interview.location && (
+                  <p className="mt-0.5 flex items-start gap-1 text-[13px] text-ink-muted">
+                    <MapPin size={13} className="mt-[3px] flex-none" aria-hidden="true" />
+                    <span>{interview.location}</span>
+                  </p>
                 )}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newParticipantName}
-                    onChange={(e) => setNewParticipantName(e.target.value)}
-                    placeholder="Nombre"
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  />
-                  <input
-                    type="email"
-                    value={newParticipantEmail}
-                    onChange={(e) => setNewParticipantEmail(e.target.value)}
-                    placeholder="Email"
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={addParticipant}
-                    disabled={!newParticipantName.trim() || !newParticipantEmail.trim()}
-                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50"
+                {/* ADM-065: las filas guardadas antes de validar la liga
+                    pueden traer cualquier cosa; si no es http(s) se
+                    enseña como texto, nunca como enlace. */}
+                {interview.meetingUrl && esEnlaceHttp(interview.meetingUrl) && (
+                  <a
+                    href={interview.meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 inline-flex items-center gap-1 rounded text-[13px] font-medium text-teal hover:text-teal-dark hover:underline"
                   >
-                    Añadir
-                  </button>
-                </div>
-              </div>
+                    <Video size={13} aria-hidden="true" /> Liga VC
+                    <span className="sr-only"> de la entrevista de {interview.application.candidateName} (se abre en otra pestaña)</span>
+                  </a>
+                )}
+                {interview.meetingUrl && !esEnlaceHttp(interview.meetingUrl) && (
+                  <p className="mt-0.5 break-all text-[13px] text-ink-muted">{interview.meetingUrl}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] text-ink-muted">Sin agendar</p>
+                {propuestos > 0 && (
+                  <p className="text-xs tabular-nums text-ink-muted">
+                    {propuestos} {propuestos === 1 ? 'horario propuesto' : 'horarios propuestos'}
+                  </p>
+                )}
+              </>
+            )}
+            {activeTab === 'cancelled' && (
+              <span className="mt-1 inline-flex">
+                <StatusBadge estado={interview.status} contexto="entrevista" tamano="sm" />
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      id: 'solicitada',
+      encabezado: 'Solicitada',
+      ocultarBajo: 'md',
+      className: 'whitespace-nowrap',
+      celda: (interview) => (
+        <span className="text-[13px] tabular-nums text-ink-muted">{formatDate(interview.createdAt)}</span>
+      )
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (interview) => accionFila(interview)
+    }
+  ];
 
-              {/* Company message */}
-              {selectedInterview.message && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    <MessageSquare className="w-4 h-4 inline mr-1" />Mensaje de la empresa
-                  </label>
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700">
-                    {selectedInterview.message}
-                  </div>
-                </div>
-              )}
+  // Horarios propuestos del modal (un JSON que puede venir roto).
+  const slotsDelModal = (() => {
+    if (!selectedInterview?.availableSlots) return null;
+    try {
+      const slots = JSON.parse(selectedInterview.availableSlots);
+      return Array.isArray(slots) ? (slots as Array<{ date: string; time: string }>) : [];
+    } catch {
+      return 'roto' as const;
+    }
+  })();
 
-              {/* Admin notes */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Notas internas (solo admin)</label>
-                <textarea
-                  value={formAdminNotes}
-                  onChange={(e) => setFormAdminNotes(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="Notas de seguimiento..."
-                />
-              </div>
-            </div>
+  return (
+    <>
+      <PageHeader
+        antetitulo="Reclutamiento"
+        titulo="Entrevistas"
+        remate="entre empresas y candidatos"
+        descripcion="Coordina y agenda las entrevistas que piden las empresas."
+      />
 
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-gray-50 border-t p-4 flex flex-col sm:flex-row justify-between items-center gap-3 rounded-b-xl">
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3 text-sm font-medium text-danger-dark"
+        >
+          <AlertCircle size={18} className="flex-none" aria-hidden="true" />
+          <p className="min-w-0 flex-1">{error}</p>
+          {interviews.length === 0 && (
+            <Button variante="contorno" tamano="sm" icono={RefreshCw} onClick={fetchInterviews}>
+              Reintentar
+            </Button>
+          )}
+        </div>
+      )}
+
+      <Card
+        titulo="Solicitudes de entrevista"
+        descripcion="Las empresas proponen horarios; aquí se confirma la fecha y el lugar o la liga."
+        sinRelleno
+      >
+        <Tabs
+          idBase="entrevistas"
+          etiqueta="Estado de las entrevistas"
+          activa={activeTab}
+          alCambiar={(id) => setActiveTab(id as TabType)}
+          pestanas={PESTANAS.map((tab) => ({ id: tab.key, etiqueta: tab.label, contador: tabCounts[tab.key] }))}
+          className="px-3"
+        />
+        <PanelPestana idBase="entrevistas" id={activeTab} activa={activeTab} className="pt-0">
+          <DataTable
+            etiqueta={`Entrevistas: ${pestanaActual.label}`}
+            columnas={columnas}
+            filas={filteredInterviews}
+            claveFila={(interview) => interview.id}
+            cargando={loading}
+            alActivarFila={openScheduleModal}
+            vacio={
+              <EmptyState
+                frase={pestanaActual.frase}
+                titulo="No hay entrevistas en esta categoría."
+              />
+            }
+          />
+        </PanelPestana>
+      </Card>
+
+      {/* Agendar / editar / ver una entrevista */}
+      <Modal
+        abierto={modalOpen && selectedInterview !== null}
+        alCerrar={() => setModalOpen(false)}
+        tamano="lg"
+        // Formulario a medias: pulsar fuera no lo cierra (Escape y «Cerrar» sí).
+        cerrarAlPulsarFondo={false}
+        iconoTitulo={<CalendarDays size={20} className="flex-none text-teal" aria-hidden="true" />}
+        titulo={selectedInterview?.status === 'pending' ? 'Agendar entrevista' : 'Detalle de entrevista'}
+        subtitulo={
+          selectedInterview && (
+            <>
+              <span className="font-medium text-ink">{selectedInterview.application.candidateName}</span>
+              <span aria-hidden="true"> — </span>
+              <span className="sr-only">, </span>
+              {getCompanyName(selectedInterview)}
+              <span className="mt-0.5 block text-xs">Vacante: {selectedInterview.application.job.title}</span>
+            </>
+          )
+        }
+        pie={
+          selectedInterview && (
+            <>
               {/* ADM-066: una entrevista ya confirmada no se podía cancelar desde
                   la interfaz (la API sí lo admite) y acababa en "Pasadas" como
                   si se hubiera realizado. Cancelar pide confirmación: es un
                   clic que no se puede deshacer desde aquí. */}
-              {(selectedInterview.status === 'pending' || selectedInterview.status === 'confirmed') && (
-                <button
-                  type="button"
+              {editable && (
+                <Button
+                  variante="fantasma"
                   onClick={() => {
                     const pregunta = selectedInterview.status === 'pending'
                       ? '¿Cancelar esta solicitud de entrevista?'
@@ -741,53 +678,242 @@ export default function AdminInterviewsPage() {
                     if (confirm(pregunta)) handleSave('cancelled');
                   }}
                   disabled={saving}
-                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                  className="text-danger hover:bg-danger-tint sm:mr-auto"
                 >
                   {selectedInterview.status === 'pending' ? 'Cancelar solicitud' : 'Cancelar entrevista'}
-                </button>
+                </Button>
               )}
-              {selectedInterview.status !== 'pending' && selectedInterview.status !== 'confirmed' && <div />}
+              <Button variante="contorno" onClick={() => setModalOpen(false)}>
+                Cerrar
+              </Button>
+              {selectedInterview.status === 'confirmed' && (
+                <Button icono={Save} onClick={() => handleSave(null)} cargando={saving}>
+                  Guardar cambios
+                </Button>
+              )}
+              {selectedInterview.status === 'pending' && (
+                <Button icono={CheckCircle} onClick={() => handleSave('confirmed')} cargando={saving}>
+                  Confirmar entrevista
+                </Button>
+              )}
+            </>
+          )
+        }
+      >
+        {selectedInterview && (
+          <div className="space-y-6">
+            {modalError && (
+              <div
+                ref={errorModalRef}
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-tint px-3.5 py-3 text-sm font-medium text-danger-dark"
+              >
+                <AlertCircle size={16} className="mt-0.5 flex-none" aria-hidden="true" />
+                <p className="min-w-0">{modalError}</p>
+              </div>
+            )}
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
-                >
-                  Cerrar
-                </button>
+            {!editable && (
+              <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+                <StatusBadge estado={selectedInterview.status} contexto="entrevista" />
+                Sólo lectura: esta solicitud ya no se puede modificar.
+              </p>
+            )}
 
-                {(selectedInterview.status === 'pending' || selectedInterview.status === 'confirmed') && (
+            {/* Lo que pidió la empresa, antes de agendar */}
+            {selectedInterview.message && (
+              <section className="[overflow:visible]">
+                <h3 className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                  <MessageSquare size={15} className="text-teal" aria-hidden="true" />
+                  Mensaje de la empresa
+                </h3>
+                <blockquote className="mt-1.5 whitespace-pre-wrap rounded-lg border-l-2 border-teal bg-teal-tint/40 px-3.5 py-3 text-sm leading-relaxed text-ink">
+                  {selectedInterview.message}
+                </blockquote>
+              </section>
+            )}
+
+            {/* Horarios propuestos: elegir uno rellena inicio y fin */}
+            {slotsDelModal !== null && (
+              <section className="[overflow:visible]" aria-labelledby="horarios-propuestos">
+                <h3 id="horarios-propuestos" className="text-sm font-medium text-ink">
+                  Horarios propuestos por la empresa
+                </h3>
+                {slotsDelModal === 'roto' ? (
+                  <p className="mt-1 text-[13px] text-ink-muted">Sin horarios</p>
+                ) : slotsDelModal.length === 0 ? (
+                  <p className="mt-1 text-[13px] text-ink-muted">La empresa no propuso horarios.</p>
+                ) : (
                   <>
-                    {selectedInterview.status === 'confirmed' && (
-                      <button
-                        type="button"
-                        onClick={() => handleSave(null)}
-                        disabled={saving}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Guardar Cambios
-                      </button>
-                    )}
-                    {selectedInterview.status === 'pending' && (
-                      <button
-                        type="button"
-                        onClick={() => handleSave('confirmed')}
-                        disabled={saving}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                        Confirmar Entrevista
-                      </button>
-                    )}
+                    <p className="mt-0.5 text-[13px] text-ink-muted">Elige uno para rellenar el inicio y el fin.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {slotsDelModal.map((slot, i) => {
+                        // ADM-064: un horario vencido no se puede elegir.
+                        const vencido = fechaDeSlot(slot) < new Date();
+                        const elegido = !vencido && formScheduledStart === `${slot.date}T${slot.time}`;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            disabled={vencido || !editable}
+                            aria-pressed={elegido}
+                            title={vencido ? 'Este horario ya pasó' : undefined}
+                            onClick={() => selectSlot(slot)}
+                            className={cn(
+                              'inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] tabular-nums transition-colors duration-150',
+                              vencido
+                                ? 'cursor-not-allowed border-line text-ink-muted line-through'
+                                : elegido
+                                  ? 'border-teal bg-teal-tint font-semibold text-teal-dark'
+                                  : 'border-line-strong bg-white text-ink hover:border-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60'
+                            )}
+                          >
+                            {elegido && <CheckCircle size={14} aria-hidden="true" />}
+                            {new Date(slot.date + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' })} — {slot.time}
+                            {vencido && ' (vencido)'}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </>
                 )}
-              </div>
+              </section>
+            )}
+
+            <FormField etiqueta="Tema de la entrevista">
+              <Input
+                type="text"
+                value={formTopic}
+                onChange={(e) => setFormTopic(e.target.value)}
+                placeholder="Ej.: Entrevista técnica para…"
+                disabled={!editable}
+              />
+            </FormField>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                etiqueta="Fecha y hora de inicio"
+                requerido={editable}
+                ayuda={`Dura ${selectedInterview.duration} min: el fin se calcula solo.`}
+              >
+                <Input
+                  type="datetime-local"
+                  value={formScheduledStart}
+                  onChange={(e) => handleStartChange(e.target.value)}
+                  disabled={!editable}
+                />
+              </FormField>
+              <FormField etiqueta="Fecha y hora de fin" requerido={editable}>
+                <Input
+                  type="datetime-local"
+                  value={formScheduledEnd}
+                  onChange={(e) => setFormScheduledEnd(e.target.value)}
+                  disabled={!editable}
+                />
+              </FormField>
             </div>
+
+            {selectedInterview.type === 'presential' ? (
+              <FormField
+                etiqueta="Lugar"
+                requerido={editable}
+                ayuda="Dirección completa donde será la entrevista."
+              >
+                <Input
+                  type="text"
+                  value={formLocation}
+                  onChange={(e) => setFormLocation(e.target.value)}
+                  placeholder="Calle, número, colonia, ciudad"
+                  prefijo={<MapPin />}
+                  disabled={!editable}
+                />
+              </FormField>
+            ) : (
+              <FormField
+                etiqueta="Liga de videoconferencia"
+                requerido={editable}
+                ayuda="Pega la liga completa, con https:// al principio (Meet, Zoom, Teams…)."
+              >
+                <Input
+                  type="url"
+                  value={formMeetingUrl}
+                  onChange={(e) => setFormMeetingUrl(e.target.value)}
+                  placeholder="https://meet.google.com/…"
+                  prefijo={<Video />}
+                  disabled={!editable}
+                />
+              </FormField>
+            )}
+
+            {/* Participantes */}
+            <fieldset className="min-w-0">
+              <legend className="text-sm font-medium text-ink">Participantes</legend>
+              {formParticipants.length > 0 ? (
+                <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+                  {formParticipants.map((p, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                      <span className="min-w-0">
+                        <span className="font-medium text-ink">{p.nombre}</span>{' '}
+                        <span className="break-all text-ink-muted">{p.email}</span>
+                      </span>
+                      {editable && (
+                        <IconButton
+                          etiqueta={`Quitar a ${p.nombre}`}
+                          icono={X}
+                          variante="peligro"
+                          tamano="sm"
+                          onClick={() => removeParticipant(i)}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-[13px] text-ink-muted">Nadie más, por ahora.</p>
+              )}
+              {editable && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                  <FormField etiqueta="Nombre">
+                    <Input
+                      type="text"
+                      value={newParticipantName}
+                      onChange={(e) => setNewParticipantName(e.target.value)}
+                      placeholder="Nombre"
+                    />
+                  </FormField>
+                  <FormField etiqueta="Correo">
+                    <Input
+                      type="email"
+                      value={newParticipantEmail}
+                      onChange={(e) => setNewParticipantEmail(e.target.value)}
+                      placeholder="nombre@empresa.com"
+                    />
+                  </FormField>
+                  <Button
+                    variante="contorno"
+                    icono={Plus}
+                    onClick={addParticipant}
+                    disabled={!newParticipantName.trim() || !newParticipantEmail.trim()}
+                  >
+                    Añadir
+                  </Button>
+                </div>
+              )}
+            </fieldset>
+
+            <FormField etiqueta="Notas internas" ayuda="Sólo las ven los administradores.">
+              <Textarea
+                value={formAdminNotes}
+                onChange={(e) => setFormAdminNotes(e.target.value)}
+                rows={3}
+                className="resize-none"
+                placeholder="Notas de seguimiento…"
+                disabled={!editable}
+              />
+            </FormField>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </Modal>
+    </>
   );
 }

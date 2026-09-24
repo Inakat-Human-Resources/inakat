@@ -2,20 +2,44 @@
 
 'use client';
 
+/**
+ * Asignar equipo: el admin reparte reclutador y especialista a cada vacante
+ * activa (POST /api/admin/assignments, una fila cada vez).
+ *
+ * Registro de APLICACIÓN (docs/DISENO.md): PageHeader → tarjeta con pestañas
+ * que filtran por estado del equipo (con sus cifras) → DataTable, que en móvil
+ * pasa a tarjetas. La lógica —qué se pide, cómo se conservan los cambios sin
+ * guardar de otras filas al guardar una (ADM-014), el reclutador desactivado
+ * (ADM-015), retirar el equipo con confirmación (ADM-058)— es la de siempre;
+ * sólo cambió la presentación.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
-  Users,
-  Briefcase,
+  AlertCircle,
+  AlertTriangle,
+  Building2,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  RefreshCw,
   UserCheck,
   UserCog,
-  Save,
-  Loader2,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Building2
+  Users,
+  type LucideIcon
 } from 'lucide-react';
-import Link from 'next/link';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import StatusBadge, { Badge, type TonoBadge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import Toast, { useAvisos } from '@/components/ui/Toast';
+import { Select } from '@/components/ui/FormField';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
 
 interface Job {
   id: number;
@@ -95,6 +119,66 @@ const seleccionesDelServidor = (lista: Job[]): Selecciones => {
   });
   return resultado;
 };
+
+/** Filtros por estado del equipo (los mismos valores que acepta la API). */
+const FILTROS: Array<{ value: string; label: string; cifra: (s: Stats) => number }> = [
+  { value: 'all', label: 'Todas', cifra: (s) => s.total },
+  { value: 'unassigned', label: 'Sin asignar', cifra: (s) => s.unassigned },
+  { value: 'partial', label: 'Incompletas', cifra: (s) => s.partial ?? 0 },
+  { value: 'assigned', label: 'Asignadas', cifra: (s) => s.assigned },
+  { value: 'in_progress', label: 'En proceso', cifra: (s) => s.inProgress },
+  { value: 'completed', label: 'Completadas', cifra: (s) => s.completed }
+];
+
+/** «3 reclutadores» / «1 reclutador». */
+const cuantos = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
+
+type EstadoEquipo = 'unassigned' | 'partial' | 'assigned' | 'in_progress' | 'completed';
+
+/**
+ * En qué pestaña cae una vacante: el MISMO criterio, en el mismo orden, que
+ * `estadoDeAsignacion` de GET /api/admin/assignments (el que filtra y cuenta
+ * las pestañas). Así la insignia de cada fila dice el nombre de su pestaña y
+ * no un segundo vocabulario («Asignado», «Con reclutador»…) para lo mismo.
+ * Sólo decide qué se PINTA; el filtro lo sigue haciendo la API.
+ */
+const estadoDeEquipo = (a: Assignment | undefined): EstadoEquipo => {
+  if (!a || (!a.recruiterId && !a.specialistId)) return 'unassigned';
+  if (a.specialistStatus === 'sent_to_company') return 'completed';
+  if (
+    a.recruiterStatus === 'reviewing' ||
+    a.recruiterStatus === 'sent_to_specialist' ||
+    a.specialistStatus === 'evaluating'
+  ) {
+    return 'in_progress';
+  }
+  if (a.recruiterId && a.specialistId) return 'assigned';
+  return 'partial';
+};
+
+/** Tono e icono de cada estado (el texto es la etiqueta de su pestaña, FILTROS). */
+const ASPECTO_EQUIPO: Record<EstadoEquipo, { tono: TonoBadge; icono?: LucideIcon }> = {
+  unassigned: { tono: 'peligro' },
+  partial: { tono: 'aviso', icono: AlertTriangle },
+  assigned: { tono: 'neutro', icono: Clock },
+  in_progress: { tono: 'info' },
+  completed: { tono: 'exito', icono: CheckCircle2 }
+};
+
+/**
+ * La tabla pasa a tarjetas cuando la TABLA mide menos de 600 px (container
+ * query «ap-tabla» de app.css). Clases que sólo valen en uno de los dos modos:
+ * - el w-px que ciñe la columna de acciones es de la TABLA: en la tarjeta (una
+ *   rejilla) dejaba la columna en 1 px y el botón «Guardar», alineado al final,
+ *   se montaba sobre la empresa, la ciudad y los candidatos;
+ * - en la tarjeta, «Guardar» va al pie, a todo el ancho;
+ * - los selects sólo se ensanchan cuando la tabla tiene sitio (a 1024 px de
+ *   ventana la tabla mide ~710 px y no debe desplazarse de lado).
+ */
+const SOLO_EN_TABLA_CENIDA = '[@container_ap-tabla_(min-width:600px)]:w-px';
+const EN_TARJETA_A_LO_ANCHO = '[@container_ap-tabla_(max-width:599.98px)]:mt-1.5 [@container_ap-tabla_(max-width:599.98px)]:w-full';
+const ANCHO_SELECT =
+  'min-w-[10rem] [@container_ap-tabla_(min-width:960px)]:min-w-[12.5rem] [@container_ap-tabla_(min-width:1100px)]:min-w-[16rem]';
 
 export default function AssignmentsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -183,20 +267,29 @@ export default function AssignmentsPage() {
    * activos, el select mostraba "Sin asignar" pero el estado conservaba su id y
    * se reenviaba al guardar. Se pinta como opción propia, marcada, para que el
    * admin vea que hay que sustituirlo.
+   *
+   * Presentación: el aviso ya no va en el texto de la opción (el select lo
+   * recortaba justo ahí: «Laura Benítez (desactivado: reasi…»). La opción
+   * lleva sólo el nombre, dentro de un grupo «Desactivado» en la lista
+   * desplegada, y junto al select sale la insignia «Desactivado · reasigna»
+   * (enlazada al select con aria-describedby).
    */
+  const estaFuera = (idSeleccionado: number | undefined, lista: Person[]) =>
+    !!idSeleccionado && !lista.some((p) => p.id === idSeleccionado);
+
   const opcionFuera = (
     persona: { id: number; nombre: string; apellidoPaterno?: string } | undefined,
     idSeleccionado: number | undefined,
     lista: Person[]
   ) => {
-    if (!idSeleccionado || lista.some((p) => p.id === idSeleccionado)) return null;
+    if (!idSeleccionado || !estaFuera(idSeleccionado, lista)) return null;
     const nombre = persona && persona.id === idSeleccionado
       ? `${persona.nombre} ${persona.apellidoPaterno || ''}`.trim()
       : `Usuario #${idSeleccionado}`;
     return (
-      <option value={idSeleccionado}>
-        {nombre} (desactivado: reasignar)
-      </option>
+      <optgroup label="Desactivado">
+        <option value={idSeleccionado}>{nombre}</option>
+      </optgroup>
     );
   };
 
@@ -254,501 +347,367 @@ export default function AssignmentsPage() {
     }
   };
 
-  const getJobStatusBadge = (status: string) => {
-    const configs: Record<string, { bg: string; text: string; label: string }> = {
-      active: { bg: 'bg-green-100', text: 'text-green-700', label: 'Activa' },
-      paused: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Pausada' },
-      draft: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Borrador' },
-      closed: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Cerrada' }
-    };
-    const config = configs[status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: status };
+  // ---------------------------------------------------------------------------
+  // Presentación (nada de lo que sigue pide datos ni cambia qué se envía)
+  // ---------------------------------------------------------------------------
+  const { avisar } = useAvisos();
+
+  // Se guarda fila a fila, muchas veces lejos de la cabecera: el «guardado» y
+  // la advertencia de especialidad salen como avisos flotantes.
+  useEffect(() => {
+    if (success) avisar({ tono: 'exito', mensaje: success, duracion: 3000 });
+  }, [success, avisar]);
+  useEffect(() => {
+    if (warning) avisar({ tono: 'aviso', titulo: 'Especialidad distinta', mensaje: warning, duracion: 8000 });
+  }, [warning, avisar]);
+
+  /** ¿La fila tiene una elección distinta de la guardada? */
+  const tieneCambios = (jobId: number) => {
+    const seleccion = selections[jobId] || {};
+    const base = guardadoEnServidor.current[jobId] || {};
+    return seleccion.recruiterId !== base.recruiterId || seleccion.specialistId !== base.specialistId;
+  };
+  const filasConCambios = jobs.filter((j) => tieneCambios(j.id)).length;
+
+  const empresaDe = (job: Job) => job.user?.companyRequest?.nombreEmpresa || job.company;
+
+  const getJobStatusBadge = (status: string) => (
+    <StatusBadge estado={status} contexto="vacante" tamano="sm" />
+  );
+
+  /**
+   * Estado del equipo de una fila: color, icono (o punto) y TEXTO, que es el
+   * nombre de la pestaña en la que cae (ADM-029: mismo criterio que el filtro
+   * y las cifras de la API). «En proceso» dice debajo con quién está.
+   */
+  const getAssignmentStatusBadge = (job: Job, enLinea = false) => {
+    const estado = estadoDeEquipo(job.assignment);
+    const etiqueta = FILTROS.find((f) => f.value === estado)?.label ?? estado;
+    const conEspecialista =
+      job.assignment?.recruiterStatus === 'sent_to_specialist' ||
+      job.assignment?.specialistStatus === 'evaluating';
+    const { tono } = ASPECTO_EQUIPO[estado];
+    const Icono =
+      estado === 'in_progress' ? (conEspecialista ? UserCog : UserCheck) : ASPECTO_EQUIPO[estado].icono;
     return (
-      <span className={`px-2 py-0.5 ${config.bg} ${config.text} text-xs rounded-full`}>
-        {config.label}
+      <span className={cn('inline-flex items-start gap-x-2 gap-y-1', enLinea ? 'flex-wrap items-center' : 'flex-col')}>
+        <Badge tono={tono} icono={Icono} tamano="sm">
+          {etiqueta}
+        </Badge>
+        {estado === 'in_progress' && (
+          <span className="text-xs text-ink-muted">
+            {conEspecialista ? 'con el especialista' : 'con el reclutador'}
+          </span>
+        )}
       </span>
     );
   };
 
-  const getAssignmentStatusBadge = (job: Job) => {
-    // ADM-029: mismo criterio que el filtro y las tarjetas de la API. Una fila
-    // de asignación con ambos ids en null es "Sin asignar", no "Asignado".
-    if (!job.assignment || (!job.assignment.recruiterId && !job.assignment.specialistId)) {
-      return (
-        <span className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full font-medium">
-          Sin asignar
-        </span>
-      );
-    }
+  /** Especialistas agrupados por especialidad (grupos de la lista desplegada). */
+  const gruposEspecialistas = specialists.reduce<Array<{ nombre: string; personas: Person[] }>>((grupos, s) => {
+    const nombre = s.specialty || 'Sin especialidad';
+    const grupo = grupos.find((g) => g.nombre === nombre);
+    if (grupo) grupo.personas.push(s);
+    else grupos.push({ nombre, personas: [s] });
+    return grupos;
+  }, []);
 
-    const { recruiterStatus, specialistStatus } = job.assignment;
-
-    if (specialistStatus === 'sent_to_company') {
-      return (
-        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full flex items-center gap-1">
-          <CheckCircle size={12} />
-          Completado
-        </span>
-      );
-    }
-
-    if (
-      recruiterStatus === 'sent_to_specialist' ||
-      specialistStatus === 'evaluating'
-    ) {
-      return (
-        <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full flex items-center gap-1">
-          <UserCog size={12} />
-          Con Especialista
-        </span>
-      );
-    }
-
-    if (recruiterStatus === 'reviewing') {
-      return (
-        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full flex items-center gap-1">
-          <UserCheck size={12} />
-          Con Reclutador
-        </span>
-      );
-    }
-
-    if (!job.assignment.recruiterId || !job.assignment.specialistId) {
-      return (
-        <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full flex items-center gap-1">
-          <Clock size={12} />
-          Incompleta
-        </span>
-      );
-    }
-
-    return (
-      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full flex items-center gap-1">
-        <Clock size={12} />
-        Asignado
-      </span>
-    );
+  /** Especialidad de quien está elegido en la fila (activo o desactivado). */
+  const especialidadElegida = (job: Job): string | null => {
+    const id = selections[job.id]?.specialistId;
+    if (!id) return null;
+    const activo = specialists.find((s) => s.id === id);
+    if (activo) return activo.specialty || null;
+    return job.assignment?.specialist?.id === id ? job.assignment.specialist.specialty || null : null;
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-button-green" size={40} />
-      </div>
-    );
+  /** Insignia bajo un select cuyo elegido ya no está activo. */
+  const avisoDesactivado = (id: string) => (
+    <p id={id} className="mt-1.5">
+      <Badge tono="aviso" icono={AlertTriangle} tamano="sm">
+        Desactivado · reasigna
+      </Badge>
+    </p>
+  );
+
+  // Anchos medidos: a 1024 px de ventana la tabla sólo tiene ~710 px. Por eso
+  // empresa, ciudad y candidatos van en la celda de la vacante (no en columnas
+  // propias) y el estado del equipo sube a ella cuando su columna se esconde.
+  const columnas: Columna<Job>[] = [
+    {
+      id: 'vacante',
+      encabezado: 'Vacante',
+      enTarjeta: 'titulo',
+      className: 'min-w-[11rem]',
+      celda: (job) => {
+        const candidatos = job._count?.applications || 0;
+        return (
+          <div className="min-w-0">
+            {/* Título y especialidad en una línea (que envuelve): la fila
+                queda en dos o tres renglones en vez de cuatro. */}
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-semibold leading-snug text-ink">{job.title}</span>
+              {/* La API sólo lista activas: el estado se enseña si NO lo es. */}
+              {job.status !== 'active' && getJobStatusBadge(job.status)}
+              {job.profile && (
+                <Badge tono="info" sinPunto tamano="sm">
+                  {job.profile}
+                </Badge>
+              )}
+            </p>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-muted">
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <Building2 size={13} className="flex-none" aria-hidden="true" />
+                {empresaDe(job)}
+              </span>
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <MapPin size={13} className="flex-none" aria-hidden="true" />
+                {job.location}
+              </span>
+              <Link
+                href={`/admin/assign-candidates?jobId=${job.id}`}
+                title="Gestionar candidatos"
+                className="inline-flex items-center gap-1 rounded font-medium tabular-nums text-teal hover:text-teal-dark hover:underline"
+              >
+                <Users size={13} className="flex-none" aria-hidden="true" />
+                {candidatos} {candidatos === 1 ? 'candidato' : 'candidatos'}
+                <span className="sr-only"> de {job.title}: gestionar</span>
+              </Link>
+            </p>
+            {/* El estado del equipo sube aquí cuando su columna se esconde. */}
+            <span data-solo-bajo="lg" className="mt-1.5 flex">
+              {getAssignmentStatusBadge(job, true)}
+            </span>
+          </div>
+        );
+      }
+    },
+    {
+      id: 'reclutador',
+      encabezado: 'Reclutador',
+      celda: (job) => {
+        const elegido = selections[job.id]?.recruiterId;
+        const fuera = estaFuera(elegido, recruiters);
+        const idAviso = `reclutador-desactivado-${job.id}`;
+        return (
+          <div className={cn('w-full', ANCHO_SELECT)}>
+            <Select
+              aria-label={`Reclutador de ${job.title}`}
+              aria-describedby={fuera ? idAviso : undefined}
+              value={elegido || ''}
+              onChange={(e) =>
+                setSelections({
+                  ...selections,
+                  [job.id]: {
+                    ...selections[job.id],
+                    recruiterId: e.target.value ? parseInt(e.target.value) : undefined
+                  }
+                })
+              }
+              className="h-8 sm:text-[13px]"
+            >
+              <option value="">Sin asignar</option>
+              {opcionFuera(job.assignment?.recruiter, elegido, recruiters)}
+              {recruiters.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nombre} {r.apellidoPaterno || ''}
+                </option>
+              ))}
+            </Select>
+            {fuera && avisoDesactivado(idAviso)}
+          </div>
+        );
+      }
+    },
+    {
+      id: 'especialista',
+      encabezado: 'Especialista',
+      celda: (job) => {
+        const elegido = selections[job.id]?.specialistId;
+        const fuera = estaFuera(elegido, specialists);
+        const especialidad = especialidadElegida(job);
+        const idAviso = `especialista-desactivado-${job.id}`;
+        const idAyuda = `especialista-especialidad-${job.id}`;
+        const describe = [fuera && idAviso, especialidad && idAyuda].filter(Boolean).join(' ') || undefined;
+        return (
+          <div className={cn('w-full', ANCHO_SELECT)}>
+            <Select
+              aria-label={`Especialista de ${job.title}`}
+              aria-describedby={describe}
+              value={elegido || ''}
+              onChange={(e) =>
+                setSelections({
+                  ...selections,
+                  [job.id]: {
+                    ...selections[job.id],
+                    specialistId: e.target.value ? parseInt(e.target.value) : undefined
+                  }
+                })
+              }
+              className="h-8 sm:text-[13px]"
+            >
+              <option value="">Sin asignar</option>
+              {opcionFuera(job.assignment?.specialist, elegido, specialists)}
+              {/* La especialidad ya no va en el texto de la opción (el select la
+                  recortaba: «Diego Calderón (Tecnolog…»): agrupa la lista y se
+                  lee como ayuda bajo el select. */}
+              {gruposEspecialistas.map((grupo) => (
+                <optgroup key={grupo.nombre} label={grupo.nombre}>
+                  {grupo.personas.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre} {s.apellidoPaterno || ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+            {fuera && avisoDesactivado(idAviso)}
+            {especialidad && (
+              <p id={idAyuda} className="mt-1 text-xs text-ink-muted">
+                Especialidad: <span className="text-ink">{especialidad}</span>
+              </p>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      id: 'asignacion',
+      encabezado: 'Equipo',
+      ocultarBajo: 'lg',
+      className: 'whitespace-nowrap',
+      celda: (job) => getAssignmentStatusBadge(job)
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      // En la tarjeta, al pie y a lo ancho, después de los dos selects: nunca
+      // encima de la línea de empresa y ciudad.
+      enTarjeta: 'completa',
+      className: cn('whitespace-nowrap', SOLO_EN_TABLA_CENIDA),
+      celda: (job) => {
+        const cambios = tieneCambios(job.id);
+        return (
+          // Una fila con cambios sin guardar cambia de botón (tinta) y lleva un
+          // punto; el lector lo oye en el nombre del botón.
+          <Button
+            variante={cambios ? 'secundario' : 'contorno'}
+            tamano="sm"
+            cargando={savingJobId === job.id}
+            onClick={() => handleSaveAssignment(job.id)}
+            aria-label={`Guardar equipo de ${job.title}${cambios ? ' (cambios sin guardar)' : ''}`}
+            title={cambios ? 'Hay cambios sin guardar' : 'Guardar asignación'}
+            className={EN_TARJETA_A_LO_ANCHO}
+          >
+            {cambios && <span className="h-1.5 w-1.5 flex-none rounded-full bg-orange" aria-hidden="true" />}
+            Guardar
+          </Button>
+        );
+      }
+    }
+  ];
+
+  // Esqueleto de página sólo en la primera carga; al cambiar de pestaña
+  // se ve la tabla cargando y la cabecera se queda.
+  if (isLoading && !stats) {
+    return <SkeletonPagina conCifras={false} />;
   }
 
+  const filtroActual = FILTROS.find((f) => f.value === statusFilter);
+  const errorDeCarga = !!error && jobs.length === 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        {/* Header - Responsive */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Vacantes</h1>
-          <p className="text-gray-600 mt-1 text-sm md:text-base">
-            Asigna equipo y gestiona candidatos desde una sola vista
-          </p>
-        </div>
+    <>
+      <PageHeader
+        antetitulo="Reclutamiento"
+        titulo="Asignar equipo"
+        remate="a cada vacante"
+        descripcion="Elige reclutador y especialista para cada vacante activa y guarda fila por fila."
+      />
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={20} />
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-auto text-red-400 hover:text-red-600"
-            >
-              ×
-            </button>
-          </div>
-        )}
+      {/* Error de una acción (con la lista a la vista): aviso fijo arriba,
+          visible aunque la fila quede lejos. El de carga va en la tarjeta. */}
+      <Toast
+        tono="error"
+        mensaje={errorDeCarga ? null : error}
+        alCerrar={() => setError(null)}
+        duracion={0}
+      />
 
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
-
-        {warning && (
-          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-yellow-700">
-            <AlertCircle size={20} />
-            <span className="flex-1">{warning}</span>
-            <button
-              onClick={() => setWarning(null)}
-              className="text-yellow-400 hover:text-yellow-600"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Stats */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">Total Vacantes</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">Sin Asignar</p>
-              <p className="text-2xl font-bold text-red-600">
-                {stats.unassigned}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">Incompletas</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {stats.partial ?? 0}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">Asignadas</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {stats.assigned}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">En Proceso</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {stats.inProgress}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-sm border">
-              <p className="text-sm text-gray-500">Completadas</p>
-              <p className="text-2xl font-bold text-green-600">
-                {stats.completed}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Info de personal */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-2 mb-2">
-              <UserCheck className="text-blue-600" size={20} />
-              <h3 className="font-semibold text-blue-800">
-                Reclutadores Disponibles
-              </h3>
-            </div>
-            {recruiters.length === 0 ? (
-              <p className="text-sm text-blue-600">
-                No hay reclutadores registrados
-              </p>
-            ) : (
-              <p className="text-sm text-blue-600">
-                {recruiters.length} reclutador(es)
-              </p>
-            )}
-          </div>
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-            <div className="flex items-center gap-2 mb-2">
-              <UserCog className="text-purple-600" size={20} />
-              <h3 className="font-semibold text-purple-800">
-                Especialistas Disponibles
-              </h3>
-            </div>
-            {specialists.length === 0 ? (
-              <p className="text-sm text-purple-600">
-                No hay especialistas registrados
-              </p>
-            ) : (
-              <p className="text-sm text-purple-600">
-                {specialists.length} especialista(s)
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Filtros */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border mb-6">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { value: 'all', label: 'Todas' },
-              { value: 'unassigned', label: 'Sin Asignar' },
-              { value: 'partial', label: 'Incompletas' },
-              { value: 'assigned', label: 'Asignadas' },
-              { value: 'in_progress', label: 'En Proceso' },
-              { value: 'completed', label: 'Completadas' }
-            ].map((filter) => (
-              <button
-                key={filter.value}
-                onClick={() => setStatusFilter(filter.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  statusFilter === filter.value
-                    ? 'bg-button-green text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lista de vacantes - Desktop: Tabla, Mobile: Cards */}
-        {jobs.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border p-12 text-center text-gray-500">
-            <Briefcase className="mx-auto mb-2 text-gray-400" size={40} />
-            No hay vacantes para mostrar
-          </div>
-        ) : (
+      <Card
+        titulo="Vacantes activas"
+        descripcion={
           <>
-            {/* Mobile: Cards */}
-            <div className="md:hidden space-y-4">
-              {jobs.map((job) => (
-                <div key={job.id} className="bg-white rounded-lg shadow-sm border p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{job.title}</h3>
-                      <p className="text-sm text-gray-500 flex items-center gap-1">
-                        <Building2 size={14} />
-                        {job.user?.companyRequest?.nombreEmpresa || job.company}
-                      </p>
-                      <p className="text-xs text-gray-400">{job.location}</p>
-                    </div>
-                    <div className="flex flex-col gap-1 items-end">
-                      {getJobStatusBadge(job.status)}
-                      {getAssignmentStatusBadge(job)}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    {job.profile && (
-                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
-                        {job.profile}
-                      </span>
-                    )}
-                    {job._count && (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded flex items-center gap-1">
-                        <Users size={12} />
-                        {job._count.applications} candidatos
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-gray-500 flex items-center gap-1 mb-1">
-                        <UserCheck size={12} /> Reclutador
-                      </label>
-                      <select
-                        value={selections[job.id]?.recruiterId || ''}
-                        onChange={(e) =>
-                          setSelections({
-                            ...selections,
-                            [job.id]: {
-                              ...selections[job.id],
-                              recruiterId: e.target.value ? parseInt(e.target.value) : undefined
-                            }
-                          })
-                        }
-                        className="w-full p-2 border rounded-lg text-sm"
-                      >
-                        <option value="">Sin asignar</option>
-                        {opcionFuera(job.assignment?.recruiter, selections[job.id]?.recruiterId, recruiters)}
-                        {recruiters.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.nombre} {r.apellidoPaterno || ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-gray-500 flex items-center gap-1 mb-1">
-                        <UserCog size={12} /> Especialista
-                      </label>
-                      <select
-                        value={selections[job.id]?.specialistId || ''}
-                        onChange={(e) =>
-                          setSelections({
-                            ...selections,
-                            [job.id]: {
-                              ...selections[job.id],
-                              specialistId: e.target.value ? parseInt(e.target.value) : undefined
-                            }
-                          })
-                        }
-                        className="w-full p-2 border rounded-lg text-sm"
-                      >
-                        <option value="">Sin asignar</option>
-                        {opcionFuera(job.assignment?.specialist, selections[job.id]?.specialistId, specialists)}
-                        {specialists.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSaveAssignment(job.id)}
-                        disabled={savingJobId === job.id}
-                        className="flex-1 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {savingJobId === job.id ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                          <>
-                            <Save size={18} />
-                            Guardar
-                          </>
-                        )}
-                      </button>
-                      <Link
-                        href={`/admin/assign-candidates?jobId=${job.id}`}
-                        className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
-                      >
-                        <Users size={18} />
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop: Tabla */}
-            <div className="hidden md:block bg-white rounded-lg shadow-sm border overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                        Vacante
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                        Empresa
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                        Candidatos
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                        Reclutador
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                        Especialista
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                        Estado
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                        Acciones
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobs.map((job) => (
-                      <tr key={job.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-medium text-gray-900">{job.title}</p>
-                              {getJobStatusBadge(job.status)}
-                            </div>
-                            <p className="text-sm text-gray-500">{job.location}</p>
-                            {job.profile && (
-                              <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
-                                {job.profile}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Building2 size={16} className="text-gray-400" />
-                            <span className="text-sm text-gray-700">
-                              {job.user?.companyRequest?.nombreEmpresa || job.company}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 rounded-full font-semibold text-sm">
-                            {job._count?.applications || 0}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={selections[job.id]?.recruiterId || ''}
-                            onChange={(e) =>
-                              setSelections({
-                                ...selections,
-                                [job.id]: {
-                                  ...selections[job.id],
-                                  recruiterId: e.target.value ? parseInt(e.target.value) : undefined
-                                }
-                              })
-                            }
-                            className="w-full p-2 border rounded-lg text-sm"
-                          >
-                            <option value="">Sin asignar</option>
-                            {opcionFuera(job.assignment?.recruiter, selections[job.id]?.recruiterId, recruiters)}
-                            {recruiters.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.nombre} {r.apellidoPaterno || ''}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={selections[job.id]?.specialistId || ''}
-                            onChange={(e) =>
-                              setSelections({
-                                ...selections,
-                                [job.id]: {
-                                  ...selections[job.id],
-                                  specialistId: e.target.value ? parseInt(e.target.value) : undefined
-                                }
-                              })
-                            }
-                            className="w-full p-2 border rounded-lg text-sm"
-                          >
-                            <option value="">Sin asignar</option>
-                            {opcionFuera(job.assignment?.specialist, selections[job.id]?.specialistId, specialists)}
-                            {specialists.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.nombre} {s.apellidoPaterno || ''} {s.specialty ? `(${s.specialty})` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {getAssignmentStatusBadge(job)}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleSaveAssignment(job.id)}
-                              disabled={savingJobId === job.id}
-                              className="p-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                              title="Guardar asignación"
-                            >
-                              {savingJobId === job.id ? (
-                                <Loader2 size={18} className="animate-spin" />
-                              ) : (
-                                <Save size={18} />
-                              )}
-                            </button>
-                            <Link
-                              href={`/admin/assign-candidates?jobId=${job.id}`}
-                              className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-                              title="Gestionar candidatos"
-                            >
-                              <Users size={18} />
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <span className="inline-flex items-center gap-1">
+              <UserCheck size={14} aria-hidden="true" />
+              {recruiters.length === 0 ? 'No hay reclutadores registrados' : `${cuantos(recruiters.length, 'reclutador', 'reclutadores')} disponibles`}
+            </span>
+            <span aria-hidden="true" className="mx-2">·</span>
+            <span className="inline-flex items-center gap-1">
+              <UserCog size={14} aria-hidden="true" />
+              {specialists.length === 0 ? 'No hay especialistas registrados' : `${cuantos(specialists.length, 'especialista', 'especialistas')} disponibles`}
+            </span>
           </>
-        )}
-      </div>
-    </div>
+        }
+        acciones={
+          filasConCambios > 0 && (
+            <Badge tono="aviso">
+              {filasConCambios === 1 ? '1 fila con cambios sin guardar' : `${filasConCambios} filas con cambios sin guardar`}
+            </Badge>
+          )
+        }
+        sinRelleno
+      >
+        <Tabs
+          idBase="equipo"
+          etiqueta="Filtrar vacantes por estado del equipo"
+          activa={statusFilter}
+          alCambiar={setStatusFilter}
+          pestanas={FILTROS.map((f) => ({
+            id: f.value,
+            etiqueta: f.label,
+            contador: stats ? f.cifra(stats) : undefined
+          }))}
+          className="px-3"
+        />
+
+        <PanelPestana idBase="equipo" id={statusFilter} activa={statusFilter} className="pt-0">
+          {errorDeCarga ? (
+            <div role="alert" className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+              <AlertCircle className="h-6 w-6 text-danger" aria-hidden="true" />
+              <p className="font-display font-semibold text-ink">No se pudo cargar la lista</p>
+              <p className="text-sm text-ink-muted">{error}</p>
+              <Button variante="contorno" tamano="sm" icono={RefreshCw} onClick={() => fetchAssignments()}>
+                Reintentar
+              </Button>
+            </div>
+          ) : (
+            <DataTable
+              etiqueta={`Vacantes activas: ${filtroActual?.label ?? 'todas'}`}
+              columnas={columnas}
+              filas={jobs}
+              claveFila={(job) => job.id}
+              cargando={isLoading}
+              vacio={
+                <EmptyState
+                  frase="Nada que repartir por aquí."
+                  titulo="No hay vacantes para mostrar"
+                  descripcion={statusFilter !== 'all' ? 'Ninguna vacante activa está en este estado.' : undefined}
+                  accion={
+                    statusFilter !== 'all' ? (
+                      <Button variante="contorno" tamano="sm" onClick={() => setStatusFilter('all')}>
+                        Ver todas
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              }
+            />
+          )}
+        </PanelPestana>
+      </Card>
+    </>
   );
 }

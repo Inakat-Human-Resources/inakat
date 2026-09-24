@@ -2,23 +2,42 @@
 
 'use client';
 
+/**
+ * Catálogo de especialidades (perfiles profesionales) de la plataforma.
+ *
+ * Registro de aplicación (docs/DISENO.md §5): PageHeader → cifras → tabla →
+ * modales. La lógica es la de siempre: mismas llamadas a
+ * /api/admin/specialties con los mismos cuerpos, mismos estados y mismos
+ * mensajes. Sólo cambió la presentación.
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   Plus,
-  Edit2,
+  Pencil,
   Trash2,
   Save,
-  X,
   ChevronDown,
-  ChevronUp,
-  Tag,
-  Palette,
-  ToggleLeft,
-  ToggleRight,
-  Loader2,
-  AlertCircle,
-  CheckCircle
+  Tags,
+  CheckCircle2,
+  CircleOff,
+  X
 } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import StatCard from '@/components/ui/StatCard';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import { Badge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import IconButton from '@/components/ui/IconButton';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import FormField, { Input, Textarea, Checkbox } from '@/components/ui/FormField';
+import { SkeletonPagina } from '@/components/ui/Skeleton';
+import { cn } from '@/lib/utils';
+import { AvisoError } from '@/components/ui/Aviso';
+import Switch from '@/components/ui/Switch';
 
 interface Specialty {
   id: number;
@@ -53,6 +72,20 @@ const initialFormData: FormData = {
   sortOrder: 0,
   isActive: true
 };
+
+/** «1 subcategoría», «8 subcategorías». */
+const subcategoriasTexto = (n: number) => `${n} subcategoría${n !== 1 ? 's' : ''}`;
+
+/** Muestra del color de la especialidad (dato del admin; decorativo: el nombre va al lado). */
+function MuestraColor({ color, className }: { color: string; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('inline-block h-2.5 w-2.5 flex-none rounded-full ring-1 ring-ink/15', className)}
+      style={{ backgroundColor: color }}
+    />
+  );
+}
 
 export default function SpecialtiesPage() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -245,589 +278,372 @@ export default function SpecialtiesPage() {
     setExpandedRows(newExpanded);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-button-green" size={40} />
-      </div>
-    );
+  // ---------------------------------------------------------------------------
+  // Presentación
+  // ---------------------------------------------------------------------------
+  const activas = specialties.filter((s) => s.isActive).length;
+  const porEliminar = specialties.find((s) => s.id === deleteConfirmId) ?? null;
+
+  const columnas: Columna<Specialty>[] = [
+    {
+      id: 'sortOrder',
+      encabezado: 'Orden',
+      alinear: 'centro',
+      // Las filas ya vienen en este orden: con la tabla estrecha, la columna sobra.
+      ocultarBajo: 'md',
+      className: 'w-px whitespace-nowrap',
+      celda: (s) => <span className="font-display tabular-nums text-ink-muted">{s.sortOrder}</span>,
+    },
+    {
+      id: 'name',
+      encabezado: 'Especialidad',
+      enTarjeta: 'titulo',
+      className: 'min-w-[12rem]',
+      celda: (s) => (
+        <div className="flex min-w-0 items-start gap-3">
+          <MuestraColor color={s.color} className="mt-[7px]" />
+          <div className="min-w-0">
+            <p className="font-semibold text-ink">
+              {s.icon && (
+                <span className="mr-1.5" aria-hidden="true">
+                  {s.icon}
+                </span>
+              )}
+              {s.name}
+            </p>
+            {s.description && (
+              <p className="mt-0.5 line-clamp-2 max-w-md text-[13px] leading-snug text-ink-muted">{s.description}</p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'subcategories',
+      encabezado: 'Subcategorías',
+      celda: (s) => {
+        if (s.subcategories.length === 0) {
+          return <span className="text-[13px] text-ink-muted">Sin subcategorías</span>;
+        }
+        const abierta = expandedRows.has(s.id);
+        return (
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => toggleRowExpand(s.id)}
+              aria-expanded={abierta}
+              aria-controls={`subcategorias-${s.id}`}
+              className="-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-medium text-teal transition-colors duration-150 hover:bg-teal-tint hover:text-teal-dark"
+            >
+              {subcategoriasTexto(s.subcategories.length)}
+              <span className="sr-only"> de {s.name}</span>
+              <ChevronDown
+                className={cn('h-4 w-4 transition-transform duration-150', abierta && 'rotate-180')}
+                aria-hidden="true"
+              />
+            </button>
+            {abierta && (
+              <ul id={`subcategorias-${s.id}`} className="mt-1.5 flex max-w-sm flex-wrap gap-1.5">
+                {s.subcategories.map((sub, index) => (
+                  <li key={index}>
+                    <Badge tono="neutro" sinPunto tamano="sm">
+                      #{sub}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'isActive',
+      encabezado: 'Estado',
+      className: 'w-px whitespace-nowrap',
+      celda: (s) => (
+        <Switch
+          activo={s.isActive}
+          alCambiar={() => toggleActive(s)}
+          objeto={s.name}
+          textos={{ activo: 'Activa', inactivo: 'Inactiva' }}
+        />
+      ),
+    },
+    {
+      id: 'acciones',
+      encabezado: 'Acciones',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (s) => (
+        <div className="flex items-center justify-end gap-1">
+          <IconButton etiqueta={`Editar ${s.name}`} title="Editar" icono={Pencil} tamano="sm" onClick={() => openEditModal(s)} />
+          <IconButton
+            etiqueta={`Eliminar ${s.name}`}
+            title="Eliminar"
+            icono={Trash2}
+            tamano="sm"
+            variante="peligro"
+            onClick={() => setDeleteConfirmId(s.id)}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  if (isLoading && specialties.length === 0) {
+    return <SkeletonPagina />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Especialidades</h1>
-            <p className="text-gray-600 mt-1 text-sm md:text-base">
-              Gestiona los perfiles profesionales disponibles en la plataforma
-            </p>
-          </div>
-          <button
-            onClick={openCreateModal}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Plus size={20} />
-            Nueva Especialidad
-          </button>
-        </div>
+    <>
+      <PageHeader
+        antetitulo="Sistema"
+        titulo="Especialidades"
+        remate="del catálogo"
+        descripcion="Gestiona los perfiles profesionales disponibles en la plataforma"
+        acciones={
+          <Button icono={Plus} onClick={openCreateModal}>
+            Nueva especialidad
+          </Button>
+        }
+      />
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle size={20} />
-            {error}
-            <button onClick={() => setError(null)} className="ml-auto">
-              <X size={18} />
-            </button>
-          </div>
-        )}
+      {error && (
+        <AvisoError
+          mensaje={error}
+          alCerrar={() => setError(null)}
+          // Sin lista, el fallo fue al cargarla: se ofrece volver a pedirla.
+          alReintentar={specialties.length === 0 ? fetchSpecialties : undefined}
+        />
+      )}
 
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-            <CheckCircle size={20} />
-            {success}
-          </div>
-        )}
+      <Toast tono="exito" mensaje={success} alCerrar={() => setSuccess(null)} duracion={0} />
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
-            <p className="text-xs md:text-sm text-gray-500">Total</p>
-            <p className="text-xl md:text-2xl font-bold text-gray-900">
-              {specialties.length}
-            </p>
-          </div>
-          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
-            <p className="text-xs md:text-sm text-gray-500">Activas</p>
-            <p className="text-xl md:text-2xl font-bold text-green-600">
-              {specialties.filter((s) => s.isActive).length}
-            </p>
-          </div>
-          <div className="bg-white p-3 md:p-4 rounded-lg shadow-sm border">
-            <p className="text-xs md:text-sm text-gray-500">Inactivas</p>
-            <p className="text-xl md:text-2xl font-bold text-gray-400">
-              {specialties.filter((s) => !s.isActive).length}
-            </p>
-          </div>
-        </div>
+      <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-4 lg:mb-8">
+        <StatCard etiqueta="Total" valor={specialties.length} icono={Tags} tono="teal" />
+        <StatCard etiqueta="Activas" valor={activas} icono={CheckCircle2} tono="lime" />
+        <StatCard etiqueta="Inactivas" valor={specialties.length - activas} icono={CircleOff} tono="ink" />
+      </div>
 
-        {/* Mobile Cards */}
-        <div className="md:hidden space-y-3">
-          {specialties.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm border p-8 text-center text-gray-500">
-              No hay especialidades registradas. ¡Crea la primera!
-            </div>
-          ) : (
-            specialties.map((specialty) => (
-              <div
-                key={specialty.id}
-                className="bg-white rounded-lg shadow-sm border p-4"
-              >
-                {/* Header con nombre y estado */}
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: specialty.color }}
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {specialty.icon && (
-                          <span className="mr-1">{specialty.icon}</span>
-                        )}
-                        {specialty.name}
-                      </p>
-                      <span className="text-xs text-gray-400">
-                        Orden: {specialty.sortOrder}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => toggleActive(specialty)}
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
-                      specialty.isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {specialty.isActive ? (
-                      <>
-                        <ToggleRight size={12} />
-                        Activa
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft size={12} />
-                        Inactiva
-                      </>
-                    )}
-                  </button>
-                </div>
+      <Card titulo="Catálogo" descripcion="En su orden de aparición. Pulsa una fila para editarla." sinRelleno>
+        <DataTable
+          etiqueta="Especialidades"
+          columnas={columnas}
+          filas={specialties}
+          claveFila={(s) => s.id}
+          cargando={isLoading}
+          alActivarFila={openEditModal}
+          etiquetaTotal="especialidades"
+          vacio={
+            error ? (
+              <p className="px-5 py-10 text-center text-sm text-ink-muted">
+                No se pudo cargar el catálogo. Pulsa «Reintentar» en el aviso de arriba.
+              </p>
+            ) : (
+              <EmptyState
+                frase="Todavía nada por aquí."
+                titulo="No hay especialidades registradas"
+                descripcion="Crea la primera: al guardarla se generan sus precios."
+                accion={
+                  <Button variante="contorno" tamano="sm" icono={Plus} onClick={openCreateModal}>
+                    Crear la primera
+                  </Button>
+                }
+              />
+            )
+          }
+        />
+      </Card>
 
-                {/* Descripción */}
-                {specialty.description && (
-                  <p className="text-sm text-gray-500 mb-3 line-clamp-2">
-                    {specialty.description}
-                  </p>
-                )}
+      {/* Crear / editar */}
+      <Modal
+        abierto={isModalOpen}
+        alCerrar={closeModal}
+        tamano="md"
+        titulo={editingId ? 'Editar especialidad' : 'Nueva especialidad'}
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={closeModal}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="form-especialidad"
+              icono={Save}
+              cargando={isSubmitting}
+              textoCargando="Guardando…"
+            >
+              {editingId ? 'Guardar cambios' : 'Crear especialidad'}
+            </Button>
+          </>
+        }
+      >
+        <form id="form-especialidad" onSubmit={handleSubmit} className="space-y-5">
+          {modalError && <AvisoError mensaje={modalError} className="mb-0" />}
 
-                {/* Subcategorías */}
-                {specialty.subcategories.length > 0 && (
-                  <div className="mb-3">
-                    <button
-                      onClick={() => toggleRowExpand(specialty.id)}
-                      className="flex items-center gap-1 text-sm text-blue-600"
-                    >
-                      {specialty.subcategories.length} subcategorías
-                      {expandedRows.has(specialty.id) ? (
-                        <ChevronUp size={14} />
-                      ) : (
-                        <ChevronDown size={14} />
-                      )}
-                    </button>
-                    {expandedRows.has(specialty.id) && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {specialty.subcategories.map((sub, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600"
-                          >
-                            #{sub}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+          <FormField etiqueta="Nombre" requerido>
+            <Input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Ej: Tecnología"
+              autoComplete="off"
+            />
+          </FormField>
 
-                {/* Acciones */}
-                <div className="flex gap-2 pt-3 border-t">
-                  <button
-                    onClick={() => openEditModal(specialty)}
-                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-blue-600 bg-blue-50 rounded-lg text-sm"
-                  >
-                    <Edit2 size={16} />
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirmId(specialty.id)}
-                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-red-600 bg-red-50 rounded-lg text-sm"
-                  >
-                    <Trash2 size={16} />
-                    Eliminar
-                  </button>
-                </div>
+          <FormField etiqueta="Descripción" opcional>
+            <Textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Descripción breve de la especialidad"
+              rows={2}
+            />
+          </FormField>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <FormField etiqueta="Color" ayuda="Hexadecimal, por ejemplo #2b5d62.">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  aria-label="Elegir el color en la paleta"
+                  className="h-10 w-12 flex-none cursor-pointer rounded-lg border border-line-strong bg-white p-1 transition-colors duration-150 hover:border-ink"
+                />
+                <Input
+                  type="text"
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  placeholder="#2b5d62"
+                  className="font-mono"
+                  spellCheck={false}
+                />
               </div>
-            ))
-          )}
-        </div>
+            </FormField>
 
-        {/* Desktop Table */}
-        <div className="hidden md:block bg-white rounded-lg shadow-sm border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Orden
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Especialidad
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
-                  Subcategorías
-                </th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {specialties.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-12 text-center text-gray-500"
-                  >
-                    No hay especialidades registradas. ¡Crea la primera!
-                  </td>
-                </tr>
-              ) : (
-                specialties.map((specialty) => (
-                  <React.Fragment key={specialty.id}>
-                    <tr className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 text-gray-400">
-                          <span className="font-mono text-sm">
-                            {specialty.sortOrder}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: specialty.color }}
-                          />
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {specialty.icon && (
-                                <span className="mr-1">{specialty.icon}</span>
-                              )}
-                              {specialty.name}
-                            </p>
-                            {specialty.description && (
-                              <p className="text-sm text-gray-500 truncate max-w-xs">
-                                {specialty.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {specialty.subcategories.length > 0 ? (
-                          <button
-                            onClick={() => toggleRowExpand(specialty.id)}
-                            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
-                          >
-                            {specialty.subcategories.length} subcategorías
-                            {expandedRows.has(specialty.id) ? (
-                              <ChevronUp size={16} />
-                            ) : (
-                              <ChevronDown size={16} />
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-sm text-gray-400">
-                            Sin subcategorías
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => toggleActive(specialty)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                            specialty.isActive
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {specialty.isActive ? (
-                            <>
-                              <ToggleRight size={14} />
-                              Activa
-                            </>
-                          ) : (
-                            <>
-                              <ToggleLeft size={14} />
-                              Inactiva
-                            </>
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => openEditModal(specialty)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                            title="Editar"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(specialty.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {/* Expanded subcategories row */}
-                    {expandedRows.has(specialty.id) &&
-                      specialty.subcategories.length > 0 && (
-                        <tr className="bg-gray-50">
-                          <td colSpan={5} className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2 pl-8">
-                              {specialty.subcategories.map((sub, index) => (
-                                <span
-                                  key={index}
-                                  className="px-2 py-1 bg-white border rounded text-sm text-gray-600"
-                                >
-                                  #{sub}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            <FormField etiqueta="Icono (emoji)" opcional>
+              <Input
+                type="text"
+                value={formData.icon}
+                onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                placeholder="💻"
+              />
+            </FormField>
+          </div>
 
-        {/* Create/Edit Modal */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center p-6 border-b">
-                <h2 className="text-xl font-bold">
-                  {editingId ? 'Editar Especialidad' : 'Nueva Especialidad'}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X size={24} />
-                </button>
+          <FormField etiqueta="Orden de aparición" ayuda="Se ordenan de menor a mayor.">
+            <Input
+              type="number"
+              value={formData.sortOrder}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  sortOrder: parseInt(e.target.value) || 0
+                })
+              }
+              min="0"
+              className="sm:max-w-[10rem]"
+            />
+          </FormField>
+
+          <div className="space-y-2.5">
+            <FormField etiqueta="Subcategorías" opcional ayuda="Escribe una y pulsa Intro o «Añadir».">
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={newSubcategory}
+                  onChange={(e) => setNewSubcategory(e.target.value)}
+                  onKeyPress={(e) =>
+                    e.key === 'Enter' &&
+                    (e.preventDefault(), addSubcategory())
+                  }
+                  placeholder="Ej: Desarrollo web"
+                />
+                <Button variante="contorno" icono={Plus} onClick={addSubcategory} className="flex-none">
+                  Añadir
+                </Button>
               </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                {modalError && (
-                  <div role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2">
-                    <AlertCircle size={16} className="flex-shrink-0" />
-                    {modalError}
-                  </div>
-                )}
-
-                {/* Nombre */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                    placeholder="Ej: Tecnología"
-                    required
-                  />
-                </div>
-
-                {/* Descripción */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-button-green focus:border-transparent"
-                    placeholder="Descripción breve de la especialidad"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Color e Icono */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      <Palette size={14} className="inline mr-1" />
-                      Color
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={formData.color}
-                        onChange={(e) =>
-                          setFormData({ ...formData, color: e.target.value })
-                        }
-                        className="w-12 h-10 rounded cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={formData.color}
-                        onChange={(e) =>
-                          setFormData({ ...formData, color: e.target.value })
-                        }
-                        className="flex-1 p-2 border rounded-lg text-sm"
-                        placeholder="#2b5d62"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Icono (emoji)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.icon}
-                      onChange={(e) =>
-                        setFormData({ ...formData, icon: e.target.value })
-                      }
-                      className="w-full p-3 border rounded-lg"
-                      placeholder="💻"
-                    />
-                  </div>
-                </div>
-
-                {/* Orden */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Orden de aparición
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.sortOrder}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        sortOrder: parseInt(e.target.value) || 0
-                      })
-                    }
-                    className="w-full p-3 border rounded-lg"
-                    min="0"
-                  />
-                </div>
-
-                {/* Subcategorías */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <Tag size={14} className="inline mr-1" />
-                    Subcategorías
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newSubcategory}
-                      onChange={(e) => setNewSubcategory(e.target.value)}
-                      onKeyPress={(e) =>
-                        e.key === 'Enter' &&
-                        (e.preventDefault(), addSubcategory())
-                      }
-                      className="flex-1 p-2 border rounded-lg"
-                      placeholder="Agregar subcategoría..."
-                    />
+            </FormField>
+            {formData.subcategories.length > 0 && (
+              <ul aria-label="Subcategorías añadidas" className="flex flex-wrap gap-1.5">
+                {formData.subcategories.map((sub, index) => (
+                  <li
+                    key={index}
+                    className="inline-flex items-center gap-0.5 rounded-full bg-mist py-0.5 pl-2.5 pr-0.5 text-xs font-medium text-ink"
+                  >
+                    #{sub}
                     <button
                       type="button"
-                      onClick={addSubcategory}
-                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      onClick={() => removeSubcategory(index)}
+                      aria-label={`Quitar ${sub}`}
+                      title={`Quitar ${sub}`}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-ink-muted transition-colors duration-150 hover:bg-danger-tint hover:text-danger"
                     >
-                      <Plus size={20} />
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.subcategories.map((sub, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm"
-                      >
-                        #{sub}
-                        <button
-                          type="button"
-                          onClick={() => removeSubcategory(index)}
-                          className="text-gray-400 hover:text-red-500"
-                        >
-                          <X size={14} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-                {/* Estado */}
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-gray-700">
-                    Estado:
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormData({ ...formData, isActive: !formData.isActive })
-                    }
-                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                      formData.isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {formData.isActive ? (
-                      <>
-                        <ToggleRight size={16} />
-                        Activa
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft size={16} />
-                        Inactiva
-                      </>
-                    )}
-                  </button>
-                </div>
+          <Checkbox
+            etiqueta="Especialidad activa"
+            descripcion="Si está inactiva, deja de aparecer en el catálogo de especialidades."
+            checked={formData.isActive}
+            onChange={() => setFormData({ ...formData, isActive: !formData.isActive })}
+          />
+        </form>
+      </Modal>
 
-                {/* Buttons */}
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex-1 px-4 py-3 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                      <Save size={20} />
-                    )}
-                    {editingId ? 'Guardar Cambios' : 'Crear Especialidad'}
-                  </button>
-                </div>
-              </form>
+      {/* Confirmar borrado */}
+      <Modal
+        abierto={deleteConfirmId !== null}
+        alCerrar={() => setDeleteConfirmId(null)}
+        tamano="sm"
+        titulo="¿Eliminar especialidad?"
+        descripcion="Esta acción no se puede deshacer. Si la especialidad está en uso, no podrá eliminarse."
+        claseCuerpo={porEliminar ? undefined : 'hidden'}
+        pie={
+          <>
+            <Button variante="contorno" onClick={() => setDeleteConfirmId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variante="peligro"
+              icono={Trash2}
+              onClick={() => deleteConfirmId !== null && handleDelete(deleteConfirmId)}
+            >
+              Sí, eliminar
+            </Button>
+          </>
+        }
+      >
+        {porEliminar && (
+          <div className="flex items-center gap-3 rounded-lg border border-line bg-paper px-4 py-3">
+            <MuestraColor color={porEliminar.color} />
+            <div className="min-w-0">
+              <p className="font-semibold text-ink">
+                {porEliminar.icon && (
+                  <span className="mr-1.5" aria-hidden="true">
+                    {porEliminar.icon}
+                  </span>
+                )}
+                {porEliminar.name}
+              </p>
+              <p className="text-[13px] text-ink-muted">
+                {porEliminar.subcategories.length > 0
+                  ? subcategoriasTexto(porEliminar.subcategories.length)
+                  : 'Sin subcategorías'}
+              </p>
             </div>
           </div>
         )}
-
-        {/* Delete Confirmation Modal */}
-        {deleteConfirmId && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-md w-full p-6">
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                  <AlertCircle className="text-red-600" size={32} />
-                </div>
-                <h3 className="text-xl font-bold mb-2">
-                  ¿Eliminar especialidad?
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Esta acción no se puede deshacer. Si la especialidad está en
-                  uso, no podrá eliminarse.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setDeleteConfirmId(null)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(deleteConfirmId)}
-                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                  >
-                    Sí, eliminar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }

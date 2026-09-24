@@ -2,22 +2,49 @@
 
 // RUTA: src/app/admin/vendors/page.tsx
 
+/**
+ * Vendedores, sus códigos de descuento y las comisiones que se les deben.
+ *
+ * Registro de aplicación (docs/DISENO.md §5): PageHeader → cifras → pestañas
+ * con tabla paginada → modales. La lógica es la de siempre: mismas llamadas
+ * (con page/limit/search/status), los mismos guardas de carrera
+ * (peticionVendedores/peticionComisiones), las mismas validaciones del alta y
+ * del comprobante, y el mismo manejo del 401. El `confirm()` de activar o
+ * desactivar un código pasó a un Modal (useConfirmacion) que responde igual.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Users,
-  DollarSign,
   Clock,
-  CheckCircle,
+  CheckCircle2,
   Search,
-  Loader2,
-  X,
   AlertCircle,
   TrendingUp,
-  Eye,
-  EyeOff,
-  Plus
+  Plus,
+  Wallet,
+  ExternalLink,
+  RotateCw
 } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import StatCard from '@/components/ui/StatCard';
+import Card from '@/components/ui/Card';
+import DataTable, { type Columna } from '@/components/ui/DataTable';
+import FilterToolbar from '@/components/ui/FilterToolbar';
+import { Badge, RolBadge } from '@/components/ui/Badge';
+import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import Toast from '@/components/ui/Toast';
+import Tabs, { PanelPestana } from '@/components/ui/Tabs';
+import FormField, { Input } from '@/components/ui/FormField';
+import type { PaginacionApi } from '@/components/ui/Pagination';
+import { AvisoError } from '@/components/ui/Aviso';
+import Switch from '@/components/ui/Switch';
+import CampoContrasena from '@/components/ui/CampoContrasena';
+import { useConfirmacion } from '@/components/ui/useConfirmacion';
+import { fechaCorta } from '@/lib/fechas';
 
 interface Vendor {
   id: number;
@@ -100,6 +127,8 @@ const PAGINACION_VACIA: Pagination = {
 
 // PAGO-036: el modal no es un <form>, así que el navegador no valida nada de
 // lo que escribe el admin. Estas son las mismas reglas que aplica el servidor.
+// (Ahora el alta sí va en un <form>, pero con noValidate: las reglas siguen
+// siendo éstas, con sus mensajes, y no las del navegador.)
 const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FORMATO_CODIGO = /^[A-Z0-9]{4,20}$/;
 
@@ -136,43 +165,21 @@ function leerPorcentaje(valor: string): number | null {
  * pedir la siguiente. Los contadores decían "27 pendientes" y la tabla enseñaba
  * 20; como se ordenan por fecha descendente, las que quedaban escondidas eran
  * justo las más antiguas, las más cercanas a su fecha límite de pago.
+ *
+ * La paginación la pinta ahora DataTable (Pagination del sistema). Esto sólo
+ * traduce el bloque de estas APIs ({ totalCount }) al de las demás
+ * ({ total, hasNext, hasPrev }), con la página que lleva la pantalla: «Anterior»
+ * se apaga en la 1 y «Siguiente» en la última, como antes.
  */
-function ControlesPaginacion({
-  pagination,
-  page,
-  onChange,
-  etiqueta
-}: {
-  pagination: Pagination;
-  page: number;
-  onChange: (nuevaPagina: number) => void;
-  etiqueta: string;
-}) {
-  if (pagination.totalPages <= 1) return null;
-
-  return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t">
-      <p className="text-sm text-gray-600">
-        Página {page} de {pagination.totalPages} · {pagination.totalCount} {etiqueta}
-      </p>
-      <div className="flex gap-2">
-        <button
-          onClick={() => onChange(page - 1)}
-          disabled={page <= 1}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Anterior
-        </button>
-        <button
-          onClick={() => onChange(page + 1)}
-          disabled={page >= pagination.totalPages}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Siguiente
-        </button>
-      </div>
-    </div>
-  );
+function aPaginacionApi(pagination: Pagination, page: number): PaginacionApi {
+  return {
+    page,
+    limit: pagination.limit,
+    total: pagination.totalCount,
+    totalPages: pagination.totalPages,
+    hasNext: page < pagination.totalPages,
+    hasPrev: page > 1
+  };
 }
 
 /**
@@ -181,19 +188,21 @@ function ControlesPaginacion({
  */
 function AvisoDeError({ mensaje, onReintentar }: { mensaje: string; onReintentar: () => void }) {
   return (
-    <div className="text-center py-12 px-4">
-      <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-      <h3 className="text-lg font-medium text-gray-900 mb-2">No se pudieron cargar los datos</h3>
-      <p className="text-gray-500 text-sm mb-4">{mensaje}</p>
-      <button
-        onClick={onReintentar}
-        className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-      >
+    <div role="alert" className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+      <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-danger-tint text-danger" aria-hidden="true">
+        <AlertCircle className="h-5 w-5" />
+      </span>
+      <p className="font-display text-base font-semibold text-ink">No se pudieron cargar los datos</p>
+      <p className="max-w-md text-sm text-ink-muted">{mensaje}</p>
+      <Button variante="contorno" tamano="sm" icono={RotateCw} onClick={onReintentar} className="mt-2">
         Reintentar
-      </button>
+      </Button>
     </div>
   );
 }
+
+/** «1 crédito», «5 créditos». */
+const creditosTexto = (n: number) => `${n} ${n === 1 ? 'crédito' : 'créditos'}`;
 
 export default function AdminVendorsPage() {
   const router = useRouter();
@@ -263,6 +272,9 @@ export default function AdminVendorsPage() {
     discountPercent: '10',
     commissionPercent: '10'
   });
+
+  // La pregunta de activar/desactivar un código, con el Modal del sistema.
+  const { confirmar, dialogo } = useConfirmacion();
 
   // Cargar vendedores al montar y cuando cambia la página
   useEffect(() => {
@@ -335,9 +347,19 @@ export default function AdminVendorsPage() {
   const handleToggleVendor = async (vendor: Vendor) => {
     const activar = !vendor.isActive;
     const pregunta = activar
-      ? `¿Reactivar el código ${vendor.code}? Volverá a dar descuento y a generar comisiones.`
-      : `¿Desactivar el código ${vendor.code}? Dejará de dar descuento y de generar comisiones. El vendedor no podrá reactivarlo por su cuenta.`;
-    if (!confirm(pregunta)) return;
+      ? {
+          titulo: `¿Reactivar el código ${vendor.code}?`,
+          descripcion: 'Volverá a dar descuento y a generar comisiones.',
+          textoConfirmar: 'Reactivar',
+          variante: 'primario' as const
+        }
+      : {
+          titulo: `¿Desactivar el código ${vendor.code}?`,
+          descripcion: 'Dejará de dar descuento y de generar comisiones. El vendedor no podrá reactivarlo por su cuenta.',
+          textoConfirmar: 'Desactivar',
+          variante: 'peligro' as const
+        };
+    if (!(await confirmar(pregunta))) return;
 
     setTogglingVendorId(vendor.id);
     try {
@@ -572,843 +594,775 @@ export default function AdminVendorsPage() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  // Fecha corta del panel (src/lib/fechas): «23 sep 2026»; «—» si falta.
+  const formatDate = (dateString: string | null | undefined) => fechaCorta(dateString);
+
+  // ---------------------------------------------------------------------------
+  // Presentación
+  // ---------------------------------------------------------------------------
+
+  /** Cambiar de pestaña hace lo mismo que hacían los tres botones de antes. */
+  const cambiarPestana = (id: string) => {
+    if (id === 'vendors') {
+      setActiveTab('vendors');
+    } else if (id === 'pending') {
+      setActiveTab('pending');
+      setCommissionFilter('pending');
+      setCommissionPage(1);
+    } else if (id === 'history') {
+      setActiveTab('history');
+      setCommissionFilter('paid');
+      setCommissionPage(1);
+    }
   };
 
-  const getRoleLabel = (role: string) => {
-    const roles: Record<string, string> = {
-      admin: 'Administrador',
-      company: 'Empresa',
-      recruiter: 'Reclutador',
-      specialist: 'Especialista',
-      candidate: 'Candidato',
-      user: 'Usuario'
-    };
-    return roles[role] || role;
+  const abrirModalAlta = () => {
+    setIsCreateModalOpen(true);
+    setCreateError('');
   };
 
-  const getRoleColor = (role: string) => {
-    const colors: Record<string, string> = {
-      admin: 'bg-purple-100 text-purple-800',
-      company: 'bg-blue-100 text-blue-800',
-      recruiter: 'bg-green-100 text-green-800',
-      specialist: 'bg-orange-100 text-orange-800',
-      candidate: 'bg-cyan-100 text-cyan-800',
-      user: 'bg-gray-100 text-gray-800'
-    };
-    return colors[role] || 'bg-gray-100 text-gray-800';
+  const cerrarModalAlta = () => {
+    setIsCreateModalOpen(false);
+    setCreateError('');
+    setShowPassword(false);
   };
+
+  // Mientras llega la primera respuesta las cifras no son ceros: son «cargando».
+  const cifrasCargando = loadingVendors && vendors.length === 0 && !vendorsError;
+
+  const hoy = new Date();
+
+  /**
+   * El rol con la insignia del panel (RolBadge: la misma que /admin/users).
+   * Las altas de esta pantalla crean usuarios con rol 'vendor': sale
+   * «Vendedor», no la palabra cruda.
+   */
+  const insigniaRol = (role: string, tamano?: 'sm' | 'md') => <RolBadge rol={role} tamano={tamano} />;
+
+  const columnasVendedores: Columna<Vendor>[] = [
+    {
+      id: 'vendedor',
+      encabezado: 'Vendedor',
+      enTarjeta: 'titulo',
+      className: 'min-w-[10rem]',
+      celda: (vendor) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{vendor.user.nombre}</p>
+          <p className="break-all text-[13px] text-ink-muted">{vendor.user.email}</p>
+          {/* Con la tabla estrecha la columna Rol se esconde: su dato sube aquí. */}
+          <span data-solo-bajo="lg" className="mt-1 inline-flex">
+            {insigniaRol(vendor.user.role, 'sm')}
+          </span>
+        </div>
+      ),
+    },
+    // Móvil: la tarjeta es el nombre + UNA línea «rol · código · % desc. ·
+    // % com.», las comisiones y el interruptor arriba a la derecha. Ventas e
+    // ingresos (el resumen) no salen: ~130 px por vendedor en vez de ~260.
+    {
+      id: 'rol',
+      encabezado: 'Rol',
+      ocultarBajo: 'lg',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (vendor) => insigniaRol(vendor.user.role),
+    },
+    {
+      id: 'codigo',
+      encabezado: 'Código',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (vendor) => (
+        <div>
+          <p className="font-mono text-sm font-semibold tracking-wide text-teal">
+            {vendor.code}
+            {/* En la línea meta de la tarjeta, los porcentajes van seguidos. */}
+            <span data-solo-tarjeta className="font-sans text-xs font-normal tracking-normal tabular-nums text-ink-muted">
+              {' '}
+              · {vendor.discountPercent}% desc. · {vendor.commissionPercent}% com.
+            </span>
+          </p>
+          {/* PAGO-009: la API ya devolvía los porcentajes, pero
+              no se enseñaban en ninguna parte; un 100% tecleado
+              por error era invisible desde el panel. */}
+          <p data-solo-tabla className="text-xs tabular-nums text-ink-muted">
+            {vendor.discountPercent}% desc. · {vendor.commissionPercent}% com.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'ventas',
+      encabezado: 'Ventas',
+      numerica: true,
+      ocultarBajo: 'md',
+      enTarjeta: 'oculta',
+      celda: (vendor) => <span className="font-medium">{vendor.stats.totalSales}</span>,
+    },
+    {
+      id: 'ingresos',
+      encabezado: 'Ingresos',
+      numerica: true,
+      ocultarBajo: 'md',
+      enTarjeta: 'oculta',
+      className: 'whitespace-nowrap',
+      celda: (vendor) => formatCurrency(vendor.stats.totalRevenue),
+    },
+    {
+      id: 'comisiones',
+      encabezado: 'Comisiones',
+      numerica: true,
+      className: 'whitespace-nowrap',
+      celda: (vendor) => (
+        <div>
+          <p className="font-medium text-ink">{formatCurrency(vendor.stats.totalCommission)}</p>
+          {vendor.stats.pendingCommission > 0 && (
+            <p className="text-xs font-medium text-orange-dark">
+              {formatCurrency(vendor.stats.pendingCommission)} pendiente
+            </p>
+          )}
+          {/* Ventas: suben aquí cuando su columna se esconde (tabla estrecha). */}
+          <p data-solo-bajo="md" className="text-xs text-ink-muted">
+            {vendor.stats.totalSales} venta{vendor.stats.totalSales !== 1 ? 's' : ''}
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'estado',
+      encabezado: 'Estado',
+      alinear: 'fin',
+      // El interruptor, arriba a la derecha de la tarjeta (se nombra solo:
+      // «código X»), como las acciones de icono.
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (vendor) => (
+        <Switch
+          activo={vendor.isActive}
+          alCambiar={() => handleToggleVendor(vendor)}
+          objeto={`código ${vendor.code}`}
+          cargando={togglingVendorId === vendor.id}
+        />
+      ),
+    },
+  ];
+
+  const columnasPendientes: Columna<Commission>[] = [
+    {
+      id: 'vendedor',
+      encabezado: 'Vendedor',
+      enTarjeta: 'titulo',
+      className: 'min-w-[10rem]',
+      celda: (comm) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{comm.vendor.nombre}</p>
+          <p className="text-[13px] text-ink-muted">
+            Código: <span className="font-mono">{comm.vendor.code}</span>
+          </p>
+          {/* Con la tabla estrecha la columna Empresa se esconde: su dato sube aquí. */}
+          <p data-solo-bajo="md" className="mt-0.5 text-[13px] text-ink">
+            {`${comm.company.nombreEmpresa} · ${creditosTexto(comm.purchase.credits)}`}
+          </p>
+        </div>
+      ),
+    },
+    // Móvil: vendedor + UNA línea «empresa · créditos · fecha», la comisión,
+    // la fecha límite y «Marcar pagada» al pie. El monto de la venta no sale
+    // (la comisión es lo que se paga).
+    {
+      id: 'empresa',
+      encabezado: 'Empresa',
+      ocultarBajo: 'md',
+      enTarjeta: 'meta',
+      className: 'min-w-[9rem]',
+      celda: (comm) => (
+        <div className="min-w-0">
+          <p className="font-medium text-ink">
+            {comm.company.nombreEmpresa}
+            <span data-solo-tarjeta className="font-normal text-ink-muted">
+              {' '}
+              · {creditosTexto(comm.purchase.credits)}
+            </span>
+          </p>
+          <p data-solo-tabla className="text-[13px] text-ink-muted">
+            {creditosTexto(comm.purchase.credits)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'fechaVenta',
+      encabezado: 'Fecha venta',
+      ocultarBajo: 'lg',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (comm) => <span className="tabular-nums">{formatDate(comm.createdAt)}</span>,
+    },
+    {
+      id: 'montoVenta',
+      encabezado: 'Monto venta',
+      numerica: true,
+      ocultarBajo: 'md',
+      enTarjeta: 'oculta',
+      className: 'whitespace-nowrap',
+      celda: (comm) => formatCurrency(comm.purchase.finalPrice),
+    },
+    {
+      id: 'comision',
+      encabezado: 'Comisión',
+      numerica: true,
+      className: 'whitespace-nowrap',
+      celda: (comm) => (
+        <div>
+          <p className="font-display text-[15px] font-semibold text-ink">{formatCurrency(comm.commission.amount)}</p>
+          {/* Monto de la venta: sube aquí cuando su columna se esconde. */}
+          <p data-solo-bajo="md" className="text-xs text-ink-muted">
+            de {formatCurrency(comm.purchase.finalPrice)}
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'fechaLimite',
+      encabezado: 'Fecha límite',
+      className: 'whitespace-nowrap',
+      celda: (comm) =>
+        comm.commission.dueDate ? (
+          <div>
+            <p className="tabular-nums">{formatDate(comm.commission.dueDate)}</p>
+            {new Date(comm.commission.dueDate) < hoy && (
+              <Badge tono="peligro" tamano="sm" className="mt-1">
+                Vencida
+              </Badge>
+            )}
+          </div>
+        ) : (
+          <span className="text-ink-muted" aria-label="Sin fecha límite">
+            —
+          </span>
+        ),
+    },
+    {
+      id: 'accion',
+      encabezado: 'Acción',
+      encabezadoOculto: true,
+      alinear: 'fin',
+      enTarjeta: 'acciones',
+      className: 'w-px whitespace-nowrap',
+      celda: (comm) => (
+        <Button variante="contorno" tamano="sm" icono={CheckCircle2} onClick={() => abrirModalPago(comm)}>
+          Marcar pagada
+          <span className="sr-only">
+            {' '}
+            la comisión de {comm.vendor.nombre} ({comm.company.nombreEmpresa})
+          </span>
+        </Button>
+      ),
+    },
+  ];
+
+  const columnasHistorial: Columna<Commission>[] = [
+    {
+      id: 'vendedor',
+      encabezado: 'Vendedor',
+      enTarjeta: 'titulo',
+      className: 'min-w-[10rem]',
+      celda: (comm) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{comm.vendor.nombre}</p>
+          <p className="break-all text-[13px] text-ink-muted">{comm.vendor.email}</p>
+          {/* Con la tabla estrecha la columna Empresa se esconde: su dato sube aquí. */}
+          <p data-solo-bajo="md" className="mt-0.5 text-[13px] text-ink">
+            {`Empresa: ${comm.company.nombreEmpresa}`}
+          </p>
+        </div>
+      ),
+    },
+    // Móvil: vendedor + UNA línea «empresa · fecha de venta», la comisión, la
+    // fecha de pago y el comprobante.
+    {
+      id: 'empresa',
+      encabezado: 'Empresa',
+      ocultarBajo: 'md',
+      enTarjeta: 'meta',
+      className: 'min-w-[9rem]',
+      celda: (comm) => <span className="text-ink">{comm.company.nombreEmpresa}</span>,
+    },
+    {
+      id: 'fechaVenta',
+      encabezado: 'Fecha venta',
+      ocultarBajo: 'md',
+      enTarjeta: 'meta',
+      className: 'whitespace-nowrap',
+      celda: (comm) => <span className="tabular-nums">{formatDate(comm.createdAt)}</span>,
+    },
+    {
+      id: 'comision',
+      encabezado: 'Comisión',
+      numerica: true,
+      className: 'whitespace-nowrap',
+      celda: (comm) => (
+        <span className="font-display text-[15px] font-semibold text-lime-dark">
+          {formatCurrency(comm.commission.amount)}
+        </span>
+      ),
+    },
+    {
+      id: 'fechaPago',
+      encabezado: 'Fecha pago',
+      className: 'whitespace-nowrap',
+      celda: (comm) =>
+        comm.commission.paidAt ? (
+          <span className="tabular-nums">{formatDate(comm.commission.paidAt)}</span>
+        ) : (
+          <span className="text-ink-muted" aria-label="Sin fecha de pago">
+            —
+          </span>
+        ),
+    },
+    {
+      id: 'comprobante',
+      encabezado: 'Comprobante',
+      alinear: 'fin',
+      className: 'w-px whitespace-nowrap',
+      celda: (comm) =>
+        comm.commission.proofUrl ? (
+          <a
+            href={comm.commission.proofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded text-sm font-medium text-teal hover:text-teal-dark hover:underline"
+          >
+            Ver
+            <span className="sr-only"> el comprobante de {comm.vendor.nombre} (se abre en otra pestaña)</span>
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="text-[13px] text-ink-muted">Sin comprobante</span>
+        ),
+    },
+  ];
+
+  const pestanas = [
+    { id: 'vendors', etiqueta: 'Vendedores', contador: globalStats.totalVendors },
+    { id: 'pending', etiqueta: 'Pendientes', contador: commissionSummary.pending.count },
+    { id: 'history', etiqueta: 'Historial de pagos' }
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        {/* Header - Responsive */}
-        <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestión de Vendedores</h1>
-            <p className="text-gray-600 mt-1 text-sm md:text-base">
-              Códigos de descuento y comisiones
-            </p>
-          </div>
-          <button
-            onClick={() => { setIsCreateModalOpen(true); setCreateError(''); }}
-            className="px-4 py-2.5 bg-button-green text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo Vendedor
-          </button>
-        </div>
+    <>
+      <PageHeader
+        antetitulo="Empresas y comercial"
+        titulo="Vendedores"
+        remate="y sus comisiones"
+        descripcion="Códigos de descuento y comisiones"
+        acciones={
+          <Button icono={Plus} onClick={abrirModalAlta}>
+            Nuevo vendedor
+          </Button>
+        }
+      />
 
-        {/* Notificación */}
-        {notification.type && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
-              notification.type === 'success'
-                ? 'bg-green-100 text-green-800 border border-green-300'
-                : 'bg-red-100 text-red-800 border border-red-300'
-            }`}
-          >
-            <span>{notification.message}</span>
-            <button
-              onClick={() => setNotification({ type: null, message: '' })}
-              className="ml-4 hover:opacity-70 text-xl"
-            >
-              ×
-            </button>
-          </div>
-        )}
+      {/* Notificación: los errores se quedan hasta cerrarlos; los avisos de éxito se van solos. */}
+      <Toast
+        tono={notification.type === 'error' ? 'error' : 'exito'}
+        mensaje={notification.type ? notification.message : null}
+        alCerrar={() => setNotification({ type: null, message: '' })}
+        duracion={notification.type === 'error' ? 0 : 8000}
+      />
 
-        {/* Stats Globales - Responsive */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Users className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Vendedores</p>
-                <p className="text-xl font-bold">{globalStats.totalVendors}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Ventas</p>
-                <p className="text-xl font-bold">{globalStats.totalSales}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Ingresos</p>
-                <p className="text-xl font-bold">{formatCurrency(globalStats.totalRevenue)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Pendiente</p>
-                <p className="text-xl font-bold text-yellow-600">
-                  {formatCurrency(globalStats.pendingCommissions)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Total Comisiones</p>
-                <p className="text-xl font-bold">{formatCurrency(globalStats.totalCommissions)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="border-b">
-            <nav className="flex -mb-px">
-              <button
-                onClick={() => setActiveTab('vendors')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 ${
-                  activeTab === 'vendors'
-                    ? 'border-button-green text-button-green'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Users className="w-4 h-4 inline mr-2" />
-                Vendedores ({globalStats.totalVendors})
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab('pending');
-                  setCommissionFilter('pending');
-                  setCommissionPage(1);
-                }}
-                className={`px-6 py-4 text-sm font-medium border-b-2 ${
-                  activeTab === 'pending'
-                    ? 'border-button-green text-button-green'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Clock className="w-4 h-4 inline mr-2" />
-                Pendientes ({commissionSummary.pending.count})
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab('history');
-                  setCommissionFilter('paid');
-                  setCommissionPage(1);
-                }}
-                className={`px-6 py-4 text-sm font-medium border-b-2 ${
-                  activeTab === 'history'
-                    ? 'border-button-green text-button-green'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <CheckCircle className="w-4 h-4 inline mr-2" />
-                Historial de Pagos
-              </button>
-            </nav>
-          </div>
-
-          {/* Tab: Vendedores */}
-          {activeTab === 'vendors' && (
-            <div>
-              {/* Búsqueda */}
-              <div className="p-4 border-b">
-                <div className="flex gap-2">
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={vendorSearch}
-                      onChange={(e) => setVendorSearch(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSearchVendors()}
-                      placeholder="Buscar por código, nombre o email..."
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg"
-                    />
-                  </div>
-                  <button
-                    onClick={handleSearchVendors}
-                    className="px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700"
-                  >
-                    Buscar
-                  </button>
-                </div>
-              </div>
-
-              {/* Tabla de vendedores */}
-              <div className="overflow-x-auto">
-                {loadingVendors ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                  </div>
-                ) : vendorsError ? (
-                  <AvisoDeError mensaje={vendorsError} onReintentar={fetchVendors} />
-                ) : vendors.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No hay vendedores registrados
-                    </h3>
-                  </div>
-                ) : (
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Vendedor
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Rol
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Código
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Ventas
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Ingresos
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Comisiones
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Estado
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {vendors.map((vendor) => (
-                        <tr key={vendor.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {vendor.user.nombre}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {vendor.user.email}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              getRoleColor(vendor.user.role)
-                            }`}>
-                              {getRoleLabel(vendor.user.role)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className="font-mono font-bold text-button-green">
-                              {vendor.code}
-                            </span>
-                            {/* PAGO-009: la API ya devolvía los porcentajes, pero
-                                no se enseñaban en ninguna parte; un 100% tecleado
-                                por error era invisible desde el panel. */}
-                            <p className="text-xs text-gray-500 mt-1">
-                              {vendor.discountPercent}% desc. · {vendor.commissionPercent}% com.
-                            </p>
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium">
-                            {vendor.stats.totalSales}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {formatCurrency(vendor.stats.totalRevenue)}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div>
-                              <p className="font-medium">
-                                {formatCurrency(vendor.stats.totalCommission)}
-                              </p>
-                              {vendor.stats.pendingCommission > 0 && (
-                                <p className="text-xs text-yellow-600">
-                                  {formatCurrency(vendor.stats.pendingCommission)} pendiente
-                                </p>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                vendor.isActive
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {vendor.isActive ? 'Activo' : 'Inactivo'}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleVendor(vendor)}
-                                disabled={togglingVendorId === vendor.id}
-                                className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                              >
-                                {togglingVendorId === vendor.id
-                                  ? 'Guardando…'
-                                  : vendor.isActive
-                                    ? 'Desactivar'
-                                    : 'Reactivar'}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {!loadingVendors && !vendorsError && vendors.length > 0 && (
-                <ControlesPaginacion
-                  pagination={vendorPagination}
-                  page={vendorPage}
-                  onChange={setVendorPage}
-                  etiqueta="vendedores"
-                />
-              )}
-            </div>
-          )}
-
-          {/* Tab: Comisiones Pendientes */}
-          {activeTab === 'pending' && (
-            <div>
-              <div className="p-4 border-b bg-yellow-50">
-                <div className="flex items-center gap-2 text-yellow-800">
-                  <AlertCircle className="w-5 h-5" />
-                  <span className="font-medium">
-                    {commissionSummary.pending.count} comisiones pendientes por{' '}
-                    {formatCurrency(commissionSummary.pending.total)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                {loadingCommissions ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                  </div>
-                ) : commissionsError ? (
-                  <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
-                ) : commissions.length === 0 ? (
-                  <div className="text-center py-12">
-                    <CheckCircle className="w-16 h-16 text-green-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No hay comisiones pendientes
-                    </h3>
-                    <p className="text-gray-500">
-                      Todas las comisiones han sido pagadas
-                    </p>
-                  </div>
-                ) : (
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Vendedor
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Empresa
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Fecha Venta
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Monto Venta
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Comisión
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Fecha Límite
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Acción
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {commissions.map((comm) => (
-                        <tr key={comm.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {comm.vendor.nombre}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                Código: {comm.vendor.code}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {comm.company.nombreEmpresa}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {comm.purchase.credits} créditos
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center text-sm">
-                            {formatDate(comm.createdAt)}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {formatCurrency(comm.purchase.finalPrice)}
-                          </td>
-                          <td className="px-6 py-4 text-right font-bold text-button-green">
-                            {formatCurrency(comm.commission.amount)}
-                          </td>
-                          <td className="px-6 py-4 text-center text-sm">
-                            {comm.commission.dueDate
-                              ? formatDate(comm.commission.dueDate)
-                              : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              onClick={() => abrirModalPago(comm)}
-                              className="px-4 py-2 bg-button-green text-white text-sm rounded-lg hover:bg-green-700"
-                            >
-                              Marcar Pagada
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {!loadingCommissions && !commissionsError && commissions.length > 0 && (
-                <ControlesPaginacion
-                  pagination={commissionPagination}
-                  page={commissionPage}
-                  onChange={setCommissionPage}
-                  etiqueta="comisiones pendientes"
-                />
-              )}
-            </div>
-          )}
-
-          {/* Tab: Historial de Pagos */}
-          {activeTab === 'history' && (
-            <div>
-              <div className="p-4 border-b bg-green-50">
-                <div className="flex items-center gap-2 text-green-800">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-medium">
-                    {commissionSummary.paid.count} comisiones pagadas por{' '}
-                    {formatCurrency(commissionSummary.paid.total)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                {loadingCommissions ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                  </div>
-                ) : commissionsError ? (
-                  <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
-                ) : commissions.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No hay pagos realizados
-                    </h3>
-                  </div>
-                ) : (
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Vendedor
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Empresa
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Fecha Venta
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                          Comisión
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Fecha Pago
-                        </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                          Comprobante
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {commissions.map((comm) => (
-                        <tr key={comm.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {comm.vendor.nombre}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {comm.vendor.email}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-gray-900">
-                              {comm.company.nombreEmpresa}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4 text-center text-sm">
-                            {formatDate(comm.createdAt)}
-                          </td>
-                          <td className="px-6 py-4 text-right font-bold text-green-600">
-                            {formatCurrency(comm.commission.amount)}
-                          </td>
-                          <td className="px-6 py-4 text-center text-sm">
-                            {comm.commission.paidAt
-                              ? formatDate(comm.commission.paidAt)
-                              : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {comm.commission.proofUrl ? (
-                              <a
-                                href={comm.commission.proofUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-button-green hover:underline"
-                              >
-                                <Eye className="w-4 h-4" />
-                                Ver
-                              </a>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {!loadingCommissions && !commissionsError && commissions.length > 0 && (
-                <ControlesPaginacion
-                  pagination={commissionPagination}
-                  page={commissionPage}
-                  onChange={setCommissionPage}
-                  etiqueta="comisiones pagadas"
-                />
-              )}
-            </div>
-          )}
-        </div>
+      {/* Cifras globales (sin filtro de búsqueda: las cuenta la API) */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:mb-8 xl:grid-cols-4">
+        <StatCard
+          etiqueta="Vendedores"
+          valor={globalStats.totalVendors.toLocaleString('es-MX')}
+          icono={Users}
+          tono="ink"
+          cargando={cifrasCargando}
+        />
+        <StatCard
+          etiqueta="Ingresos"
+          valor={formatCurrency(globalStats.totalRevenue)}
+          compacta
+          detalle={`${globalStats.totalSales.toLocaleString('es-MX')} venta${globalStats.totalSales !== 1 ? 's' : ''} con código`}
+          icono={TrendingUp}
+          tono="teal"
+          cargando={cifrasCargando}
+        />
+        <StatCard
+          etiqueta="Comisión pendiente"
+          valor={formatCurrency(globalStats.pendingCommissions)}
+          compacta
+          detalle="Por pagar a vendedores"
+          icono={Clock}
+          tono="orange"
+          cargando={cifrasCargando}
+        />
+        <StatCard
+          etiqueta="Total comisiones"
+          valor={formatCurrency(globalStats.totalCommissions)}
+          compacta
+          detalle="De compras pagadas"
+          icono={Wallet}
+          tono="lime"
+          cargando={cifrasCargando}
+        />
       </div>
 
-      {/* Modal de Pago */}
-      {paymentModal.isOpen && paymentModal.commission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6 border-b flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Marcar Comisión como Pagada</h3>
-              <button
-                onClick={cerrarModalPago}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Card sinRelleno>
+        <Tabs
+          idBase="vendedores"
+          etiqueta="Vendedores y comisiones"
+          activa={activeTab}
+          alCambiar={cambiarPestana}
+          pestanas={pestanas}
+          className="px-2 sm:px-3"
+        />
 
-            <div className="p-6">
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Vendedor</p>
-                    <p className="font-medium">{paymentModal.commission.vendor.nombre}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Código</p>
-                    <p className="font-mono font-bold text-button-green">
-                      {paymentModal.commission.vendor.code}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Empresa</p>
-                    <p className="font-medium">{paymentModal.commission.company.nombreEmpresa}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Comisión a Pagar</p>
-                    <p className="text-xl font-bold text-button-green">
-                      {formatCurrency(paymentModal.commission.commission.amount)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+        {/* Tab: Vendedores */}
+        <PanelPestana idBase="vendedores" id="vendors" activa={activeTab} className="pt-0">
+          <form
+            className="border-b border-line px-5 py-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSearchVendors();
+            }}
+          >
+            <FilterToolbar
+              busqueda={{
+                valor: vendorSearch,
+                alCambiar: setVendorSearch,
+                etiqueta: 'Buscar vendedores',
+                placeholder: 'Código, nombre o email'
+              }}
+            >
+              {/* La búsqueda va al servidor al pulsar «Buscar» o Intro (como antes). */}
+              <Button type="submit" variante="secundario" tamano="sm" icono={Search} className="h-9 w-full sm:w-auto">
+                Buscar
+              </Button>
+            </FilterToolbar>
+          </form>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  URL del Comprobante de Pago (opcional)
-                </label>
-                <input
-                  type="url"
-                  value={paymentProofUrl}
-                  onChange={(e) => { setPaymentProofUrl(e.target.value); setProofError(''); }}
-                  placeholder="https://..."
-                  className={`w-full px-4 py-2 border rounded-lg ${proofError ? 'border-red-500' : ''}`}
+          <DataTable
+            etiqueta="Vendedores"
+            columnas={columnasVendedores}
+            filas={vendors}
+            claveFila={(vendor) => vendor.id}
+            cargando={loadingVendors}
+            paginacion={
+              !loadingVendors && !vendorsError && vendors.length > 0
+                ? aPaginacionApi(vendorPagination, vendorPage)
+                : undefined
+            }
+            alCambiarPagina={setVendorPage}
+            etiquetaTotal="vendedores"
+            vacio={
+              vendorsError ? (
+                <AvisoDeError mensaje={vendorsError} onReintentar={fetchVendors} />
+              ) : (
+                <EmptyState
+                  icono={Users}
+                  titulo={
+                    vendorSearch.trim()
+                      ? 'Ningún vendedor coincide con la búsqueda'
+                      : 'No hay vendedores registrados'
+                  }
+                  descripcion={
+                    vendorSearch.trim()
+                      ? 'Prueba con otro código, nombre o email.'
+                      : 'Da de alta al primero con «Nuevo vendedor».'
+                  }
                 />
-                {proofError ? (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                    {proofError}
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Puedes subir el comprobante a un servicio externo y pegar la URL
-                  </p>
-                )}
-              </div>
+              )
+            }
+          />
+        </PanelPestana>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={cerrarModalPago}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleMarkAsPaid}
-                  disabled={processingPayment}
-                  className="flex-1 px-4 py-2 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {processingPayment ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Confirmar Pago
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Tab: Comisiones Pendientes */}
+        <PanelPestana idBase="vendedores" id="pending" activa={activeTab} className="pt-0">
+          <p className="flex items-center gap-2 border-b border-line bg-orange-tint/60 px-5 py-3 text-sm font-medium text-orange-dark">
+            <AlertCircle className="h-[18px] w-[18px] flex-none" aria-hidden="true" />
+            <span className="tabular-nums">
+              {commissionSummary.pending.count} comisiones pendientes por{' '}
+              {formatCurrency(commissionSummary.pending.total)}
+            </span>
+          </p>
 
-      {/* Modal Crear Vendedor */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white p-6 border-b flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-green-600" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Nuevo Vendedor</h3>
-              </div>
-              <button
-                onClick={() => { setIsCreateModalOpen(false); setCreateError(''); setShowPassword(false); }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {/* Nombre */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                  <input
-                    type="text"
-                    value={createForm.nombre}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, nombre: e.target.value }))}
-                    placeholder="Nombre"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Apellido Paterno *</label>
-                  <input
-                    type="text"
-                    value={createForm.apellidoPaterno}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoPaterno: e.target.value }))}
-                    placeholder="Apellido Paterno"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Apellido Materno</label>
-                  <input
-                    type="text"
-                    value={createForm.apellidoMaterno}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoMaterno: e.target.value }))}
-                    placeholder="Apellido Materno"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="vendedor@ejemplo.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          <DataTable
+            etiqueta="Comisiones pendientes"
+            columnas={columnasPendientes}
+            filas={commissions}
+            claveFila={(comm) => comm.id}
+            cargando={loadingCommissions}
+            paginacion={
+              !loadingCommissions && !commissionsError && commissions.length > 0
+                ? aPaginacionApi(commissionPagination, commissionPage)
+                : undefined
+            }
+            alCambiarPagina={setCommissionPage}
+            etiquetaTotal="comisiones pendientes"
+            vacio={
+              commissionsError ? (
+                <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
+              ) : (
+                <EmptyState
+                  frase="Al día."
+                  titulo="No hay comisiones pendientes"
+                  descripcion="Todas las comisiones han sido pagadas"
                 />
-              </div>
+              )
+            }
+          />
+        </PanelPestana>
 
-              {/* Contraseña */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={createForm.password}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
-                    placeholder="Mínimo 8 caracteres, una mayúscula y un número"
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+        {/* Tab: Historial de Pagos */}
+        <PanelPestana idBase="vendedores" id="history" activa={activeTab} className="pt-0">
+          <p className="flex items-center gap-2 border-b border-line bg-lime-tint/70 px-5 py-3 text-sm font-medium text-lime-dark">
+            <CheckCircle2 className="h-[18px] w-[18px] flex-none" aria-hidden="true" />
+            <span className="tabular-nums">
+              {commissionSummary.paid.count} comisiones pagadas por{' '}
+              {formatCurrency(commissionSummary.paid.total)}
+            </span>
+          </p>
 
-              {/* Código de descuento */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Código de Descuento *</label>
-                <input
+          <DataTable
+            etiqueta="Historial de pagos de comisiones"
+            columnas={columnasHistorial}
+            filas={commissions}
+            claveFila={(comm) => comm.id}
+            cargando={loadingCommissions}
+            paginacion={
+              !loadingCommissions && !commissionsError && commissions.length > 0
+                ? aPaginacionApi(commissionPagination, commissionPage)
+                : undefined
+            }
+            alCambiarPagina={setCommissionPage}
+            etiquetaTotal="comisiones pagadas"
+            vacio={
+              commissionsError ? (
+                <AvisoDeError mensaje={commissionsError} onReintentar={fetchCommissions} />
+              ) : (
+                <EmptyState icono={Clock} titulo="No hay pagos realizados" />
+              )
+            }
+          />
+        </PanelPestana>
+      </Card>
+
+      {/* Modal de pago */}
+      <Modal
+        abierto={paymentModal.isOpen && paymentModal.commission !== null}
+        alCerrar={cerrarModalPago}
+        tamano="sm"
+        titulo="Marcar comisión como pagada"
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={cerrarModalPago}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="form-pago-comision"
+              icono={CheckCircle2}
+              cargando={processingPayment}
+              textoCargando="Procesando…"
+            >
+              Confirmar pago
+            </Button>
+          </>
+        }
+      >
+        {paymentModal.commission && (
+          <form
+            id="form-pago-comision"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleMarkAsPaid();
+            }}
+            className="space-y-5"
+          >
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-line bg-paper px-4 py-3 text-sm">
+              <div className="min-w-0">
+                <dt className="text-xs text-ink-muted">Vendedor</dt>
+                <dd className="font-medium text-ink">{paymentModal.commission.vendor.nombre}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs text-ink-muted">Código</dt>
+                <dd className="font-mono font-semibold text-teal">{paymentModal.commission.vendor.code}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs text-ink-muted">Empresa</dt>
+                <dd className="font-medium text-ink">{paymentModal.commission.company.nombreEmpresa}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs text-ink-muted">Comisión a pagar</dt>
+                <dd className="font-display text-xl font-semibold tabular-nums text-ink">
+                  {formatCurrency(paymentModal.commission.commission.amount)}
+                </dd>
+              </div>
+            </dl>
+
+            <FormField
+              etiqueta="URL del comprobante de pago"
+              opcional
+              error={proofError || null}
+              ayuda="Puedes subir el comprobante a un servicio externo y pegar la URL"
+            >
+              <Input
+                type="url"
+                inputMode="url"
+                value={paymentProofUrl}
+                onChange={(e) => { setPaymentProofUrl(e.target.value); setProofError(''); }}
+                placeholder="https://..."
+                autoComplete="off"
+              />
+            </FormField>
+          </form>
+        )}
+      </Modal>
+
+      {/* Modal crear vendedor */}
+      <Modal
+        abierto={isCreateModalOpen}
+        alCerrar={cerrarModalAlta}
+        tamano="md"
+        titulo="Nuevo vendedor"
+        descripcion="Se crea su cuenta con rol de vendedor y su código de descuento."
+        cerrarAlPulsarFondo={false}
+        pie={
+          <>
+            <Button variante="contorno" onClick={cerrarModalAlta}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="form-alta-vendedor"
+              icono={Plus}
+              cargando={creatingVendor}
+              textoCargando="Creando…"
+            >
+              Crear vendedor
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="form-alta-vendedor"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCreateVendor();
+          }}
+          className="space-y-5"
+        >
+          <fieldset className="space-y-4">
+            <legend className="mb-3 font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+              Cuenta
+            </legend>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField etiqueta="Nombre" requerido>
+                <Input
+                  type="text"
+                  value={createForm.nombre}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, nombre: e.target.value }))}
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField etiqueta="Apellido paterno" requerido>
+                <Input
+                  type="text"
+                  value={createForm.apellidoPaterno}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoPaterno: e.target.value }))}
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField etiqueta="Apellido materno" opcional>
+                <Input
+                  type="text"
+                  value={createForm.apellidoMaterno}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, apellidoMaterno: e.target.value }))}
+                  autoComplete="off"
+                />
+              </FormField>
+            </div>
+
+            <FormField etiqueta="Email" requerido>
+              <Input
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="vendedor@ejemplo.com"
+                autoComplete="off"
+              />
+            </FormField>
+
+            <FormField etiqueta="Contraseña" requerido ayuda="Mínimo 8 caracteres, una mayúscula y un número.">
+              <CampoContrasena
+                visible={showPassword}
+                alAlternar={() => setShowPassword(!showPassword)}
+                value={createForm.password}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
+                autoComplete="new-password"
+              />
+            </FormField>
+          </fieldset>
+
+          <div className="border-t border-line pt-5">
+            <fieldset className="space-y-4">
+              <legend className="mb-3 font-display text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                Código de descuento
+              </legend>
+              <FormField
+                etiqueta="Código"
+                requerido
+                ayuda="Entre 4 y 20 letras y números. Se convertirá a mayúsculas automáticamente."
+              >
+                <Input
                   type="text"
                   value={createForm.code}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
                   placeholder="Ej: VENDEDOR10"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono uppercase tracking-wide"
                 />
-                <p className="text-xs text-gray-500 mt-1">Se convertirá a mayúsculas automáticamente</p>
-              </div>
+              </FormField>
 
-              {/* Porcentajes */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">% Descuento</label>
-                  <input
+                <FormField etiqueta="% de descuento" ayuda="Para la empresa, de 0 a 99.">
+                  <Input
                     type="number"
                     min={0}
                     max={100}
+                    inputMode="decimal"
                     value={createForm.discountPercent}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, discountPercent: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="tabular-nums"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">% Comisión</label>
-                  <input
+                </FormField>
+                <FormField etiqueta="% de comisión" ayuda="Para el vendedor, de 0 a 99.">
+                  <Input
                     type="number"
                     min={0}
                     max={100}
+                    inputMode="decimal"
                     value={createForm.commissionPercent}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, commissionPercent: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="tabular-nums"
                   />
-                </div>
+                </FormField>
               </div>
-
-              {/* Error */}
-              {createError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {createError}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-gray-50 border-t p-4 flex gap-3">
-              <button
-                onClick={() => { setIsCreateModalOpen(false); setCreateError(''); setShowPassword(false); }}
-                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCreateVendor}
-                disabled={creatingVendor}
-                className="flex-1 px-4 py-2.5 bg-button-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-sm flex items-center justify-center gap-2"
-              >
-                {creatingVendor ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Creando...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Crear Vendedor
-                  </>
-                )}
-              </button>
-            </div>
+            </fieldset>
           </div>
-        </div>
-      )}
-    </div>
+
+          {/* Error */}
+          {createError && <AvisoError mensaje={createError} className="mb-0" />}
+        </form>
+      </Modal>
+
+      {dialogo}
+    </>
   );
 }

@@ -9,12 +9,26 @@
 // El modelo no tiene campo de "leído": esta pantalla sólo lista, del más
 // reciente al más antiguo. La protección de /admin/* la hace el middleware y la
 // API vuelve a exigir requireRole('admin').
+//
+// Registro de APLICACIÓN (docs/DISENO.md): PageHeader → aviso de error con
+// «Reintentar» → tarjeta con la bandeja paginada en el servidor. Es una lista y
+// no una tabla porque lo que importa es leer el mensaje entero, no comparar
+// columnas. La llamada es la de siempre (misma URL, misma cookie).
 
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Mail, Phone, RefreshCw } from 'lucide-react';
-import Paginacion, { PAGINACION_VACIA, type PaginacionApi } from '../_components/Paginacion';
+import { ChevronDown, Mail, Phone, RefreshCw } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
+import { AvisoError } from '@/components/ui/Aviso';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Avatar from '@/components/ui/Avatar';
+import EmptyState from '@/components/ui/EmptyState';
+import Skeleton, { SkeletonPagina, SkeletonTexto } from '@/components/ui/Skeleton';
+import Pagination, { PAGINACION_VACIA, type PaginacionApi } from '@/components/ui/Pagination';
+import { cn } from '@/lib/utils';
+import { fechaHora } from '@/lib/fechas';
 
 interface ContactMessage {
   id: number;
@@ -25,12 +39,114 @@ interface ContactMessage {
   createdAt: string;
 }
 
+/** Un mensaje más largo que esto (o con muchos renglones) se muestra recortado, con «Leer completo». */
+const LARGO_RECORTE = 320;
+const RENGLONES_RECORTE = 4;
+
+const esLargo = (texto: string) =>
+  texto.length > LARGO_RECORTE || texto.split('\n').length > RENGLONES_RECORTE;
+
+/** Un mensaje de la bandeja. */
+function Mensaje({ m, fecha }: { m: ContactMessage; fecha: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const largo = esLargo(m.mensaje);
+  const idTexto = `mensaje-${m.id}-texto`;
+  const idNombre = `mensaje-${m.id}-nombre`;
+
+  return (
+    <article aria-labelledby={idNombre} className="flex gap-3 px-5 py-4 sm:gap-4">
+      <Avatar nombre={m.nombre} email={m.email} className="mt-0.5 hidden sm:inline-flex" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+          <h3 id={idNombre} className="break-words font-display text-[15px] font-semibold leading-snug text-ink">
+            {m.nombre}
+          </h3>
+          <time dateTime={m.createdAt} className="flex-none text-xs tabular-nums text-ink-muted">
+            {fecha}
+          </time>
+        </div>
+
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
+          <a
+            href={`mailto:${m.email}`}
+            className="inline-flex items-center gap-1.5 break-all rounded font-medium text-teal hover:text-teal-dark hover:underline"
+          >
+            <Mail size={14} className="flex-none" aria-hidden="true" />
+            {m.email}
+          </a>
+          {m.telefono && (
+            <a
+              href={`tel:${m.telefono}`}
+              className="inline-flex items-center gap-1.5 rounded text-ink hover:text-teal-dark hover:underline"
+            >
+              <Phone size={14} className="flex-none text-ink-muted" aria-hidden="true" />
+              <span className="tabular-nums">{m.telefono}</span>
+            </a>
+          )}
+        </div>
+
+        {/* Medida de lectura: a 1440 px el renglón llegaba a ~1000 px (más de
+            100 caracteres); 72ch lo deja en la franja cómoda de 60–75. */}
+        <p
+          id={idTexto}
+          className={cn(
+            'mt-2.5 max-w-[72ch] whitespace-pre-wrap break-words text-sm leading-relaxed text-ink',
+            largo && !abierto && 'line-clamp-4'
+          )}
+        >
+          {m.mensaje}
+        </p>
+        {largo && (
+          <button
+            type="button"
+            onClick={() => setAbierto((a) => !a)}
+            aria-expanded={abierto}
+            aria-controls={idTexto}
+            className="mt-1.5 inline-flex items-center gap-1 rounded text-[13px] font-semibold text-teal transition-colors duration-150 hover:text-teal-dark"
+          >
+            {abierto ? 'Mostrar menos' : 'Leer completo'}
+            <ChevronDown
+              className={cn('h-4 w-4 transition-transform duration-150', abierto && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/** Filas esqueleto de la bandeja (al cambiar de página). */
+function MensajesEsqueleto() {
+  return (
+    <ul aria-hidden="true" className="divide-y divide-line">
+      {[0, 1, 2, 3].map((i) => (
+        <li key={i} className="flex gap-4 px-5 py-4">
+          <Skeleton className="hidden h-9 w-9 flex-none rounded-full sm:block" />
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-56 max-w-full" />
+            <SkeletonTexto lineas={2} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function AdminContactMessagesPage() {
   const [mensajes, setMensajes] = useState<ContactMessage[]>([]);
   const [pagination, setPagination] = useState<PaginacionApi>(PAGINACION_VACIA);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sólo presentación: esqueleto de página en la primera carga; al paginar se
+  // queda la página y sólo la lista muestra huecos.
+  const [cargaInicial, setCargaInicial] = useState(true);
+  useEffect(() => {
+    if (!isLoading) setCargaInicial(false);
+  }, [isLoading]);
 
   const fetchMensajes = useCallback(async (pagina: number) => {
     try {
@@ -59,82 +175,68 @@ export default function AdminContactMessagesPage() {
     fetchMensajes(page);
   }, [page, fetchMensajes]);
 
-  const formatearFecha = (iso: string) =>
-    new Date(iso).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
+  // Fecha con hora del panel (src/lib/fechas): «23 sep 2026, 18:22».
+  const formatearFecha = (iso: string) => fechaHora(iso);
+
+  if (isLoading && cargaInicial) {
+    return <SkeletonPagina conCifras={false} />;
+  }
+
+  const total = pagination.total;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto py-8 px-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 md:mb-8">
-          <div>
-            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-1 md:mb-2">
-              Mensajes de contacto
-            </h1>
-            <p className="text-gray-600 text-sm md:text-base">
-              Lo que llega desde el formulario público de /contact, del más reciente al más antiguo
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => fetchMensajes(page)}
-            className="w-full sm:w-auto px-4 py-2 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm text-gray-700"
-          >
-            <RefreshCw size={16} />
+    <>
+      <PageHeader
+        antetitulo="Sistema"
+        titulo="Mensajes"
+        remate="de contacto"
+        descripcion="Lo que llega desde el formulario público de /contact, del más reciente al más antiguo."
+        acciones={
+          <Button variante="contorno" icono={RefreshCw} onClick={() => fetchMensajes(page)} cargando={isLoading}>
             Actualizar
-          </button>
-        </div>
+          </Button>
+        }
+      />
 
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm" role="alert">
-            {error}
+      {error && <AvisoError mensaje={error} alReintentar={() => fetchMensajes(page)} />}
+
+      {/* Un error sin mensajes que enseñar no es una bandeja vacía: sólo el aviso. */}
+      {!(error && mensajes.length === 0) && (
+        <Card
+          titulo="Bandeja"
+          descripcion={
+            total > 0 ? `${total.toLocaleString('es-MX')} mensaje${total !== 1 ? 's' : ''} en total` : undefined
+          }
+          sinRelleno
+        >
+          <div aria-busy={isLoading || undefined}>
+            {isLoading ? (
+              <>
+                <span className="sr-only" role="status">
+                  Cargando mensajes…
+                </span>
+                <MensajesEsqueleto />
+              </>
+            ) : mensajes.length === 0 ? (
+              <EmptyState
+                frase="Bandeja en calma."
+                titulo="Todavía no hay mensajes de contacto."
+                descripcion="Cuando alguien escriba desde el formulario de contacto del sitio, su mensaje aparecerá aquí y recibirás una notificación."
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {mensajes.map((m) => (
+                  <li key={m.id} className="transition-colors duration-150 hover:bg-paper/60">
+                    <Mensaje m={m} fecha={formatearFecha(m.createdAt)} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        )}
 
-        <div className="bg-white rounded-lg shadow">
-          {isLoading ? (
-            <div className="py-12 text-center text-gray-500">Cargando mensajes...</div>
-          ) : mensajes.length === 0 ? (
-            <div className="py-12 text-center text-gray-500">
-              {error ? 'No se pudieron cargar los mensajes.' : 'Todavía no hay mensajes de contacto.'}
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {mensajes.map((m) => (
-                <li key={m.id} className="px-4 sm:px-6 py-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
-                    <p className="font-semibold text-gray-900 break-words">{m.nombre}</p>
-                    <p className="text-xs text-gray-500">{formatearFecha(m.createdAt)}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mb-2">
-                    <a
-                      href={`mailto:${m.email}`}
-                      className="inline-flex items-center gap-1 text-button-green hover:underline break-all"
-                    >
-                      <Mail size={14} />
-                      {m.email}
-                    </a>
-                    {m.telefono && (
-                      <a
-                        href={`tel:${m.telefono}`}
-                        className="inline-flex items-center gap-1 hover:underline"
-                      >
-                        <Phone size={14} />
-                        {m.telefono}
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{m.mensaje}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <Paginacion pagination={pagination} onChange={setPage} etiqueta="mensajes" />
-        </div>
-      </div>
-    </div>
+          <Pagination pagination={pagination} alCambiar={setPage} etiqueta="mensajes" />
+        </Card>
+      )}
+    </>
   );
 }
