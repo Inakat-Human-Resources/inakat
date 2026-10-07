@@ -12,59 +12,107 @@ propio en cookie · MercadoPago · Vercel Blob.
 
 ---
 
-## 📸 ESTADO AL 24/09/2026
+## 📸 ESTADO AL 07/10/2026
 
 *(Esta sección se reescribe completa en cada actualización.)*
 
 **Hecho y funcionando**
-- **Todo el sitio rediseñado («Arco») está en producción**: las 40 páginas, públicas y
-  de aplicación, con el sistema de diseño de `src/components/ui`. Despliegue
-  `inakat-4bhp379j9-izalith` (commits hasta `997ecce`). Revisado de nuevo el 24/09:
-  públicas 200, app 307 al login sin sesión, `/xyz` 404 y `/diseno` 404 duro.
-- **Los arreglos de la auditoría están en producción, con test cada uno** (la primera
-  tanda del 22/09 y 327 hallazgos más en la Parte A): vacantes publicadas sin pagar, carreras y doble acreditación de créditos,
-  comisiones de compras no pagadas contadas como ingresos, cargos sin registro, fugas de
-  notas internas, des-anonimización de vacantes confidenciales, XSS contra el admin,
-  CV, registro de empresa y entrevistas. En vivo: de 27 vacantes públicas, las 2
-  confidenciales salen sin `userId` ni coordenadas y ninguna trae `notasInternas`.
-- **El árbol está verde**: `tsc` 0 · lint 0 errores · **1999 tests pasan** (131 suites,
-  7 saltados) · `next build` OK. Dependencias: de 26 vulnerabilidades a 8, ninguna crítica.
-- **Si hay que volver atrás:** `vercel rollback inakat-kbmoiljye-izalith` (portada nueva
-  y arreglos, sin el rediseño del resto) o `inakat-28tg0ux2w-izalith` (antes de todo).
-- Documentación: auditoría en `docs/AUDITORIA-2026-09.md`, plan en
-  `docs/PLAN-OPUS-2026-09.md`, sistema de diseño en `docs/DISENO.md`.
+- **Producción** corre el despliegue `inakat-4bhp379j9-izalith` (código de `997ecce`, igual al
+  de `main`). Comprobado el 06/10:
+  - Las páginas públicas dan 200, la app redirige con 307 sin sesión y `/diseno` da 404.
+  - De 27 vacantes públicas, ninguna filtra datos internos.
+  - Las tarjetas se cobran: 11 compras pagadas, la última del 01/10.
+- **El puente con Worky2 está activo.** La migración de sus tablas está aplicada desde el
+  10/08 y en producción hay 1 API key y 1 webhook registrados. Una key con formato válido
+  da 401, no 500.
+- **Rollback:** `vercel rollback inakat-kbmoiljye-izalith` (sin el rediseño) o
+  `inakat-28tg0ux2w-izalith` (antes de todo).
+- Documentación: `docs/AUDITORIA-2026-09.md`, `docs/DISENO.md` y
+  `docs/WORKY2_INTEGRATION.md` (con la sección de tests del puente).
 
 **A medias**
-- **277 hallazgos saltados con motivo** en la Parte A: decisiones de negocio y columnas
-  que exigen migración. **La lista no quedó en el repo**, sólo el conteo; para
-  retomarlos hay que cruzar `docs/auditoria-2026-09/*.md` con el código actual.
-- **Migración `20260922000000` escrita, sin aplicar a producción** (aditiva e
-  idempotente). Falta correrla con `prisma migrate deploy` contra producción.
-- **Bloqueo a empresas no aprobadas apagado** (`ENFORCE_COMPANY_APPROVAL`): falta que
-  INAKAT apruebe a las empresas legítimas; después se enciende en Vercel.
-- **Chequeo de variables en modo aviso** (`STRICT_ENV_CHECK`): se vuelve estricto en
-  cuanto estén las tres variables de abajo.
+- **Rama `test/integracion-worky` (worktree `inakat-integracion`), sin push.** Trae 5 commits:
+  - Tests del puente con Worky2 y archivo de contrato.
+  - Apellidos bien separados en las postulaciones sin perfil.
+  - El arreglo de la postulación con sesión.
+  - El arreglo del Blob.
+  - El test que tenía el CI en rojo.
+
+  La suite queda en 2077 tests verdes (134 suites, 7 saltados) y tsc en 0. **Falta el
+  push a `main` y el despliegue**, y ver que el CI de GitHub salga verde: lleva rojo desde
+  el 23/09.
+- **Migración `20260922000000` sin aplicar** en producción (se comprobó el 06/10 con
+  `migrate status`). Sin ella falta el índice único que impide postularse dos veces a la
+  misma vacante.
+- **277 hallazgos de la Parte A saltados con motivo**, sin lista en el repo: hay que
+  cruzar `docs/auditoria-2026-09/*.md` con el código.
+- `ENFORCE_COMPANY_APPROVAL` está apagado: hay 8 empresas pendientes de aprobar.
+  `STRICT_ENV_CHECK` está en modo aviso.
 
 **Bloqueado**
-- **En Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`**: faltan
-  desde siempre; se descubrió el 23/09/2026 y se comprobó otra vez el 24/09. Sin ellas
-  no sale ningún correo y el webhook responde 500, así que los pagos por OXXO y SPEI
-  nunca se confirman. Depende de Memo.
-- **Google Maps responde `BillingNotEnabled`** (desde el 23/09/2026). Depende de Memo.
-- **Decisiones de contenido que esperan a INAKAT** (desde el 21/09/2026):
-  1. La foto del hero es generada por IA; hace falta una fotografía de verdad.
-  2. Las cifras de la portada (100 %, 150+ especialistas, 15+ estados, 11 etapas) no
-     son verificables desde el código.
-  3. La cobertura se contradice sola: la FAQ dice «Monterrey, Morelia, CDMX, Puebla y
-     Guadalajara»; el mapa y los chips dicen CDMX, Monterrey, Guadalajara, Puebla,
-     Querétaro, León y Mérida.
-  4. `/privacy` y `/terms` dicen «Provisional» hasta tener el texto legal definitivo.
-  5. Pendientes menores del rediseño: el enlace a `/applications` en el menú, el texto
-     del modal de precio al borrar y el campo «departamento».
+- **En Vercel faltan `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`.** Se vio el
+  23/09 y se volvió a comprobar el 06/10.
+  - Sin ellas no sale ningún correo y el webhook de pagos responde 500.
+  - Hay una compra pendiente desde el 17/01/2026 que nadie confirmó.
+  - Depende de Memo.
+- **Google Maps sin facturación** (desde el 23/09; el 06/10 seguía dando REQUEST_DENIED).
+  Depende de Memo.
+- **Decisiones de contenido que esperan a INAKAT** (desde el 21/09):
+  - La foto del hero.
+  - Las cifras de la portada.
+  - La cobertura, que se contradice.
+  - `/privacy` y `/terms` siguen como provisionales.
+  - Los pendientes menores del rediseño.
 
 **Siguiente paso**
-- **Memo da de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`**:
-  es lo único que hoy rompe algo en producción (correos y pagos asíncronos).
+- **Memo decide el push de la rama a `main` y su despliegue**, y en el mismo viaje da de
+  alta en Vercel las tres variables. Hay que redesplegar después de darlas de alta.
+
+---
+
+## 07/10/2026 — Revisión antes de producción: tests del puente con Worky2 y tres bloqueantes arreglados
+
+**Qué cambió**
+- Tests del puente con los handlers reales, en `__tests__/integracion-worky2/`, 70 tests:
+  - Las rutas `/api/integration`.
+  - El webhook que sale al aceptar desde el panel de empresa y desde el de admin.
+  - `contrato-worky2.json`, que genera el código real. Worky2 reproduce ese mismo archivo
+    contra su cliente, su receptor y su importador.
+- Prueba en vivo sin efectos: `scripts/smoke-integracion-worky2.mjs`.
+- Al reproducir el contrato salieron tres fallos:
+  - **INAKAT:** «Juan Carlos Pérez López» sin perfil viajaba como nombre «Juan» y paterno
+    «Carlos». Ahora los apellidos se toman del final.
+  - **Worky2:** sólo leía la primera página.
+  - **Worky2:** un candidato sin apellido le tumbaba la lista entera.
+- **Un candidato con sesión no podía postularse desde el modal** (pasaba desde el 22/09).
+  `/api/applications/check` caía en la regla «sólo admin» del middleware y respondía 403.
+- **Cualquier cuenta de candidato podía borrar archivos ajenos del Blob.** Bastaba con
+  registrar la URL de un logo o un CV como documento propio y luego borrarlo. Ahora
+  `blob-en-uso.ts` sólo borra lo que ninguna otra fila referencia. De paso, cambiar el CV
+  ya no rompe el CV enlazado en las postulaciones anteriores.
+- **CI rojo desde el 23/09:** un test daba 503 porque en el CI no hay token de
+  MercadoPago. En local pasaba porque `next/jest` carga el `.env`.
+
+**Decisiones y descartes**
+- No se hizo una prueba de punta a punta con los dos servidores. El anti-SSRF del webhook
+  rechaza `localhost` a propósito, y abrirlo para la prueba debilitaba la defensa. En su
+  lugar quedaron el contrato generado y la prueba en vivo.
+- El Blob no se protege fijando el host del store: la URL la manda el cliente y el host
+  no prueba quién es el dueño. Se protege comprobando que nadie más use el archivo.
+
+**Lo que salió mal**
+- La bitácora del 24/09 decía «árbol verde». Era cierto en local, pero el CI de GitHub
+  llevaba rojo desde el 23/09. **«Verde» se comprueba en el CI, no sólo en local.**
+- El meta-test INFRA-003 quita los comentarios con una regex: un comentario con
+  «/api/integration/*» abrió un falso bloque `/*` y escondió los imports. Se reescribió
+  el comentario.
+- El `.env` local apunta a la base de producción y `next/jest` lo carga en cada corrida.
+  No hay test que escriba en ella, pero conviene un `.env.test`. Queda pendiente.
+
+**Datos duros** (revisión del 06/10, sólo SELECT)
+- 8 empresas aprobadas y 8 pendientes.
+- `npm audit --omit=dev`: 10 vulnerabilidades (7 altas, 3 moderadas, 0 críticas).
+- `https://inakat.com` redirige a www con un 307, no con un 308.
 
 ---
 
