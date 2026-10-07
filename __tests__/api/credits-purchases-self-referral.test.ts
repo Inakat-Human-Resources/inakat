@@ -11,6 +11,12 @@
  * registrar el uso del código.
  */
 
+// La ruta responde 503 sin token de MercadoPago ANTES de mirar el código. En
+// local next/jest carga el token real del .env y el test pasaba; en el CI no hay
+// .env y salía 503, así que `main` llevaba rojo desde el 23/09. El SDK está
+// simulado: el valor no sale de aquí.
+process.env.MERCADOPAGO_ACCESS_TOKEN = 'TEST-token-de-prueba';
+
 jest.mock('next/server', () => ({
   NextRequest: class {},
   NextResponse: {
