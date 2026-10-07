@@ -218,26 +218,72 @@ export async function loadCandidatosAceptados(
 // INTERNOS
 // =============================================
 
+/** Partículas que forman parte del apellido que las sigue («de la Garza»). */
+const PARTICULAS_APELLIDO = new Set([
+  'de', 'del', 'la', 'las', 'los', 'y', 'san', 'santa', 'van', 'von', 'da', 'di'
+]);
+
+/**
+ * Separa un nombre completo escrito en un solo campo (postulaciones sin perfil
+ * Candidate) en nombre y apellidos, con el orden mexicano «nombre(s) paterno
+ * materno».
+ *
+ * Los apellidos se toman del FINAL: antes se tomaba la segunda palabra como
+ * apellido paterno, así que «Juan Carlos Pérez López» llegaba a Worky2 como
+ * nombre «Juan», paterno «Carlos» y materno «Pérez López». Las partículas se
+ * pegan al apellido que las sigue: «María de los Ángeles de la Garza Ruiz» →
+ * «María de los Ángeles» / «de la Garza» / «Ruiz».
+ *
+ * Con una sola palabra no hay apellido que inventar: `apellidoPaterno` sale
+ * vacío y quien importa lo completa a mano.
+ */
+export function separarNombreCompleto(nombreCompleto: string): {
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+} {
+  const palabras = nombreCompleto.trim().split(/\s+/).filter(Boolean);
+
+  // Grupos desde el final: cada palabra se lleva las partículas que la preceden.
+  const grupos: string[][] = [];
+  let i = palabras.length - 1;
+  while (i >= 0) {
+    const grupo = [palabras[i]];
+    i--;
+    while (i > 0 && PARTICULAS_APELLIDO.has(palabras[i].toLowerCase())) {
+      grupo.unshift(palabras[i]);
+      i--;
+    }
+    grupos.unshift(grupo);
+  }
+
+  const unir = (g: string[][]) => g.map((p) => p.join(' ')).join(' ');
+
+  if (grupos.length === 0) return { nombre: '', apellidoPaterno: '', apellidoMaterno: null };
+  if (grupos.length === 1) return { nombre: unir(grupos), apellidoPaterno: '', apellidoMaterno: null };
+  if (grupos.length === 2) {
+    return { nombre: unir(grupos.slice(0, 1)), apellidoPaterno: unir(grupos.slice(1)), apellidoMaterno: null };
+  }
+  return {
+    nombre: unir(grupos.slice(0, -2)),
+    apellidoPaterno: unir(grupos.slice(-2, -1)),
+    apellidoMaterno: unir(grupos.slice(-1))
+  };
+}
+
 function buildCandidato(
   application: ApplicationWithRelations,
   candidate: PerfilCandidato | null
 ): CandidatoInakat {
   // Nombre: preferir el perfil Candidate (ya separado); si no existe,
   // separar candidateName de la Application (best effort).
-  let nombre: string;
-  let apellidoPaterno: string;
-  let apellidoMaterno: string | null;
-
-  if (candidate) {
-    nombre = candidate.nombre;
-    apellidoPaterno = candidate.apellidoPaterno;
-    apellidoMaterno = candidate.apellidoMaterno ?? null;
-  } else {
-    const parts = application.candidateName.trim().split(/\s+/);
-    nombre = parts[0] ?? application.candidateName;
-    apellidoPaterno = parts[1] ?? '';
-    apellidoMaterno = parts.length > 2 ? parts.slice(2).join(' ') : null;
-  }
+  const { nombre, apellidoPaterno, apellidoMaterno } = candidate
+    ? {
+        nombre: candidate.nombre,
+        apellidoPaterno: candidate.apellidoPaterno,
+        apellidoMaterno: candidate.apellidoMaterno ?? null
+      }
+    : separarNombreCompleto(application.candidateName);
 
   // Evaluaciones: recruiter ≈ evaluación inicial/psicológica,
   // specialist + skill ratings ≈ evaluación técnica.
