@@ -64,6 +64,14 @@ no las cubre, a propósito): cada ruta se autentica sola con los helpers de
 Se consideran "aceptados/contratados" las Applications con status `accepted`
 (estado final de la máquina de estados) y, defensivamente, el legado `hired`.
 
+> **Nombre sin perfil Candidate.** Si quien se postuló no tiene perfil, el
+> nombre sale de `Application.candidateName` (un solo campo) con
+> `separarNombreCompleto`: los apellidos se toman del FINAL y las partículas
+> van con su apellido («Juan Carlos Pérez López» → «Juan Carlos» / «Pérez» /
+> «López»; «María de los Ángeles de la Garza Ruiz» → «María de los Ángeles» /
+> «de la Garza» / «Ruiz»). Con una sola palabra, `apellidoPaterno` sale `""`:
+> Worky2 lo acepta y su pantalla de importación pide completarlo.
+
 > **Privacidad — `notasAdicionales`.** El campo existe en el contrato pero
 > INAKAT emite siempre `null`. `Application.notes` son las notas INTERNAS de
 > INAKAT sobre el candidato («pide 20% más que la banda», «referencia negativa»),
@@ -131,7 +139,7 @@ compartido; la empresa los registra en INAKAT:
 curl -X POST https://<inakat>/api/integration/webhooks \
   -H "Authorization: Bearer <jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://<worky2>/api/webhooks/inakat", "secret": "<secreto de Worky2>"}'
+  -d '{"url": "https://<worky2>/api/integrations/inakat/webhook/<token>", "secret": "<secreto de Worky2>"}'
 
 # Listar (secreto enmascarado) / desactivar
 curl https://<inakat>/api/integration/webhooks -H "Authorization: Bearer <jwt>"
@@ -188,3 +196,39 @@ viejos (p. ej. > 5 min) para evitar replay.
 Si el webhook falla, Worky2 sigue pudiendo importar por polling con el
 endpoint de candidatos (sección 2): el webhook es un acelerador, no la fuente
 de verdad.
+
+La URL que Worky2 muestra sale de su `NEXT_PUBLIC_APP_URL`: tiene que ser el
+dominio final de Worky2 en `https://`, sin redirección (INAKAT no sigue 3xx).
+Si esa variable falta, Worky2 muestra `http://localhost:3000/...` y INAKAT la
+rechaza al registrarla.
+
+## 5. Tests del puente
+
+Los dos repos prueban el MISMO tráfico:
+
+| Dónde | Qué prueba |
+| --- | --- |
+| `__tests__/integracion-worky2/rutas-integracion.test.ts` | Las tres rutas `/api/integration/*` con handler real: auth por JWT y por key, aprobación, topes, SSRF, paginación, privacidad y límite por key. |
+| `__tests__/integracion-worky2/webhook-saliente.test.ts` | El POST que sale al aceptar (desde el PATCH real de la empresa): cabeceras, firma, `redirect: 'error'`, un secreto por webhook, fallos aislados. |
+| `__tests__/integracion-worky2/contrato-worky2.test.ts` | Genera `contrato-worky2.json` con el código real (páginas del pull + webhook firmado) y falla si lo que emite INAKAT cambia. |
+| Worky2: `__tests__/api/integrations/contrato-inakat.test.ts` | Reproduce ese mismo JSON (copia en `__tests__/fixtures/contrato-inakat.json`) contra el cliente, el proxy, el receptor del webhook y el importador de Worky2. |
+
+**Si cambia el contrato a propósito:**
+
+```bash
+ACTUALIZAR_CONTRATO=1 npx jest __tests__/integracion-worky2/contrato-worky2
+cp __tests__/integracion-worky2/contrato-worky2.json <repo Worky2>/__tests__/fixtures/contrato-inakat.json
+```
+
+y correr los tests de Worky2. Con los dos repos uno junto al otro
+(`dev/inakat/Inakatt/inakat` y `dev/Worky2/Worky`, o con `WORKY_REPO_DIR` /
+`INAKAT_REPO_DIR`), cada lado comprueba además que su copia es idéntica.
+
+**Prueba en vivo** (no crea ni borra nada; ver el encabezado del script):
+
+```bash
+INAKAT_API_KEY=inak_... \
+WORKY_WEBHOOK_URL=https://<worky2>/api/integrations/inakat/webhook/<token> \
+WORKY_WEBHOOK_SECRET=<secreto> \
+node scripts/smoke-integracion-worky2.mjs
+```

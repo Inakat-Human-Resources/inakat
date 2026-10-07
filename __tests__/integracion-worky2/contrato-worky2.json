@@ -1,0 +1,163 @@
+{
+  "_LEEME": "Contrato INAKAT → Worky2 generado por el código real de INAKAT (__tests__/integracion-worky2/contrato-worky2.test.ts). NO editar a mano. Regenerar con ACTUALIZAR_CONTRATO=1 y copiar idéntico a Worky: __tests__/fixtures/contrato-inakat.json.",
+  "version": 1,
+  "apiKey": "inak_0123456789abcdef0123456789abcdef",
+  "candidatos": {
+    "porPagina": 2,
+    "peticiones": [
+      {
+        "ruta": "/api/integration/candidates?status=accepted&page=1&limit=2",
+        "status": 200,
+        "respuesta": {
+          "success": true,
+          "data": [
+            {
+              "inakatCandidateId": 101,
+              "nombre": "Ana Lucía",
+              "apellidoPaterno": "Núñez",
+              "apellidoMaterno": "Ávila",
+              "email": "ana.nunez@correo.mx",
+              "telefono": "5511223344",
+              "cvUrl": "https://blob.inakat.com/cv/ana-nunez.pdf",
+              "evaluacionPsicologica": "Entrevista conductual: estable, buena comunicación.",
+              "evaluacionTecnica": "Domina el cálculo de ISR e IMSS.\n\nHabilidades evaluadas:\nExcel: 5/5 — Tablas dinámicas\nNómina: 4/5",
+              "notasAdicionales": null,
+              "puesto": "Analista de nómina",
+              "universidad": "Universidad Michoacana",
+              "carrera": "Contaduría Pública",
+              "experienciaAnios": 6,
+              "salarioMensualPropuesto": 38000,
+              "fechaAceptacion": "2026-09-30T16:30:00.000Z"
+            },
+            {
+              "inakatCandidateId": 102,
+              "nombre": "Juan Carlos",
+              "apellidoPaterno": "Pérez",
+              "apellidoMaterno": "López",
+              "email": "jc.perez@correo.mx",
+              "telefono": "4431234567",
+              "cvUrl": null,
+              "evaluacionPsicologica": null,
+              "evaluacionTecnica": null,
+              "notasAdicionales": null,
+              "puesto": "Analista de nómina",
+              "universidad": null,
+              "carrera": null,
+              "experienciaAnios": null,
+              "salarioMensualPropuesto": 38000,
+              "fechaAceptacion": "2026-09-29T10:00:00.000Z"
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "limit": 2,
+            "total": 5,
+            "totalPages": 3,
+            "hasNext": true,
+            "hasPrev": false
+          }
+        }
+      },
+      {
+        "ruta": "/api/integration/candidates?status=accepted&page=2&limit=2",
+        "status": 200,
+        "respuesta": {
+          "success": true,
+          "data": [
+            {
+              "inakatCandidateId": 103,
+              "nombre": "María de los Ángeles",
+              "apellidoPaterno": "de la Garza",
+              "apellidoMaterno": "Ruiz",
+              "email": "angeles.garza@correo.mx",
+              "telefono": null,
+              "cvUrl": null,
+              "evaluacionPsicologica": null,
+              "evaluacionTecnica": null,
+              "notasAdicionales": null,
+              "puesto": "Auxiliar contable",
+              "universidad": null,
+              "carrera": null,
+              "experienciaAnios": null,
+              "salarioMensualPropuesto": 15000,
+              "fechaAceptacion": "2026-09-28T09:15:00.000Z"
+            },
+            {
+              "inakatCandidateId": 104,
+              "nombre": "Xóchitl",
+              "apellidoPaterno": "",
+              "apellidoMaterno": null,
+              "email": "xochitl@correo.mx",
+              "telefono": null,
+              "cvUrl": null,
+              "evaluacionPsicologica": null,
+              "evaluacionTecnica": null,
+              "notasAdicionales": null,
+              "puesto": "Analista de nómina",
+              "universidad": null,
+              "carrera": null,
+              "experienciaAnios": null,
+              "salarioMensualPropuesto": null,
+              "fechaAceptacion": "2026-09-27T12:00:00.000Z"
+            }
+          ],
+          "pagination": {
+            "page": 2,
+            "limit": 2,
+            "total": 5,
+            "totalPages": 3,
+            "hasNext": true,
+            "hasPrev": true
+          }
+        }
+      },
+      {
+        "ruta": "/api/integration/candidates?status=accepted&page=3&limit=2",
+        "status": 200,
+        "respuesta": {
+          "success": true,
+          "data": [
+            {
+              "inakatCandidateId": 105,
+              "nombre": "Pedro",
+              "apellidoPaterno": "Gómez",
+              "apellidoMaterno": null,
+              "email": "Pedro.Gomez@Correo.MX",
+              "telefono": null,
+              "cvUrl": null,
+              "evaluacionPsicologica": null,
+              "evaluacionTecnica": null,
+              "notasAdicionales": null,
+              "puesto": "Analista de nómina",
+              "universidad": null,
+              "carrera": null,
+              "experienciaAnios": null,
+              "salarioMensualPropuesto": 25000,
+              "fechaAceptacion": "2026-08-15T08:00:00.000Z"
+            }
+          ],
+          "pagination": {
+            "page": 3,
+            "limit": 2,
+            "total": 5,
+            "totalPages": 3,
+            "hasNext": false,
+            "hasPrev": true
+          }
+        }
+      }
+    ]
+  },
+  "webhook": {
+    "url": "https://worky.example.com/api/integrations/inakat/webhook/0b6f3c3e-5a8d-4c1e-9d55-2f1a7e9b4c10",
+    "secreto": "c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ffeebeef",
+    "metodo": "POST",
+    "cabeceras": {
+      "Content-Type": "application/json",
+      "X-Inakat-Timestamp": "1790877600",
+      "X-Inakat-Delivery": "5d0c7f3a-8e2b-4c51-9a7e-2b6f1d3e4a90",
+      "X-Inakat-Signature": "v1=0bf951c7a79a1745a491b9657d9ecf05c5ceeeb78e94af98c6fd5573adcda366"
+    },
+    "cuerpo": "{\"event\":\"candidate.accepted\",\"id\":\"5d0c7f3a-8e2b-4c51-9a7e-2b6f1d3e4a90\",\"createdAt\":\"2026-10-01T18:00:00.000Z\",\"candidate\":{\"inakatCandidateId\":101,\"nombre\":\"Ana Lucía\",\"apellidoPaterno\":\"Núñez\",\"apellidoMaterno\":\"Ávila\",\"email\":\"ana.nunez@correo.mx\",\"telefono\":\"5511223344\",\"cvUrl\":\"https://blob.inakat.com/cv/ana-nunez.pdf\",\"evaluacionPsicologica\":\"Entrevista conductual: estable, buena comunicación.\",\"evaluacionTecnica\":\"Domina el cálculo de ISR e IMSS.\\n\\nHabilidades evaluadas:\\nExcel: 5/5 — Tablas dinámicas\\nNómina: 4/5\",\"notasAdicionales\":null,\"puesto\":\"Analista de nómina\",\"universidad\":\"Universidad Michoacana\",\"carrera\":\"Contaduría Pública\",\"experienciaAnios\":6,\"salarioMensualPropuesto\":38000,\"fechaAceptacion\":\"2026-09-30T16:30:00.000Z\"}}"
+  }
+}
