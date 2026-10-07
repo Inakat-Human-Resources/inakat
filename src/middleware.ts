@@ -145,7 +145,12 @@ export async function middleware(request: NextRequest) {
     // - /api/recruiter/dashboard
     // - /api/specialist/dashboard
     // NO mover esta restricción sin verificar esas rutas alternativas.
-    pathname.startsWith('/api/applications') ||
+    // EXCEPCIÓN: /api/applications/check es del CANDIDATO (ApplyJobModal lo
+    // llama con su sesión para saber si ya postuló). Desde que dejó de ser
+    // público caía en esta regla y respondía 403: el modal lo tomaba como error
+    // y mandaba al candidato con sesión a «Inicia sesión para aplicar». Sigue
+    // exigiendo sesión (arriba) y la ruta sólo responde por el propio usuario.
+    (pathname.startsWith('/api/applications') && pathname !== '/api/applications/check') ||
     pathname.startsWith('/api/admin/') ||
     pathname.startsWith('/applications') ||
     pathname.startsWith('/admin');

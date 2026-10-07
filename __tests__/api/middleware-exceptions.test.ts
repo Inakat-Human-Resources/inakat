@@ -162,6 +162,12 @@ describe('Middleware - Permisos por rol', () => {
     { pathname: '/api/admin/users', role: 'candidate', esperado: 403 },
     { pathname: '/api/admin/users', role: 'company', esperado: 403 },
     { pathname: '/api/applications', role: 'company', esperado: 403 },
+    // El modal de postulación lo llama con la sesión del candidato: caía en la
+    // regla de admin de /api/applications y respondía 403.
+    { pathname: '/api/applications/check', role: 'user', esperado: 'pasa' },
+    { pathname: '/api/applications/check', role: 'candidate', esperado: 'pasa' },
+    { pathname: '/api/applications/1', role: 'candidate', esperado: 403 },
+    { pathname: '/api/applications/checks', role: 'candidate', esperado: 403 },
     { pathname: '/api/company/dashboard', role: 'company', esperado: 'pasa' },
     { pathname: '/api/company/dashboard', role: 'admin', esperado: 'pasa' },
     { pathname: '/api/company/dashboard', role: 'recruiter', esperado: 403 },
