@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { del } from '@vercel/blob';
+import { urlsDeArchivoEnUso } from '@/lib/blob-en-uso';
 
 /** Máximo de documentos adicionales por candidato (#PERF-019). */
 const MAX_DOCUMENTOS_POR_CANDIDATO = 20;
@@ -57,6 +58,9 @@ async function borrarBlobSiEsNuestro(fileUrl: string | null | undefined) {
   if (fileUrl.startsWith('/uploads/')) return; // fallback local: no hay blob
 
   try {
+    // El host no prueba que el archivo sea de ESTE candidato: la URL la manda
+    // el cliente. Si otra fila (CV, logo, postulación…) lo usa, no se toca.
+    if ((await urlsDeArchivoEnUso([fileUrl])).size > 0) return;
     await del(fileUrl);
   } catch (error) {
     console.error('[Documentos] No se pudo eliminar el blob:', fileUrl, error);

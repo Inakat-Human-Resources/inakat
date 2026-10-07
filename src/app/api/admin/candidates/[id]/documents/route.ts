@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { del } from '@vercel/blob';
+import { urlsDeArchivoEnUso } from '@/lib/blob-en-uso';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 import { isSafeHttpUrl } from '@/lib/sanitize';
@@ -40,6 +41,8 @@ async function borrarBlobSiEsPropio(url: string): Promise<void> {
   if (!esBlobPropio(url)) return;
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
   try {
+    // La URL la registró el candidato: si otra fila la usa, no es sólo suya.
+    if ((await urlsDeArchivoEnUso([url])).size > 0) return;
     await del(url);
   } catch (error) {
     console.error('[admin/candidates/documents] No se pudo borrar el blob:', error);

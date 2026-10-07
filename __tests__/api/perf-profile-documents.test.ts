@@ -24,7 +24,7 @@ jest.mock('next/server', () => ({
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
-    candidate: { findFirst: jest.fn() },
+    candidate: { findFirst: jest.fn(), findMany: jest.fn(async () => []) },
     candidateDocument: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -32,6 +32,12 @@ jest.mock('@/lib/prisma', () => ({
       findUnique: jest.fn(),
       delete: jest.fn(),
     },
+    // Tablas que consulta blob-en-uso antes de borrar un archivo.
+    application: { findMany: jest.fn(async () => []) },
+    companyRequest: { findMany: jest.fn(async () => []) },
+    creditPurchase: { findMany: jest.fn(async () => []) },
+    evaluationNote: { findMany: jest.fn(async () => []) },
+    discountCodeUse: { findMany: jest.fn(async () => []) },
   },
 }));
 
@@ -204,12 +210,41 @@ describe('PERF · /api/profile/documents', () => {
     it('DELETE borra el blob del documento eliminado', async () => {
       mockDoc.findUnique.mockResolvedValue({ id: 7, candidateId: 10, fileUrl: URL_PROPIA });
       mockDoc.delete.mockResolvedValue({ id: 7 });
+      mockDoc.findMany.mockResolvedValue([]);
 
       const res = await DELETE(pedir('http://localhost/api/profile/documents?id=7', 'DELETE'));
 
       expect(res.status).toBe(200);
       expect(mockDoc.delete).toHaveBeenCalledWith({ where: { id: 7 } });
       expect(mockDel).toHaveBeenCalledWith(URL_PROPIA);
+    });
+
+    it('SEGURIDAD: si registró como suyo un archivo ajeno (logo de una empresa), se borra la fila pero NO el archivo', async () => {
+      const LOGO_AJENO = 'https://abc123store.public.blob.vercel-storage.com/logo-empresa.png';
+      mockDoc.findUnique.mockResolvedValue({ id: 9, candidateId: 10, fileUrl: LOGO_AJENO });
+      mockDoc.delete.mockResolvedValue({ id: 9 });
+      mockDoc.findMany.mockResolvedValue([]);
+      (prisma as any).companyRequest.findMany.mockResolvedValueOnce([
+        { logoUrl: LOGO_AJENO, identificacionUrl: null, documentosConstitucionUrl: null },
+      ]);
+
+      const res = await DELETE(pedir('http://localhost/api/profile/documents?id=9', 'DELETE'));
+
+      expect(res.status).toBe(200);
+      expect(mockDoc.delete).toHaveBeenCalledWith({ where: { id: 9 } });
+      expect(mockDel).not.toHaveBeenCalled();
+    });
+
+    it('SEGURIDAD: tampoco borra el CV que otra persona usa en una postulación', async () => {
+      const CV_AJENO = 'https://abc123store.public.blob.vercel-storage.com/cv-de-otra-persona.pdf';
+      mockDoc.findUnique.mockResolvedValue({ id: 11, candidateId: 10, fileUrl: CV_AJENO });
+      mockDoc.delete.mockResolvedValue({ id: 11 });
+      mockDoc.findMany.mockResolvedValue([]);
+      (prisma as any).application.findMany.mockResolvedValueOnce([{ cvUrl: CV_AJENO }]);
+
+      await DELETE(pedir('http://localhost/api/profile/documents?id=11', 'DELETE'));
+
+      expect(mockDel).not.toHaveBeenCalled();
     });
 
     it('no intenta borrar un blob que no es nuestro (dato antiguo)', async () => {

@@ -34,8 +34,15 @@ jest.mock('next/server', () => ({
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     user: { findUnique: jest.fn(), update: jest.fn() },
-    candidate: { update: jest.fn() },
+    candidate: { update: jest.fn(), findMany: jest.fn(async () => []) },
     $transaction: jest.fn(),
+    // Tablas que consulta blob-en-uso antes de borrar el archivo reemplazado.
+    candidateDocument: { findMany: jest.fn(async () => []) },
+    application: { findMany: jest.fn(async () => []) },
+    companyRequest: { findMany: jest.fn(async () => []) },
+    creditPurchase: { findMany: jest.fn(async () => []) },
+    evaluationNote: { findMany: jest.fn(async () => []) },
+    discountCodeUse: { findMany: jest.fn(async () => []) },
   },
 }));
 
@@ -366,6 +373,28 @@ describe('PERF · PUT /api/profile', () => {
       mockUser.findUnique.mockResolvedValue(usuarioConCandidato({ cvUrl: URL_PROPIA }));
 
       await PUT(pedirPut({ candidateData: { cvUrl: URL_PROPIA } }));
+
+      expect(mockDel).not.toHaveBeenCalled();
+    });
+
+    it('conserva el CV anterior si una postulación lo sigue enlazando (la empresa lo consulta)', async () => {
+      mockUser.findUnique.mockResolvedValue(usuarioConCandidato({ cvUrl: URL_PROPIA }));
+      (prisma as any).application.findMany.mockResolvedValueOnce([{ cvUrl: URL_PROPIA }]);
+
+      const res = await PUT(pedirPut({ candidateData: { cvUrl: URL_PROPIA_2 } }));
+
+      expect(res.status).toBe(200);
+      expect(mockDel).not.toHaveBeenCalled();
+    });
+
+    it('SEGURIDAD: poner como «mi CV» el logo de una empresa y reemplazarlo no borra el logo', async () => {
+      const LOGO_AJENO = URL_PROPIA.replace(/[^/]+$/, 'logo-empresa.png');
+      mockUser.findUnique.mockResolvedValue(usuarioConCandidato({ cvUrl: LOGO_AJENO }));
+      (prisma as any).companyRequest.findMany.mockResolvedValueOnce([
+        { logoUrl: LOGO_AJENO, identificacionUrl: null, documentosConstitucionUrl: null },
+      ]);
+
+      await PUT(pedirPut({ candidateData: { cvUrl: URL_PROPIA_2 } }));
 
       expect(mockDel).not.toHaveBeenCalled();
     });

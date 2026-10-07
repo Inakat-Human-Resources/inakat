@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/auth';
 import { isSafeHttpUrl } from '@/lib/sanitize';
+import { urlsDeArchivoEnUso } from '@/lib/blob-en-uso';
 
 /**
  * ¿La URL apunta a nuestro propio almacén de blobs? Sólo esos se borran al
@@ -599,8 +600,9 @@ export async function DELETE(
 
     // Borrar también los archivos del store de blobs: el cascade sólo elimina
     // las filas y el CV, la foto y las identificaciones seguían descargables por
-    // URL indefinidamente. Se respetan los que una postulación sigue usando
-    // (Application.cvUrl), porque la empresa los consulta en su historial.
+    // URL indefinidamente. Se respetan los que otra fila sigue usando: el CV de
+    // una postulación (la empresa lo consulta en su historial) o un archivo
+    // ajeno que el candidato registró como suyo.
     const urlsDelCandidato = [
       ...candidate.documents.map((doc) => doc.fileUrl),
       candidate.cvUrl,
@@ -608,11 +610,7 @@ export async function DELETE(
     ].filter((url): url is string => typeof url === 'string' && esBlobPropio(url));
 
     if (urlsDelCandidato.length > 0) {
-      const enUso = await prisma.application.findMany({
-        where: { cvUrl: { in: urlsDelCandidato } },
-        select: { cvUrl: true }
-      });
-      const urlsEnUso = new Set(enUso.map((app) => app.cvUrl));
+      const urlsEnUso = await urlsDeArchivoEnUso(urlsDelCandidato);
       await borrarBlobs(urlsDelCandidato.filter((url) => !urlsEnUso.has(url)));
     }
 

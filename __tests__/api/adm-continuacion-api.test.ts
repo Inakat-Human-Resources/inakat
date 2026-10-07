@@ -48,6 +48,12 @@ jest.mock('@/lib/prisma', () => ({
     jobAssignment: { count: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() },
     candidate: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
     application: { findMany: jest.fn(), groupBy: jest.fn() },
+    // Tablas que consulta blob-en-uso antes de borrar archivos.
+    candidateDocument: { findMany: jest.fn(async () => []) },
+    companyRequest: { findMany: jest.fn(async () => []) },
+    creditPurchase: { findMany: jest.fn(async () => []) },
+    evaluationNote: { findMany: jest.fn(async () => []) },
+    discountCodeUse: { findMany: jest.fn(async () => []) },
     interviewRequest: { findUnique: jest.fn() },
     creditPackage: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     job: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -138,6 +144,10 @@ beforeEach(() => {
   jest.resetAllMocks();
   mockRequireRole.mockResolvedValue(ADMIN);
   mockTransaction.mockImplementation(async (cb: any) => cb(tx));
+  // blob-en-uso: por defecto ninguna otra fila usa los archivos.
+  for (const modelo of ['candidateDocument', 'companyRequest', 'creditPurchase', 'evaluationNote', 'discountCodeUse']) {
+    db[modelo].findMany.mockResolvedValue([]);
+  }
   const { runAfterResponse } = jest.requireMock('@/lib/notifications');
   runAfterResponse.mockImplementation(async (_e: string, fn: () => Promise<unknown>) => {
     try {
@@ -277,6 +287,7 @@ describe('ADM-080 · borrar un candidato borra sus archivos del store', () => {
       documents: [{ fileUrl: `${BLOB}/ine.pdf` }, { fileUrl: 'https://drive.google.com/x' }],
     });
     db.application.findMany.mockResolvedValue([{ cvUrl: `${BLOB}/cv.pdf` }]);
+    db.candidate.findMany.mockResolvedValue([]);
 
     const res = await candidateDelete(
       pedir('http://localhost/api/admin/candidates/7', 'DELETE'),
@@ -302,6 +313,7 @@ describe('ADM-080 · borrar un candidato borra sus archivos del store', () => {
       documents: [],
     });
     db.application.findMany.mockResolvedValue([]);
+    db.candidate.findMany.mockResolvedValue([]);
     mockDel.mockRejectedValue(new Error('store caído'));
     const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
 

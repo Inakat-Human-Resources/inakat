@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth';
 import { isSafeHttpUrl } from '@/lib/sanitize';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { del } from '@vercel/blob';
+import { urlsDeArchivoEnUso } from '@/lib/blob-en-uso';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
@@ -67,6 +68,10 @@ async function borrarBlobSiEsNuestro(fileUrl: string | null | undefined) {
   if (fileUrl.startsWith('/uploads/')) return; // fallback local: no hay blob
 
   try {
+    // El CV anterior sigue enlazado en las postulaciones hechas con él, y la
+    // URL la pudo mandar el cliente apuntando a un archivo ajeno: si otra fila
+    // lo usa, no se borra.
+    if ((await urlsDeArchivoEnUso([fileUrl])).size > 0) return;
     await del(fileUrl);
   } catch (error) {
     console.error('[Perfil] No se pudo eliminar el blob:', fileUrl, error);
