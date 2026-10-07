@@ -17,30 +17,23 @@ propio en cookie · MercadoPago · Vercel Blob.
 *(Esta sección se reescribe completa en cada actualización.)*
 
 **Hecho y funcionando**
-- **Producción** corre el despliegue `inakat-4bhp379j9-izalith` (código de `997ecce`, igual al
-  de `main`). Comprobado el 06/10:
-  - Las páginas públicas dan 200, la app redirige con 307 sin sesión y `/diseno` da 404.
-  - De 27 vacantes públicas, ninguna filtra datos internos.
-  - Las tarjetas se cobran: 11 compras pagadas, la última del 01/10.
-- **El puente con Worky2 está activo.** La migración de sus tablas está aplicada desde el
-  10/08 y en producción hay 1 API key y 1 webhook registrados. Una key con formato válido
-  da 401, no 500.
-- **Rollback:** `vercel rollback inakat-kbmoiljye-izalith` (sin el rediseño) o
+- **Producción** corre `inakat-oijpapwp4-izalith` (07/10/2026, `main` en `79c5207`), desplegado por CLI: Vercel
+  **no** despliega desde GitHub en este proyecto.
+  - Lo que entró en ese despliegue:
+    - Tests y archivo de contrato del puente con Worky2.
+    - Apellidos bien separados en las postulaciones sin perfil.
+    - El candidato con sesión vuelve a poder postularse.
+    - El Blob ya no borra archivos ajenos.
+  - En vivo: las páginas públicas dan 200, la app redirige con 307 sin sesión, `/diseno` da 404 y
+    `/api/applications/check` sin sesión da 401.
+- **CI de GitHub en verde** con `79c5207`: llevaba rojo desde el 23/09. La suite local da 2077 tests (134 suites).
+- **El puente con Worky2 está activo.** Las tablas existen desde el 10/08 y hay 1 API key y 1 webhook. Worky2 ya pagina
+  y acepta candidatos sin apellido: subido a su `main` el 07/10.
+- **Rollback:** `vercel rollback inakat-4bhp379j9-izalith` (antes de esta tanda) o
   `inakat-28tg0ux2w-izalith` (antes de todo).
-- Documentación: `docs/AUDITORIA-2026-09.md`, `docs/DISENO.md` y
-  `docs/WORKY2_INTEGRATION.md` (con la sección de tests del puente).
+- Documentación: `docs/AUDITORIA-2026-09.md`, `docs/DISENO.md` y `docs/WORKY2_INTEGRATION.md`.
 
 **A medias**
-- **Rama `test/integracion-worky` (worktree `inakat-integracion`), sin push.** Trae 5 commits:
-  - Tests del puente con Worky2 y archivo de contrato.
-  - Apellidos bien separados en las postulaciones sin perfil.
-  - El arreglo de la postulación con sesión.
-  - El arreglo del Blob.
-  - El test que tenía el CI en rojo.
-
-  La suite queda en 2077 tests verdes (134 suites, 7 saltados) y tsc en 0. **Falta el
-  push a `main` y el despliegue**, y ver que el CI de GitHub salga verde: lleva rojo desde
-  el 23/09.
 - **Migración `20260922000000` sin aplicar** en producción (se comprobó el 06/10 con
   `migrate status`). Sin ella falta el índice único que impide postularse dos veces a la
   misma vacante.
@@ -65,8 +58,8 @@ propio en cookie · MercadoPago · Vercel Blob.
   - Los pendientes menores del rediseño.
 
 **Siguiente paso**
-- **Memo decide el push de la rama a `main` y su despliegue**, y en el mismo viaje da de
-  alta en Vercel las tres variables. Hay que redesplegar después de darlas de alta.
+- **Memo da de alta en Vercel `MERCADOPAGO_WEBHOOK_SECRET`, `SMTP_USER` y `SMTP_PASS`** y se
+  redespliega por CLI (`vercel deploy --prod`): hoy es lo único que rompe algo en producción.
 
 ---
 
