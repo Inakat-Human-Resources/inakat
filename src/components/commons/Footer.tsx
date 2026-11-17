@@ -96,6 +96,12 @@ const Footer = () => {
         <div className="hm-pie__base">
           <p>© {new Date().getFullYear()} INAKAT. Todos los derechos reservados.</p>
           <p>Reclutamiento con evaluación dual</p>
+          <p className="credito-izalith">
+            Hecho por{" "}
+            <a href="https://www.izalith.co" target="_blank" rel="noopener" className="underline underline-offset-2">
+              Izalith
+            </a>
+          </p>
         </div>
       </div>
 
